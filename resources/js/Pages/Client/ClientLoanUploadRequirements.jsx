@@ -152,11 +152,13 @@ export default function ClientLoanUploadRequirements() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Loan Requirements" />
+                <Head title="Loan Requirements">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 
                 {/* FIX: Removed "min-h-screen bg-gradient..." 
-                   Added "space-y-6" for layout spacing.
-                   SidebarLayout controls the background now.
+                    Added "space-y-6" for layout spacing.
+                    SidebarLayout controls the background now.
                 */}
                 <div className="space-y-6">
                     

@@ -364,7 +364,9 @@ export default function ClientLoanApplication() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Loan Application" />
+                <Head title="Loan Application">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 
                 <div className="space-y-6">
                     

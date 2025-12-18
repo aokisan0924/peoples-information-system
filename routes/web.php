@@ -135,7 +135,7 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::post('/savings/withdrawal-request', [publicSavingsDepositController::class, 'createWithdrawalRequest'])->name('savings.withdrawal');
     Route::post('/paymongo/savings-checkout', [PayMongoController::class, 'createSavingsCheckout'])->name('paymongo.savingsCheckout');
     
-    Route::get('/time-deposit', fn() => Inertia::render('Client/TimeDeposit'))->name('time-deposit');
+    Route::get('/time-deposit', [TimeDepositCalculatorController::class, 'showClientTimeDeposit'])->name('time-deposit');
 
     // Client Loan Application Routes
     Route::get('/loans', [ClientLoanController::class, 'index'])->name('loans.index');

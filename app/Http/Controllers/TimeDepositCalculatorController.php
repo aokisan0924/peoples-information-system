@@ -9,6 +9,10 @@ use Inertia\Response;
 
 class TimeDepositCalculatorController extends Controller
 {
+
+    public function showClientTimeDeposit(){
+        return Inertia::render('Client/TimeDeposit');
+    }
     /**
      * Annual interest rates per term (years).
      *

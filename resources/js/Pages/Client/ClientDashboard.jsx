@@ -63,7 +63,9 @@ export default function ClientDashboard() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Dashboard" />
+                <Head title="Dashboard">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 
                 {/* REMOVED: min-h-screen bg-gradient... (SidebarLayout handles bg) */}
                 <div className="space-y-6">

@@ -118,7 +118,9 @@ export default function SavingsDeposit() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Savings Deposit" />
+                <Head title="Savings Deposit">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 
                 <div className="space-y-6">
                     

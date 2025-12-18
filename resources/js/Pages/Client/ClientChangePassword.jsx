@@ -19,7 +19,9 @@ export default function ChangePassword() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Change Password" />
+                <Head title="Change Password">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 <div className="flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 min-h-[80vh]">
                     <div className="w-full max-w-lg space-y-8">
                         <div className="text-center space-y-2">

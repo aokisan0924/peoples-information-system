@@ -289,7 +289,9 @@ export default function ClientProfile() {
         <SidebarLayout>
             <PaymentReminderLayout>
                 <div className="space-y-6">
-                    <Head title="My Profile" />
+                    <Head title="My Profile">
+                        <link rel="icon" href="/images/logo/pis_logo.png" />
+                    </Head>
                     <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
                     
                     {/* HEADER CARD */}

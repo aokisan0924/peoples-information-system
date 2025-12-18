@@ -38,7 +38,9 @@ export default function ClientNotifications() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Notifications" />
+                <Head title="Notifications">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 <div className="space-y-6">
                     <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-6 sm:p-8 flex flex-col md:flex-row gap-6 md:items-center justify-between shadow-sm dark:shadow-xl transition-colors">
                         <div className="flex gap-4">

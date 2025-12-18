@@ -62,7 +62,9 @@ export default function ClientCapitalContribution() {
     return (
         <SidebarLayout>
             <PaymentReminderLayout>
-                <Head title="Share Capital" />
+                <Head title="Share Capital">
+                    <link rel="icon" href="/images/logo/pis_logo.png" />
+                </Head>
                 <div className="space-y-6">
                     {/* HERO HEADER */}
                     <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 overflow-hidden shadow-sm dark:shadow-xl transition-colors">
