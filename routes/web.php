@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\LoanController;
 use App\Http\Controllers\Admin\MemberController;
 use App\Http\Controllers\Admin\MemberDataController;
@@ -39,7 +41,10 @@ use App\Http\Controllers\TimeDepositCalculatorController;
 use App\Http\Middleware\AdminMiddleware;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
-// Public Pages
+// =========================================================================
+// 1. PUBLIC ROUTES (RESTORED FROM ORIGINAL FILE)
+// =========================================================================
+
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
 Route::prefix('about')->group(function () {
@@ -55,6 +60,7 @@ Route::get('/gallery', fn() => Inertia::render('Gallery'))->name('gallery');
 Route::get('/contact', [ContactController::class, 'showContactPage'])->name('contact');
 Route::post('/contact/send', [ContactController::class, 'send']);
 
+// Calculators & Public Info
 Route::get('/calculator', [PublicCalculatorController::class, 'publicCalculatorIndex']);
 Route::post('/calculator/active-pensioner-v1', [PublicCalculatorController::class, 'activePensionerV1'])->name('public.calculator.activePensionerV1');
 
@@ -79,15 +85,14 @@ Route::get('/register', [RegisterController::class, 'showForm'])->name('member.r
 Route::post('/register/send-otp', [RegisterController::class, 'sendOtp'])->name('register.sendOtp')->middleware('throttle:5,1');
 Route::post('/register/verify-otp', [RegisterController::class, 'verifyOtp'])->name('register.verifyOtp')->middleware('throttle:10,1');
 Route::post('/register/resend-otp', [RegisterController::class, 'resendOtp'])->name('register.resendOtp')->middleware('throttle:1,30'); 
+Route::post('/member/register', [MemberRegistrationController::class, 'store'])->name('member.store');
 
 // Forgot password (OTP-based)
 Route::get('/password/forgot', [MemberPasswordResetController::class, 'showForgotForm']) ->name('member.password.forgot');
 Route::post('/password/forgot/send-otp', [MemberPasswordResetController::class, 'sendResetOtp']) ->name('member.password.sendOtp')->middleware('throttle:3,1');
 Route::post('/password/forgot/verify', [MemberPasswordResetController::class, 'verifyResetOtp'])->name('member.password.verifyOtp')->middleware('throttle:5,1');
 
-Route::post('/member/register', [MemberRegistrationController::class, 'store'])->name('member.store');
-
-// Login & Auth
+// Login
 Route::get('/login', fn () => Inertia::render('Auth/Login', [
     'canResetPassword' => false,
     'status' => session('status'),
@@ -95,14 +100,16 @@ Route::get('/login', fn () => Inertia::render('Auth/Login', [
 
 Route::post('/login', [MemberAuthController::class, 'memberLogin'])->name('member.login.post');
 
-// Authenticated Client Routes
+
+// =========================================================================
+// 2. CLIENT / MEMBER PORTAL (RESTORED FROM ORIGINAL FILE)
+// =========================================================================
 Route::middleware('auth:member')->prefix('client')->name('member.')->group(function () {
-    // Client SideBar Routes
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/capital-total', [DashboardController::class, 'getCapitalTotal'])->name('capital.total');
     Route::get('/capital-chart', [DashboardController::class, 'getCapitalChartData'])->name('capital.chart');
     
-    // Client Profile Data Routes
+    // Profile Data
     Route::get('/profile-data', [ClientController::class, 'showMemberProfile'])->name('show');
     Route::post('/update-basic-info', [ClientController::class, 'updateBasicInfo'])->name('update-basic-info');
     Route::post('/update-branch-service', [ClientController::class, 'updateBranchService'])->name('update-branch-service');
@@ -116,49 +123,47 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::post('/profile/photo', [ClientController::class, 'updateProfilePhoto'])->name('updateProfilePhoto');
     Route::get('/profile/photo/show', [ClientController::class, 'showProfilePhoto'])->name('showProfilePhoto');
 
+    // Notifications
     Route::get('/notifications', [ClientNotificationController::class, 'index'])->name('notifications.index');
     Route::get('/notifications/list', [ClientNotificationController::class, 'list']);
     Route::post('/notifications/{id}/read', [ClientNotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [ClientNotificationController::class, 'markAllAsRead']);
 
-    // Client Transaction Routes
+    // Transactions
     Route::get('/recent-transactions', [ClientTransactionHistoryController::class, 'getTransactionHistory'])->name('transactions.history');
     Route::get('/transactions', [ClientTransactionHistoryController::class, 'index'])->name('transactions.index');
 
-    // Client Capital Contribution Routes
-    // Route::get('/share-capital', [ClientContributionController::class, 'showShareCapital'])->name('contribution');
+    // Products & Checkout
     Route::get('/capital-contribution', [ClientContributionController::class, 'shareCapitalData'])->name('share-capital-data');
     Route::post('/paymongo/capital-checkout', [PayMongoController::class, 'createCapitalCheckout'])->name('paymongo.capitalCheckout');
 
-    // Savings Deposit Routes
     Route::get('/savings-deposit', [publicSavingsDepositController::class, 'memberIndex'])->name('savings.index');
     Route::post('/savings/withdrawal-request', [publicSavingsDepositController::class, 'createWithdrawalRequest'])->name('savings.withdrawal');
     Route::post('/paymongo/savings-checkout', [PayMongoController::class, 'createSavingsCheckout'])->name('paymongo.savingsCheckout');
     
     Route::get('/time-deposit', [TimeDepositCalculatorController::class, 'showClientTimeDeposit'])->name('time-deposit');
 
-    // Client Loan Application Routes
+    // Loans
     Route::get('/loans', [ClientLoanController::class, 'index'])->name('loans.index');
     Route::get('/api/loans', [ClientLoanController::class, 'list'])->name('loans.list');
     Route::post('/api/loans/compute', [ClientLoanController::class, 'compute'])->name('loans.compute');
     Route::post('/api/loans/submit', [ClientLoanController::class, 'submit'])->name('loans.submit');
 
-    // Loan Detail (modal)
     Route::get('/api/loans/{loanReference}', [ClientLoanController::class, 'showDetailJson'])->name('loans.show.json');
     Route::get('/loans/{loanReference}/requirements', [ClientLoanController::class, 'showRequirements'])->name('loans.requirements');
     Route::post('/loans/{loanReference}/requirements', [ClientLoanController::class, 'uploadRequirements'])->name('loans.requirements.upload');
     Route::post('/loans/{loanReference}/requirements/submit', [ClientLoanController::class, 'submitForEvaluation'])->name('loans.requirements.submit');
 
-    // Paymongo Routes
+    // Paymongo
     Route::post('/paymongo/membership-checkout', [PayMongoController::class, 'createMembershipCheckout'])->name('paymongo.membershipCheckout');
     
-    // Payment Routes
+    // Payments
     Route::get('/payment-status', [MemberPaymentStatusController::class, 'showPaymentStatus'])->name('payment-status');
     Route::get('/payment/success', [PaymentController::class, 'success']);
     Route::get('/payment/failure', [PaymentController::class, 'failure']);
     Route::get('/payment/cancel', [PaymentController::class, 'cancel']);
 
-    // Reset Password Routes
+    // Settings
     Route::get('/settings/password', [MemberSettingsController::class, 'edit'])->name('settings');
     Route::post('/settings/password', [MemberSettingsController::class, 'update'])->name('settings.update');
 
@@ -168,167 +173,171 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
 // PayMongo Webhook
 Route::post('/paymongo/webhook', [PayMongoController::class, 'webhook'])->withoutMiddleware(VerifyCsrfToken::class)->name('paymongo.webhook');
 
-// Admin Routes
+
+// =========================================================================
+// 3. ADMIN PORTAL (NEW GRANULAR PERMISSIONS SYSTEM)
+// =========================================================================
 Route::prefix('admin')->name('admin.')->group(function () {
 
-    Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
-
-    // Admin Login Group
+    // --- Guest Routes ---
     Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
 
-    Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->middleware('auth:admin')->name('2fa.setup');
-    Route::get('/2fa', [AdminAuthController::class, 'show2faForm'])->name('2fa.form');
-    Route::post('/2fa', [AdminAuthController::class, 'verify2fa'])->name('2fa.verify');
-    // Member Management Group
-    Route::prefix('/members')->name('members.')->group(function () {
-        // Pages
-        Route::get('/', [MemberController::class, 'showMemberPage'])->name('index');
-        Route::get('/profile/{encrypted}', [MemberController::class, 'showEncrypted'])->name('show-member');
-
-        // Actions
-        Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
-        Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');
+    // --- Authenticated Admin Common Routes ---
+    Route::middleware('auth:admin')->group(function () {
         
-        Route::post('/{encrypted}/update-basic-info', [MemberController::class, 'updateBasicInfo'])->name('update-basic-info');
-        Route::post('/{encrypted}/update-branch-service', [MemberController::class, 'updateBranchService'])->name('update-branch-service');
-        Route::post('/{encrypted}/update-afp-info', [MemberController::class, 'updateAfpInfo'])->name('update-afp-info');
-        Route::post('/{encrypted}/update-spouse-info', [MemberController::class, 'updateSpouseInfo'])->name('update-spouse-info');
-        Route::post('/{encrypted}/update-parents-info', [MemberController::class, 'updateParentsInfo'])->name('update-parents-info');
-        Route::post('/{encrypted}/update-identification-info', [MemberController::class, 'updateIdentificationInfo'])->name('update-identification-info');
-        Route::post('/{encrypted}/update-emergency-info', [MemberController::class, 'updateEmergencyInfo'])->name('update-emergency-info');
-        Route::post('/{encrypted}/update-dependents-info', [MemberController::class, 'updateDependents'])->name('update-dependents-info');
+        // 1. Dashboard & Security (Accessible to ALL Admins)
+        Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
+        Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->name('2fa.setup');
+        Route::get('/2fa', [AdminAuthController::class, 'show2faForm'])->name('2fa.form');
+        Route::post('/2fa', [AdminAuthController::class, 'verify2fa'])->name('2fa.verify');
 
-        Route::get('/{encrypted}/loan-details/{loanReference}', [MemberController::class, 'apiMemberLoanDetails'])->name('loan-details');
-    });
+        // 2. Profile Management (Self - Accessible to ALL Admins)
+        Route::get('/profile', [AdminProfileController::class, 'edit'])->name('profile.edit');
+        Route::patch('/profile', [AdminProfileController::class, 'update'])->name('profile.update');
+        Route::put('/password', [AdminProfileController::class, 'updatePassword'])->name('password.update');
 
-    // Loan Management
-    Route::middleware(AdminMiddleware::class)->group(function () {
-        // Pages
-        Route::get('/loans', [LoanController::class, 'showLoanPage'])->name('loans');
-        Route::get('/loans/{loanReference}', [LoanController::class, 'showLoanDetails'])->name('loans.showLoan');
-        Route::get('/loan-settings', [AdminComputationController::class, 'showLoanSettings'])->name('loan-settings.index');
 
-        // APIs
-        Route::get('/api/loans', [LoanController::class, 'apiIndex'])->name('api.loans.index');
-        Route::get('/api/members/search', [LoanController::class, 'apiSearchMembers'])->name('api.members.search');
-        Route::get('/api/loans', [LoanController::class, 'apiList']);
-        Route::get('/api/loans/{loanReference}/details', [LoanController::class, 'apiDetails'])->name('api.loans.details');
+        // =================================================================
+        // PERMISSION GROUPS (NEW)
+        // =================================================================
 
-        // Actions
-        Route::post('/compute-loan', [LoanController::class, 'compute']);
-        Route::post('/submit-loan', [LoanController::class, 'storeLoan']);
-        // Documents (upload/list/preview)
-        Route::get('/loans/{loanReference}/documents/{documentId}/preview', [LoanController::class, 'previewPreApprovalDocuments'])->whereNumber('documentId')->name('loans.preDocuments.preview');
-        Route::get('/admin/loans/{loanReference}/post-documents/{documentId}/preview',[LoanController::class, 'previewPostApprovalDocument'])->name('loans.postDocuments.preview');
-        // PDF Downloads
-        Route::get('/loans/{loanReference}/download/application', [LoanController::class, 'downloadapplication'])->name('loan.download.application');
-        Route::get('/loans/{loanReference}/download/release-voucher', [LoanController::class, 'downloadReleaseVoucher'])->name('loan.download.releaseVoucher');
-        Route::get('/loans/{loanReference}/download/ledger', [LoanController::class, 'downloadLedger'])->name('loan.download.ledger');
-        // Documents uploads
-        Route::post('/loans/{loanReference}/post-approval-docs', [LoanController::class, 'storePostApprovalDocs'])->name('loans.postApprovalDocs.store');
-        Route::post('/loans/{loanReference}/documents', [LoanController::class, 'storePreApprovalDocuments'])->name('loans.documents.store');
-        // Confirm that admin printed/downloaded docs
-        Route::post('/loans/{loanReference}/ack-downloads', [LoanController::class, 'acknowledgeDownloads'])->name('loan.ackDownloads');
-        // Actions
-        Route::post('/loans/{loanReference}/approve', [LoanController::class, 'approve'])->name('loan.approve');
-        Route::post('/loans/{loanReference}/decline', [LoanController::class, 'decline'])->name('loan.decline');
-        Route::post('/loans/{loanReference}/release', [LoanController::class, 'release'])->name('loan.release');
-        Route::post('/loans/{loanReference}/complete', [LoanController::class, 'complete'])->name('loan.complete');
-
-        // Computation Routes
-        Route::get('/computations', [AdminComputationController::class, 'computationList'])->name('computations.list');
-        Route::post('/computations', [AdminComputationController::class, 'storeComputation'])->name('computations.store-computation');
-        Route::put('/computations/{id}', [AdminComputationController::class, 'updateComputation'])->name('computations.update-computation');
-        Route::get('/computations/{id}/set-active', [AdminComputationController::class, 'setActive'])->name('computations.set-active');
-        Route::delete('/computations/{id}', [AdminComputationController::class, 'destroyComputation'])->name('computations.destroy-computation');
-    });
-
-    // Share Capital Group
-    Route::prefix('/share-capital')->name('share-capital.')->group(function () {
-        // Pages
-        Route::get('/', [ShareCapitalController::class, 'showShareCapital'])->name('index');
-        Route::get('/member/{memberId}', [ShareCapitalController::class, 'showMemberContributions'])->name('member');
-
-        // APIs
-        Route::get('/api/index', [ShareCapitalController::class, 'apiIndex'])->name('api-index');
-        Route::get('/api/member/{memberId}', [ShareCapitalController::class, 'apiMemberContributions'])->name('api-member');
-        Route::get('/api/members-min', [ShareCapitalController::class, 'apiMembersMin'])->name('api-members-min');
-
-        // Actions
-        Route::post('/store', [ShareCapitalController::class, 'storeShareCapital'])->name('store');
-        
-        // Export
-        Route::get('/export', [ShareCapitalController::class, 'exportCsv'])->name('export');
-    });
-
-    // Savings Depsit Group
-    Route::prefix('/savings-deposit')->name('savings.')->group(function () {
-        // Pages
-        Route::get('/', [SavingsDepositController::class, 'showSavingsDepositPage'])->name('index');
-        Route::get('/member/{memberId}', [SavingsDepositController::class, 'showMemberSavings'])->name('member');
-
-        Route::prefix('/withdrawals')->name('withdrawal.')->group(function () {
-            // Withdrawal Table
-            Route::get('/', [SavingsDepositController::class, 'withdrawalIndex'])->name('index');
-            Route::get('/{memberId}', [SavingsDepositController::class, 'showMemberWithdrawal'])->name('show');
+        // GROUP A: SUPER ADMIN ONLY (User Mgmt, Settings, Formulas)
+        Route::middleware(['auth:admin', 'role:super-admin'])->group(function () {
+            Route::get('/create-user', [AdminUserController::class, 'create'])->name('create-user');
+            Route::post('/create-user', [AdminUserController::class, 'store'])->name('store-user');
+            Route::patch('/update-user/{id}', [AdminUserController::class, 'update'])->name('update-user');
             
-            // APPROVE
-            Route::post('/{memberId}/approve', [SavingsDepositController::class, 'approveWithdrawal'])->name('approve');
-
-            // DECLINE
-            Route::post('/{memberId}/decline', [SavingsDepositController::class, 'declineWithdrawal'])->name('decline');
-
-            // RELEASE (Cash / GCash / Maya / Bank)
-            Route::post('/{memberId}/release', [SavingsDepositController::class, 'releaseWithdrawal'])->name('release');
-
-            // PRINT
-            Route::get('/print/{memberId}', [SavingsDepositController::class, 'printWithdrawal'])->name('print');
+            Route::get('/settings', [SettingController::class, 'showSettingPage'])->name('settings');
+            
+            // Loan Computation Settings
+            Route::get('/loan-settings', [AdminComputationController::class, 'showLoanSettings'])->name('loan-settings.index');
+            Route::get('/computations', [AdminComputationController::class, 'computationList'])->name('computations.list');
+            Route::post('/computations', [AdminComputationController::class, 'storeComputation'])->name('computations.store-computation');
+            Route::put('/computations/{id}', [AdminComputationController::class, 'updateComputation'])->name('computations.update-computation');
+            Route::get('/computations/{id}/set-active', [AdminComputationController::class, 'setActive'])->name('computations.set-active');
+            Route::delete('/computations/{id}', [AdminComputationController::class, 'destroyComputation'])->name('computations.destroy-computation');
         });
 
-        // APIs
-        Route::post('/post-interest', [SavingsDepositController::class, 'postSemiAnnualInterest'])->name('post-interest');
-        Route::get('/api', [SavingsDepositController::class, 'apiIndex'])->name('api-index');
-        Route::get('/api-members-min', [SavingsDepositController::class, 'apiMembersMin'])->name('api-members-min');
-        Route::get('/api/member/{memberId}', [SavingsDepositController::class, 'apiMemberSavings'])->name('api-member');
+        // GROUP B: REPORTS
+        Route::middleware('can_access:view_reports')->group(function () {
+            Route::get('/reports', [ReportController::class, 'showReportPage'])->name('reports');
+        });
 
-        // Actions
-        Route::post('/store', [SavingsDepositController::class, 'storeSavingsDeposit'])->name('store');
+        // GROUP C: LOAN MANAGEMENT
+        
+        // C.1 Read Access (View Pages & APIs)
+        Route::middleware('can_access:view_loans')->group(function () {
+            Route::get('/loans', [LoanController::class, 'showLoanPage'])->name('loans');
+            Route::get('/loans/{loanReference}', [LoanController::class, 'showLoanDetails'])->name('loans.showLoan');
+            
+            // Documents View/Download
+            Route::get('/loans/{loanReference}/documents/{documentId}/preview', [LoanController::class, 'previewPreApprovalDocuments'])->whereNumber('documentId')->name('loans.preDocuments.preview');
+            Route::get('/admin/loans/{loanReference}/post-documents/{documentId}/preview',[LoanController::class, 'previewPostApprovalDocument'])->name('loans.postDocuments.preview');
+            Route::get('/loans/{loanReference}/download/application', [LoanController::class, 'downloadapplication'])->name('loan.download.application');
+            Route::get('/loans/{loanReference}/download/release-voucher', [LoanController::class, 'downloadReleaseVoucher'])->name('loan.download.releaseVoucher');
+            Route::get('/loans/{loanReference}/download/ledger', [LoanController::class, 'downloadLedger'])->name('loan.download.ledger');
+            
+            // APIs
+            Route::get('/api/loans', [LoanController::class, 'apiList'])->name('api.loans.index'); 
+            Route::get('/api/loans/{loanReference}/details', [LoanController::class, 'apiDetails'])->name('api.loans.details');
+        });
 
-        // Export
-        Route::get('/export', [SavingsDepositController::class, 'exportCsv'])->name('export');
-    });
+        // C.2 Write Access (Processing Actions)
+        Route::middleware('can_access:process_loans')->group(function () {
+            Route::post('/compute-loan', [LoanController::class, 'compute']);
+            Route::post('/submit-loan', [LoanController::class, 'storeLoan']);
+            Route::post('/recompute-loan', [LoanController::class, 'recompute'])->name('loan.recompute');
+            
+            Route::post('/loans/{loanReference}/approve', [LoanController::class, 'approve'])->name('loan.approve');
+            Route::post('/loans/{loanReference}/decline', [LoanController::class, 'decline'])->name('loan.decline');
+            Route::post('/loans/{loanReference}/release', [LoanController::class, 'release'])->name('loan.release');
+            Route::post('/loans/{loanReference}/complete', [LoanController::class, 'complete'])->name('loan.complete');
 
-    // Time Deposit Group
-    Route::prefix('/time-deposit')->name('time.')->group(function () {
-        // Pages
-        Route::get('/', [TimeDepositController::class, 'showtimeDepositPage'])->name('index');
-        Route::get('/member/{memberId}', [TimeDepositController::class, 'showMemberTimeDeposit'])->name('member');
+            Route::post('/loans/{loanReference}/post-approval-docs', [LoanController::class, 'storePostApprovalDocs'])->name('loans.postApprovalDocs.store');
+            Route::post('/loans/{loanReference}/documents', [LoanController::class, 'storePreApprovalDocuments'])->name('loans.documents.store');
+            Route::post('/loans/{loanReference}/ack-downloads', [LoanController::class, 'acknowledgeDownloads'])->name('loan.ackDownloads');
+        });
 
-        // APIs
-        Route::get('/api-index', [TimeDepositController::class, 'apiIndex'])->name('api-index');
-        Route::get('/api-members-min',[TimeDepositController::class, 'apiMembersMin'])->name('api-members-min');
-    
-        // Actions
-        Route::post('/store', [TimeDepositController::class, 'storeTimeDeposit'])->name('store');
-        Route::post('/member/{memberId}/withdraw-interest', [TimeDepositController::class, 'withdrawInterest'])->name('withdraw-interest');
-    
-        // Export
-        Route::get('/export', [TimeDepositController::class, 'exportCsv'])->name('export');
-    });
+        // GROUP D: MEMBERS (Unified Access)
+        Route::middleware('can_access:manage_members')->prefix('/members')->name('members.')->group(function () {
+            Route::get('/', [MemberController::class, 'showMemberPage'])->name('index');
+            Route::get('/profile/{encrypted}', [MemberController::class, 'showEncrypted'])->name('show-member');
+            Route::get('/{encrypted}/loan-details/{loanReference}', [MemberController::class, 'apiMemberLoanDetails'])->name('loan-details');
+            Route::get('/api/members/search', [LoanController::class, 'apiSearchMembers'])->name('api.members.search'); 
+            
+            // Actions
+            Route::post('/{encrypted}/update-basic-info', [MemberController::class, 'updateBasicInfo'])->name('update-basic-info');
+            Route::post('/{encrypted}/update-branch-service', [MemberController::class, 'updateBranchService'])->name('update-branch-service');
+            Route::post('/{encrypted}/update-afp-info', [MemberController::class, 'updateAfpInfo'])->name('update-afp-info');
+            Route::post('/{encrypted}/update-spouse-info', [MemberController::class, 'updateSpouseInfo'])->name('update-spouse-info');
+            Route::post('/{encrypted}/update-parents-info', [MemberController::class, 'updateParentsInfo'])->name('update-parents-info');
+            Route::post('/{encrypted}/update-identification-info', [MemberController::class, 'updateIdentificationInfo'])->name('update-identification-info');
+            Route::post('/{encrypted}/update-emergency-info', [MemberController::class, 'updateEmergencyInfo'])->name('update-emergency-info');
+            Route::post('/{encrypted}/update-dependents-info', [MemberController::class, 'updateDependents'])->name('update-dependents-info');
+            
+            Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
+            Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');
+        });
 
-    Route::post('/recompute-loan', [LoanController::class, 'recompute'])->name('loan.recompute');
+        // GROUP E: DEPOSITS (Unified Access)
+        Route::middleware('can_access:manage_deposits')->group(function () {
+            // Share Capital
+            Route::prefix('/share-capital')->name('share-capital.')->group(function () {
+                Route::get('/', [ShareCapitalController::class, 'showShareCapital'])->name('index');
+                Route::get('/member/{memberId}', [ShareCapitalController::class, 'showMemberContributions'])->name('member');
+                Route::post('/store', [ShareCapitalController::class, 'storeShareCapital'])->name('store');
+                Route::get('/export', [ShareCapitalController::class, 'exportCsv'])->name('export');
+                // APIs
+                Route::get('/api/index', [ShareCapitalController::class, 'apiIndex'])->name('api-index');
+                Route::get('/api/member/{memberId}', [ShareCapitalController::class, 'apiMemberContributions'])->name('api-member');
+                Route::get('/api/members-min', [ShareCapitalController::class, 'apiMembersMin'])->name('api-members-min');
+            });
 
-    Route::get('/reports', [ReportController::class, 'showReportPage'])->name('reports');
-    Route::get('/settings', [SettingController::class, 'showSettingPage'])->name('settings');
+            // Savings Deposit
+            Route::prefix('/savings-deposit')->name('savings.')->group(function () {
+                Route::get('/', [SavingsDepositController::class, 'showSavingsDepositPage'])->name('index');
+                Route::get('/member/{memberId}', [SavingsDepositController::class, 'showMemberSavings'])->name('member');
+                Route::post('/store', [SavingsDepositController::class, 'storeSavingsDeposit'])->name('store');
+                Route::get('/export', [SavingsDepositController::class, 'exportCsv'])->name('export');
+                Route::post('/post-interest', [SavingsDepositController::class, 'postSemiAnnualInterest'])->name('post-interest');
+
+                // Withdrawals
+                Route::prefix('/withdrawals')->name('withdrawal.')->group(function () {
+                    Route::get('/', [SavingsDepositController::class, 'withdrawalIndex'])->name('index');
+                    Route::get('/{memberId}', [SavingsDepositController::class, 'showMemberWithdrawal'])->name('show');
+                    Route::post('/{memberId}/approve', [SavingsDepositController::class, 'approveWithdrawal'])->name('approve');
+                    Route::post('/{memberId}/decline', [SavingsDepositController::class, 'declineWithdrawal'])->name('decline');
+                    Route::post('/{memberId}/release', [SavingsDepositController::class, 'releaseWithdrawal'])->name('release');
+                    Route::get('/print/{memberId}', [SavingsDepositController::class, 'printWithdrawal'])->name('print');
+                });
+
+                // APIs
+                Route::get('/api', [SavingsDepositController::class, 'apiIndex'])->name('api-index');
+                Route::get('/api-members-min', [SavingsDepositController::class, 'apiMembersMin'])->name('api-members-min');
+                Route::get('/api/member/{memberId}', [SavingsDepositController::class, 'apiMemberSavings'])->name('api-member');
+            });
+
+            // Time Deposit
+            Route::prefix('/time-deposit')->name('time.')->group(function () {
+                Route::get('/', [TimeDepositController::class, 'showtimeDepositPage'])->name('index');
+                Route::get('/member/{memberId}', [TimeDepositController::class, 'showMemberTimeDeposit'])->name('member');
+                Route::post('/store', [TimeDepositController::class, 'storeTimeDeposit'])->name('store');
+                Route::post('/member/{memberId}/withdraw-interest', [TimeDepositController::class, 'withdrawInterest'])->name('withdraw-interest');
+                Route::get('/export', [TimeDepositController::class, 'exportCsv'])->name('export');
+                // APIs
+                Route::get('/api-index', [TimeDepositController::class, 'apiIndex'])->name('api-index');
+                Route::get('/api-members-min',[TimeDepositController::class, 'apiMembersMin'])->name('api-members-min');
+            });
+        });
+
+    }); 
 });
 
-//  Profile Management (Laravel Authenticated)
+// Profile Management (Laravel Authenticated Client)
 Route::middleware('auth')->prefix('profile')->name('profile.')->group(function () {
     Route::get('/', [ProfileController::class, 'edit'])->name('edit');
     Route::patch('/', [ProfileController::class, 'update'])->name('update');
     Route::delete('/', [ProfileController::class, 'destroy'])->name('destroy');
 });
-
-// require __DIR__.'/auth.php';

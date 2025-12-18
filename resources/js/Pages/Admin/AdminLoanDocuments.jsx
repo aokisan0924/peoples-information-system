@@ -1,46 +1,43 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, Link } from '@inertiajs/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import AdminSidebarLayout from '@/Layouts/AdminSidebarLayout';
+import { 
+    Upload, FileText, X, Check, AlertCircle, Loader2, 
+    ArrowRight, HardDrive, MousePointer2, CloudUpload, Trash2, Eye 
+} from 'lucide-react';
 
-export default function AdminLoanDocuments({ loan, requiredType = [], existingDocuments = []} ) {
+export default function AdminLoanDocuments({ loan, requiredType = [], existingDocuments = [] }) {
     const dropRef = useRef(null);
-    const [ files, setFiles ] = useState([]);
-    const [ docsType, setDocsType ] = useState(requiredType?.[0] ?? '');
+    const [files, setFiles] = useState([]);
+    const [docsType, setDocsType] = useState(requiredType?.[0] ?? '');
 
     const pendingCount = useMemo(
         () => files.filter(f => f.status === 'Pending' || f.status === 'Error').length,
         [files]
     );
 
-    // drag/drop handlers
+    // --- DRAG & DROP HANDLERS ---
     const onDragOver = useCallback((e) => {
         e.preventDefault();
         e.stopPropagation();
-
-        if (dropRef.current)
-            dropRef.current.classList.add('ring-2', 'ring-green-500');
+        if (dropRef.current) dropRef.current.classList.add('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-500/10');
     }, []);
 
     const onDragLeave = useCallback((e) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        if (dropRef.current)
-            dropRef.current.classList.add('ring-2', 'ring-green-500');
+        if (dropRef.current) dropRef.current.classList.remove('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-500/10');
     }, []);
 
     const onDrop = useCallback((e) => {
         e.preventDefault();
         e.stopPropagation();
-
-        if (dropRef.current)
-            dropRef.current.classList.add('ring-2', 'ring-green-500');
+        if (dropRef.current) dropRef.current.classList.remove('border-emerald-500', 'bg-emerald-50', 'dark:bg-emerald-500/10');
 
         const dropped = Array.from(e.dataTransfer.files || []);
-        if (!dropped.length)
-            return;
+        if (!dropped.length) return;
 
         const mapped = dropped.map((f) => ({
             file: f,
@@ -51,11 +48,10 @@ export default function AdminLoanDocuments({ loan, requiredType = [], existingDo
         setFiles((prev) => [...prev, ...mapped]);
     }, [docsType]);
 
-    // file picker
+    // --- FILE PICKER ---
     const onPick = (e) => {
         const picked = Array.from(e.target.files || []);
-        if (!picked.length)
-            return;
+        if (!picked.length) return;
 
         const mapped = picked.map((f) => ({
             file: f,
@@ -68,26 +64,19 @@ export default function AdminLoanDocuments({ loan, requiredType = [], existingDo
     };
 
     const updateDocTypeFor = (idx, value) => {
-        setFiles((prev) => prev.map((it, i) => i === idx ? {...it, docsType: value } : it));
+        setFiles((prev) => prev.map((it, i) => i === idx ? { ...it, docsType: value } : it));
     };
 
     const removeFile = (idx) => {
         setFiles((prev) => prev.filter((_, i) => i !== idx));
     };
 
-    // Single Upload
+    // --- UPLOAD LOGIC ---
     const uploadOne = async (idx) => {
         const item = files[idx];
-        if (!item)
-            return;
+        if (!item) return;
 
-        setFiles((prev) => 
-            prev.map((it, i) => 
-                (i === idx ? 
-                { ...it, status: 'Uploading' } 
-                : it)
-            )
-        );
+        setFiles((prev) => prev.map((it, i) => (i === idx ? { ...it, status: 'Uploading' } : it)));
 
         try {
             const form = new FormData();
@@ -97,42 +86,27 @@ export default function AdminLoanDocuments({ loan, requiredType = [], existingDo
             const url = route('admin.loans.documents.store', { loanReference: loan.loanReference });
             await axios.post(url, form, { headers: { 'Content-Type': 'multipart/form-data' } });
 
-            setFiles((prev) => 
-                prev.map((it, i) => 
-                    (i === idx ? 
-                    { ...it, status: 'success' } 
-                    : it)
-                )
-            );
+            setFiles((prev) => prev.map((it, i) => (i === idx ? { ...it, status: 'Success' } : it)));
             toast.success(`${item.file.name} uploaded`);
-            toast.reload({ only: ['existingDocuments'] });
+            router.reload({ only: ['existingDocuments'] });
         } catch (error) {
             console.error(error);
             const msg = error?.response?.data?.message || 'Upload failed.';
             toast.error(msg);
-
-            setFiles((prev) =>
-                prev.map((it, i) =>
-                    (i === idx ?
-                    { ...it, status: 'error'}
-                    : it)
-                )
-            );
+            setFiles((prev) => prev.map((it, i) => (i === idx ? { ...it, status: 'Error' } : it)));
         }
     };
 
-    // upload all pending/error
     const uploadAll = async () => {
         const toUpload = files
-        .map((it, i) => ({ ...it, idx: i }))
-        .filter((it) => it.status === 'Pending' || it.status === 'Error');
+            .map((it, i) => ({ ...it, idx: i }))
+            .filter((it) => it.status === 'Pending' || it.status === 'Error');
 
         if (toUpload.length === 0) {
             toast('Nothing to upload.');
             return;
         }
 
-        // Mark only those as uploading
         setFiles((prev) =>
             prev.map((it, i) =>
                 toUpload.some(t => t.idx === i) ? { ...it, status: 'Uploading' } : it
@@ -147,206 +121,241 @@ export default function AdminLoanDocuments({ loan, requiredType = [], existingDo
             });
 
             const url = route('admin.loans.documents.store', { loanReference: loan.loanReference });
-            await axios.post(url, form, { headers: {'Content-Type': 'multipart/form-data' } });
+            await axios.post(url, form, { headers: { 'Content-Type': 'multipart/form-data' } });
 
             setFiles((prev) =>
                 prev.map((it, i) =>
-                    toUpload.some(t => t.idx === i) ? { ...it, status: 'success' } : it
+                    toUpload.some(t => t.idx === i) ? { ...it, status: 'Success' } : it
                 )
             );
 
             toast.success(`Uploaded ${toUpload.length} file(s).`);
-            toast.reload({ only: ['existingDocuments'] });
+            router.reload({ only: ['existingDocuments'] });
         } catch (error) {
-            console.error(err);
-            const msg = err?.response?.data?.message || 'Upload failed';
+            console.error(error);
+            const msg = error?.response?.data?.message || 'Upload failed';
             toast.error(msg);
 
             setFiles((prev) =>
                 prev.map((it, i) =>
-                    toUpload.some(t => t.idx === i) ? { ...it, status: 'error' } : it
+                    toUpload.some(t => t.idx === i) ? { ...it, status: 'Error' } : it
                 )
             );
         }
     };
 
     return (
-        <>
+        <AdminSidebarLayout>
             <Head title="Upload Documents">
                 <link rel="icon" href="/images/logo/pis_logo.png" />
             </Head>
-            <AdminSidebarLayout>
-                <div className="p-4 md:p-6 space-y-6">
-                    <h1 className="text-2xl font-bold text-green-600">
-                        Upload Documents — {loan.loanReference}
-                    </h1>
 
-                    {/* Doc type to apply to new picks/drops */}
+            <div className="space-y-6">
+                
+                {/* HEADER */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <label className="text-sm font-medium">Document Type</label>
+                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                            <CloudUpload className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                            Upload Documents
+                        </h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            Reference: <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{loan.loanReference}</span>
+                        </p>
+                    </div>
+                    
+                    {/* Doc Type Selector */}
+                    <div className="flex items-center gap-2 bg-white dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 px-3 uppercase">Default Type:</span>
                         <select
                             value={docsType}
                             onChange={(e) => setDocsType(e.target.value)}
-                            className="w-full md:w-64 rounded-md border-gray-300 focus:border-green-500 focus:ring-green-500"
+                            className="bg-transparent border-none text-sm font-medium text-slate-900 dark:text-white focus:ring-0 cursor-pointer py-1 pr-8"
                         >
                             {requiredType.map((t) => (
-                                <option key={t} value={t}>{t}</option>
+                                <option key={t} value={t} className="text-slate-900">{t}</option>
                             ))}
                         </select>
                     </div>
+                </div>
 
-                    {/* Drag & Drop Area */}
-                    <div
-                        ref={dropRef}
-                        onDragOver={onDragOver}
-                        onDragLeave={onDragLeave}
-                        onDrop={onDrop}
-                        className="bg-white rounded-xl shadow p-6 border border-dashed border-gray-300 text-center"
-                    >
-                        <p className="text-gray-600 mb-2 font-medium">Drag & drop files here</p>
-                        <p className="text-gray-500 text-sm mb-4">or click the button below</p>
-                        <label className="inline-block">
-                            <input type="file" multiple onChange={onPick} className="hidden" accept="image/*,application/pdf" />
-                            <span className="px-4 py-2 rounded text-white bg-green-600 hover:bg-green-700 cursor-pointer">
-                            Browse files
-                            </span>
-                        </label>
-                    </div>
-
-                    {/* Pending/Selected Files */}
-                    <div className="bg-white rounded-xl shadow p-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-green-600">
-                                Pending Uploads <span className='text-gray-500 text-sm'>({pendingCount} pending)</span>
-                            </h2>
-                            <button
-                                onClick={uploadAll}
-                                disabled={files.length === 0}
-                                className={`px-4 py-2 rounded text-white ${files.length === 0 ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
-                            >
-                                Upload All
-                            </button>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    {/* LEFT COLUMN: UPLOAD AREA & PENDING LIST */}
+                    <div className="lg:col-span-2 space-y-6">
+                        
+                        {/* Drag & Drop Area */}
+                        <div
+                            ref={dropRef}
+                            onDragOver={onDragOver}
+                            onDragLeave={onDragLeave}
+                            onDrop={onDrop}
+                            className="relative group flex flex-col items-center justify-center w-full h-48 rounded-2xl border-2 border-dashed border-slate-300 dark:border-white/20 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all cursor-pointer"
+                        >
+                            <input type="file" multiple onChange={onPick} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept="image/*,application/pdf" />
+                            
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                <div className="p-3 mb-3 rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                                    <CloudUpload size={28} />
+                                </div>
+                                <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
+                                    <span className="font-semibold text-slate-900 dark:text-white">Click to upload</span> or drag and drop
+                                </p>
+                                <p className="text-xs text-slate-400 dark:text-slate-500">PDF, PNG, JPG (MAX. 10MB)</p>
+                            </div>
                         </div>
 
-                        {files.length === 0 ? (
-                            <p className="text-sm text-gray-500 mt-2">No files yet. Drag & drop or browse.</p>
-                        ) : (
-                            <ul className="mt-4 grid md:grid-cols-2 gap-3">
-                                {files.map((item, idx) => {
-                                const borderColor =
-                                    item.status === 'Success' ? 'border-green-500'
-                                    : item.status === 'Error' ? 'border-red-500'
-                                    : item.status === 'Uploading' ? 'border-blue-400'
-                                    : 'border-gray-200';
-
-                                return (
-                                    <li key={`${item.file.name}-${idx}`} className={`border ${borderColor} rounded p-3`}>
-                                        <div className="flex items-start justify-between gap-3">
+                        {/* Pending Files List */}
+                        {files.length > 0 && (
+                            <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-slate-200 dark:border-white/10 overflow-hidden">
+                                <div className="px-6 py-4 border-b border-slate-100 dark:border-white/5 flex items-center justify-between bg-slate-50 dark:bg-white/5">
+                                    <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                        <MousePointer2 size={16} className="text-emerald-500" /> 
+                                        Pending Uploads <span className="text-xs font-normal text-slate-500">({pendingCount})</span>
+                                    </h3>
+                                    {pendingCount > 0 && (
+                                        <button
+                                            onClick={uploadAll}
+                                            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all"
+                                        >
+                                            Upload All
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="p-4 grid gap-3">
+                                    {files.map((item, idx) => (
+                                        <div 
+                                            key={`${item.file.name}-${idx}`} 
+                                            className={`flex flex-col sm:flex-row sm:items-center gap-4 p-3 rounded-xl border transition-all ${
+                                                item.status === 'Success' 
+                                                    ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/20 dark:bg-emerald-500/5' 
+                                                    : item.status === 'Error'
+                                                    ? 'border-rose-200 bg-rose-50/50 dark:border-rose-500/20 dark:bg-rose-500/5'
+                                                    : 'border-slate-200 bg-white dark:border-white/10 dark:bg-white/5'
+                                            }`}
+                                        >
+                                            {/* File Info */}
                                             <div className="flex-1 min-w-0">
-                                                <div className="text-sm font-medium truncate">{item.file.name}</div>
-                                                    <div className="text-xs text-gray-500">
-                                                        {(item.file.size / 1024).toFixed(1)} KB • {item.file.type || 'unknown'}
-                                                    </div>
-
-                                                    {/* per-file docType (editable) */}
-                                                    <div className="mt-2">
-                                                        <label className="text-xs text-gray-500 mr-2">type</label>
-                                                        <select
-                                                            value={item.docsType}
-                                                            onChange={(e) => updateDocTypeFor(idx, e.target.value)}
-                                                            className="rounded-md border-gray-300 focus:border-green-500 focus:ring-green-500 text-sm"
-                                                        >
-                                                            {requiredType.map((t) => (
-                                                                <option key={t} value={t}>{t}</option>
-                                                            ))}
-                                                            <option value="">(none)</option>
-                                                        </select>
-                                                    </div>
-
-                                                {/* status */}
-                                                <div className="text-xs mt-2">
-                                                    {item.status === 'Pending' && <span className="text-gray-500">Pending</span>}
-                                                    {item.status === 'Uploading' && <span className="text-blue-600">Uploading…</span>}
-                                                    {item.status === 'Success' && <span className="text-green-600 font-medium">Uploaded ✔</span>}
-                                                    {item.status === 'Error' && <span className="text-red-600">Error — try again</span>}
+                                                <div className="flex items-center gap-2">
+                                                    <FileText size={16} className="text-slate-400" />
+                                                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.file.name}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-xs text-slate-500">{(item.file.size / 1024).toFixed(1)} KB</span>
+                                                    <span className="text-xs text-slate-300">•</span>
+                                                    
+                                                    {/* Status Badge */}
+                                                    {item.status === 'Pending' && <span className="text-xs text-slate-500">Pending</span>}
+                                                    {item.status === 'Uploading' && <span className="text-xs text-blue-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin"/> Uploading...</span>}
+                                                    {item.status === 'Success' && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><Check size={10}/> Uploaded</span>}
+                                                    {item.status === 'Error' && <span className="text-xs text-rose-600 font-bold flex items-center gap-1"><AlertCircle size={10}/> Error</span>}
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-col gap-2">
-                                                <button
-                                                    onClick={() => uploadOne(idx)}
-                                                    disabled={item.status === 'uploading' || item.status === 'Success'}
-                                                    className={`px-3 py-1 rounded text-white text-sm ${
-                                                        item.status === 'Success'
-                                                        ? 'bg-gray-400'
-                                                        : 'bg-green-600 hover:bg-green-700'
-                                                    }`}
-                                                    title="Upload this file"
+                                            {/* Type Selector & Actions */}
+                                            <div className="flex items-center gap-3">
+                                                <select
+                                                    value={item.docsType}
+                                                    onChange={(e) => updateDocTypeFor(idx, e.target.value)}
+                                                    disabled={item.status === 'Success' || item.status === 'Uploading'}
+                                                    className="rounded-lg border-slate-200 bg-white dark:bg-white/5 dark:border-white/10 text-xs py-1.5 pl-2 pr-7 focus:ring-emerald-500 disabled:opacity-50"
                                                 >
-                                                    {item.status === 'success' ? 'Done' : 'Upload'}
-                                                </button>
+                                                    {requiredType.map((t) => <option key={t} value={t} className="text-slate-900">{t}</option>)}
+                                                    <option value="" className="text-slate-900">(none)</option>
+                                                </select>
 
-                                                <button
-                                                    onClick={() => removeFile(idx)}
-                                                    disabled={item.status === 'Uploading'}
-                                                    className="px-3 py-1 rounded text-red-600 hover:bg-red-50 text-sm"
-                                                    title="Remove"
-                                                >
-                                                    Remove
-                                                </button>
+                                                {item.status !== 'Success' && (
+                                                    <div className="flex items-center gap-1">
+                                                        <button 
+                                                            onClick={() => uploadOne(idx)}
+                                                            disabled={item.status === 'Uploading'}
+                                                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition"
+                                                            title="Upload"
+                                                        >
+                                                            <Upload size={16} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => removeFile(idx)}
+                                                            disabled={item.status === 'Uploading'}
+                                                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition"
+                                                            title="Remove"
+                                                        >
+                                                            <X size={16} />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-                                    </li>
-                                    );
-                                })}
-                            </ul>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
 
-                    {/* Existing uploaded documents from server */}
-                    <div className="bg-white rounded-xl shadow p-4">
-                        <h2 className="text-lg font-semibold text-green-600 mb-3">existingDocuments</h2>
-                        {existingDocuments.length === 0 ? (
-                            <p className="text-sm text-gray-500">None uploaded yet.</p>
-                        ) : (
-                            <ul className="grid md:grid-cols-2 gap-3">
-                                {existingDocuments.map((d) => (
-                                    <li key={d.id} className="border rounded p-2">
-                                        <div className="text-sm font-medium">{d.originalName}</div>
-                                        <div className="text-xs text-gray-500">
-                                            {d.docsType || '—'} • {d.mimeType} • {(d.size / 1024).toFixed(1)} KB
+                    {/* RIGHT COLUMN: EXISTING DOCS & ACTIONS */}
+                    <div className="space-y-6">
+                        
+                        {/* Server Files */}
+                        <div className="bg-white dark:bg-white/5 rounded-2xl shadow-sm border border-slate-200 dark:border-white/10 overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/5">
+                                <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <HardDrive size={16} className="text-blue-500" />
+                                    Uploaded Documents
+                                </h3>
+                            </div>
+                            
+                            <div className="p-2 max-h-[400px] overflow-y-auto space-y-1">
+                                {existingDocuments.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                                        No documents uploaded yet.
+                                    </div>
+                                ) : (
+                                    existingDocuments.map((d) => (
+                                        <div key={d.id} className="group flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors border border-transparent hover:border-slate-100 dark:hover:border-white/5">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                                                    <FileText size={18} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[150px]">{d.originalName}</p>
+                                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                        {d.docsType || 'Uncategorized'} • {(d.size / 1024).toFixed(1)} KB
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <a
+                                                href={route('admin.loans.documents.preview', {
+                                                    loanReference: loan.loanReference,
+                                                    documentId: d.id
+                                                })}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition"
+                                                title="Preview Document"
+                                            >
+                                                <Eye size={16} />
+                                            </a>
                                         </div>
-                                        <a
-                                            href={route('admin.loans.documents.preview', {
-                                                loanReference: loan.loanReference,
-                                                documentId: d.id
-                                            })}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-blue-600 text-sm hover:underline"
-                                        >
-                                            preview
-                                        </a>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
 
-                    {/* Proceed Button */}
-                    <div className="flex justify-end mt-6">
-                        <button
-                            onClick={() =>
-                                router.visit(route('admin.loans.showLoan', {loanReference: loan.loanReference}))
-                            }
-                            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-md transition"
-                        >
-                            Proceed to Loan Review
-                        </button>
-                    </div>
+                        {/* Proceed Button */}
+                        <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl p-5 border border-emerald-100 dark:border-emerald-500/20 text-center">
+                            <h4 className="text-emerald-800 dark:text-emerald-200 font-bold mb-1">Ready to Proceed?</h4>
+                            <p className="text-xs text-emerald-600/80 dark:text-emerald-400/80 mb-4">Ensure all required documents are uploaded before continuing.</p>
+                            <button
+                                onClick={() => router.visit(route('admin.loans.showLoan', { loanReference: loan.loanReference }))}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                            >
+                                Proceed to Review <ArrowRight size={16} />
+                            </button>
+                        </div>
 
+                    </div>
                 </div>
-            </AdminSidebarLayout>
-        </>
+            </div>
+        </AdminSidebarLayout>
     );
 }

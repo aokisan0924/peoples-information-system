@@ -70,7 +70,7 @@ class Member extends Authenticatable
     }
 
     public function capitalContribution() {
-        return $this->hasOne(CapitalContribution::class, 'memberId');
+        return $this->hasMany(CapitalContribution::class, 'memberId');
     }
 
     public function loans() {

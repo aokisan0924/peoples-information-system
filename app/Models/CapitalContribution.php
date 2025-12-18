@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class CapitalContribution extends Model
 {
-
     use HasFactory;
 
     protected $fillable = [
@@ -17,6 +16,7 @@ class CapitalContribution extends Model
         'is_paid',
         'status',
         'paid_at',
+        'processed_by', // <--- Added tracking column
     ];
 
     protected $casts = [
@@ -33,9 +33,14 @@ class CapitalContribution extends Model
         return $this->belongsTo(Member::class, 'memberId');
     }
 
+    // --- NEW: Relationship to Admin ---
+    public function processor() {
+        return $this->belongsTo(Admin::class, 'processed_by');
+    }
+
     public function scopePosted($q) {
         return $q->where(function ($qq) {
-            $qq->where('is_paid', true)->overWhereRaw('LOWER(status) = ?', ['posted']);
+            $qq->where('is_paid', true)->orWhereRaw('LOWER(status) = ?', ['posted']);
         });
     }
 
@@ -50,7 +55,7 @@ class CapitalContribution extends Model
                     $mq->where('firstName', 'like', "%{$term}%")
                     ->orWhere('lastName', 'like', "%{$term}%")
                     ->orWhere('username', 'like', "%{$term}%");
-            });
+                });
         });
     }
 }

@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { Head, Link, usePage } from "@inertiajs/react";
-import {  ArrowLeft, PiggyBank, CalendarClock, TrendingUp, FileText } from "lucide-react";
+import { 
+    ArrowLeft, PiggyBank, CalendarClock, TrendingUp, FileText, 
+    AlertCircle, CheckCircle2, Wallet, ArrowDownLeft 
+} from "lucide-react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 import CountUp from "react-countup";
 import axios from "axios";
@@ -59,7 +62,7 @@ export default function TimeDepositView() {
             setSubmitting(true);
 
             const { data } = await axios.post(
-                route("admin.timeDeposit.withdraw-interest", initialDeposit.id),
+                route("admin.time.withdraw-interest", initialDeposit.id),
                 {
                     amount: amountNum,
                     remarks: withdrawRemarks || "",
@@ -91,314 +94,295 @@ export default function TimeDepositView() {
     };
 
     return (
-        <>
-            <Head title="Time Deposit Details">
-                <link rel="icon" href="/images/logo/pis_logo.png" />
-            </Head>
+        <AdminSidebarLayout>
+            <Head title="Time Deposit Details" />
 
-            <AdminSidebarLayout>
-                <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
-                    {/* Header */}
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                            <Link
-                                href={route("admin.time.index")}
-                                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-                            >
-                                <ArrowLeft className="w-4 h-4" />
-                                Back to Time Deposit List
-                            </Link>
-                        </div>
-                    </div>
-
-                    {/* Title + member info */}
-                    <div className="flex flex-col lg:flex-row gap-4">
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                                <CalendarClock className="w-6 h-6 text-emerald-600" />
-                                <h1 className="text-2xl font-bold text-gray-900">
-                                    Time Deposit Details
-                                </h1>
-                            </div>
-                            <p className="text-sm text-gray-500">
-                                Member:{" "}
-                                <span className="font-semibold text-gray-800">
-                                    {summary.memberName || "Unknown Member"}
-                                </span>{" "}
-                                {summary.username && (
-                                    <span className="text-gray-500">
-                                        ({summary.username})
-                                    </span>
-                                )}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                                TD ID: {initialDeposit?.id}
-                            </p>
-                        </div>
-
-                        {/* Meta info */}
-                        <div className="w-full lg:w-80 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-xs text-gray-600">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="font-semibold text-gray-800">
-                                    Time Deposit Info
-                                </span>
-                                <FileText className="w-4 h-4 text-gray-400" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                <span className="text-gray-500">Start Date</span>
-                                <span className="text-gray-800">
-                                    {summary.startDate || "—"}
-                                </span>
-
-                                <span className="text-gray-500">
-                                    Maturity Date
-                                </span>
-                                <span className="text-gray-800">
-                                    {summary.maturityDate || "—"}
-                                </span>
-
-                                <span className="text-gray-500">Term</span>
-                                <span className="text-gray-800">
-                                    {termYears}{" "}
-                                    {termYears === 1 ? "year" : "years"}
-                                </span>
-
-                                <span className="text-gray-500">
-                                    Rate (per annum)
-                                </span>
-                                <span className="text-gray-800">
-                                    {interestRate}% p.a.
-                                </span>
-
-                                <span className="text-gray-500">
-                                    Credited Years
-                                </span>
-                                <span className="text-gray-800">
-                                    {summary.creditedYears ?? 0}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                                <PiggyBank className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-500 mb-1">
-                                    Current Balance
-                                </div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    <CountUp
-                                        end={currentBalance}
-                                        duration={1}
-                                        decimals={2}
-                                        prefix="₱"
-                                        separator=","
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-                                <CalendarClock className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-500 mb-1">
-                                    Total Principal
-                                </div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    <CountUp
-                                        end={principal}
-                                        duration={1}
-                                        decimals={2}
-                                        prefix="₱"
-                                        separator=","
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-orange-50 text-orange-600">
-                                <TrendingUp className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-500 mb-1">
-                                    Total Interest Earned
-                                </div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    <CountUp
-                                        end={totalInterest}
-                                        duration={1}
-                                        decimals={2}
-                                        prefix="₱"
-                                        separator=","
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-                                <CalendarClock className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-500 mb-1">
-                                    Term &amp; Rate
-                                </div>
-                                <div className="text-sm font-semibold text-gray-900">
-                                    {termYears}{" "}
-                                    {termYears === 1 ? "year" : "years"} at{" "}
-                                    {interestRate}% p.a.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Withdraw interest panel */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                        <div>
-                            <div className="text-xs font-semibold text-gray-700 mb-1">
-                                Available Interest for Withdrawal
-                            </div>
-                            <div className="text-lg font-bold text-emerald-700">
-                                {asMoney(availableInterest)}
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Only interest can be withdrawn. Principal
-                                remains locked until the end of the term.
-                            </p>
-                        </div>
-                        <form
-                            onSubmit={handleWithdraw}
-                            className="flex flex-col sm:flex-row gap-2 items-start sm:items-end"
+            <div className="space-y-6">
+                
+                {/* HEADER */}
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-2">
+                        <Link
+                            href={route("admin.time.index")}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-xs font-medium"
                         >
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">
-                                    Withdrawal Amount
-                                </label>
-                                <input
-                                    type="number"
-                                    min="0.01"
-                                    step="0.01"
-                                    value={withdrawAmount}
-                                    onChange={(e) =>
-                                        setWithdrawAmount(e.target.value)
-                                    }
-                                    className="w-40 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">
-                                    Remarks (optional)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={withdrawRemarks}
-                                    onChange={(e) =>
-                                        setWithdrawRemarks(e.target.value)
-                                    }
-                                    className="w-52 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                                    placeholder="e.g. annual interest payout"
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {submitting ? "Processing..." : "Withdraw Interest"}
-                            </button>
-                        </form>
+                            <ArrowLeft size={14} /> Back
+                        </Link>
                     </div>
 
-                    {/* Transaction table */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm font-semibold text-gray-800">
-                                    Time Deposit Transactions
-                                </span>
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-lg">
+                                {summary.memberName ? summary.memberName.charAt(0) : "M"}
                             </div>
-                            <span className="text-xs text-gray-400">
-                                Credit = Principal / Interest In, Debit = Interest
-                                Withdrawn (Principal locked)
-                            </span>
+                            <div>
+                                <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
+                                    {summary.memberName || "Unknown Member"}
+                                </h1>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 font-mono flex items-center gap-2">
+                                    {summary.username && <span>@{summary.username}</span>}
+                                    <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-white/20" />
+                                    <span>TD ID: {initialDeposit?.id}</span>
+                                </p>
+                            </div>
                         </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left">
-                                            Date
-                                        </th>
-                                        <th className="px-4 py-2 text-left">
-                                            Description
-                                        </th>
-                                        <th className="px-4 py-2 text-right">
-                                            Credit
-                                        </th>
-                                        <th className="px-4 py-2 text-right">
-                                            Debit
-                                        </th>
-                                        <th className="px-4 py-2 text-right">
-                                            Balance
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {transactions.length === 0 && (
-                                        <tr>
-                                            <td
-                                                colSpan={5}
-                                                className="px-4 py-6 text-center text-gray-500 text-sm"
-                                            >
-                                                No transactions recorded for this
-                                                time deposit yet.
-                                            </td>
-                                        </tr>
-                                    )}
-
-                                    {transactions.map((t, idx) => (
-                                        <tr
-                                            key={idx}
-                                            className="border-t border-gray-100"
-                                        >
-                                            <td className="px-4 py-2 text-xs text-gray-700 whitespace-nowrap">
-                                                {t.date || "—"}
-                                            </td>
-                                            <td className="px-4 py-2 text-xs text-gray-800">
-                                                {t.description}
-                                            </td>
-                                            <td className="px-4 py-2 text-xs text-right text-emerald-700 whitespace-nowrap">
-                                                {t.credit && t.credit !== 0
-                                                    ? asMoney(t.credit)
-                                                    : "—"}
-                                            </td>
-                                            <td className="px-4 py-2 text-xs text-right text-rose-700 whitespace-nowrap">
-                                                {t.debit && t.debit !== 0
-                                                    ? asMoney(t.debit)
-                                                    : "—"}
-                                            </td>
-                                            <td className="px-4 py-2 text-xs text-right text-gray-900 whitespace-nowrap">
-                                                {asMoney(
-                                                    t.balanceAfter ?? 0
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        
+                        {/* Account Tag */}
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm">
+                            <CalendarClock className="text-emerald-500" size={18} />
+                            <div className="flex flex-col">
+                                <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Account Type</span>
+                                <span className="font-semibold text-slate-700 dark:text-white">Fixed Term Deposit</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </AdminSidebarLayout>
-        </>
+
+                {/* STAT CARDS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard 
+                        label="Current Balance" 
+                        value={currentBalance} 
+                        icon={PiggyBank} 
+                        color="emerald" 
+                        prefix="₱"
+                    />
+                    <StatCard 
+                        label="Total Principal" 
+                        value={principal} 
+                        icon={Wallet} 
+                        color="blue" 
+                        prefix="₱"
+                    />
+                    <StatCard 
+                        label="Interest Earned" 
+                        value={totalInterest} 
+                        icon={TrendingUp} 
+                        color="amber" 
+                        prefix="₱"
+                    />
+                    <StatCard 
+                        label="Rate & Term" 
+                        value={interestRate} 
+                        icon={CalendarClock} 
+                        color="purple" 
+                        suffix="%"
+                        subtext={`${termYears} Year${termYears > 1 ? 's' : ''} Term`}
+                    />
+                </div>
+
+                {/* DETAILS & WITHDRAWAL GRID */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    {/* LEFT: INFO CARD */}
+                    <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <FileText size={18} className="text-emerald-500" />
+                                Account Details
+                            </h3>
+                        </div>
+                        <div className="space-y-3 text-sm">
+                            <DetailRow label="Start Date" value={summary.startDate} />
+                            <DetailRow label="Maturity Date" value={summary.maturityDate} />
+                            <DetailRow label="Credited Years" value={summary.creditedYears ?? 0} />
+                            <DetailRow label="Interest Rate" value={`${interestRate}% p.a.`} />
+                            <DetailRow label="Status" value="Active" badge="emerald" />
+                        </div>
+                    </div>
+
+                    {/* RIGHT: WITHDRAWAL PANEL */}
+                    <div className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-6 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-5 dark:opacity-10 pointer-events-none">
+                            <Wallet size={120} />
+                        </div>
+
+                        <div className="relative z-10 flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
+                            <div>
+                                <h3 className="font-bold text-slate-900 dark:text-white text-lg">Withdraw Interest</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
+                                    Principal is locked until maturity. You can only withdraw the interest earned to date.
+                                </p>
+                                
+                                <div className="mt-4 inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20">
+                                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Available</div>
+                                    <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400 font-mono">
+                                        {asMoney(availableInterest)}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleWithdraw} className="w-full md:w-auto flex flex-col gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Amount</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">₱</span>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="0.01"
+                                            value={withdrawAmount}
+                                            onChange={(e) => setWithdrawAmount(e.target.value)}
+                                            className="w-full md:w-48 pl-7 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all font-mono"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide">Remarks</label>
+                                    <input
+                                        type="text"
+                                        value={withdrawRemarks}
+                                        onChange={(e) => setWithdrawRemarks(e.target.value)}
+                                        className="w-full md:w-48 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 dark:bg-white/5 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                                        placeholder="Optional"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={submitting || availableInterest <= 0}
+                                    className="mt-1 w-full md:w-48 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                >
+                                    {submitting ? "Processing..." : (
+                                        <>
+                                            <ArrowDownLeft size={16} /> Withdraw
+                                        </>
+                                    )}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                {/* TRANSACTION HISTORY */}
+                <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 shadow-sm overflow-hidden transition-colors">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
+                        <div className="flex items-center gap-2">
+                            <FileText className="text-slate-400" size={18} />
+                            <h2 className="font-semibold text-slate-900 dark:text-white">Transaction History</h2>
+                        </div>
+                        <span className="text-[10px] text-slate-400 uppercase tracking-wider hidden sm:inline-block">
+                            Credit = Principal / Interest • Debit = Withdrawal
+                        </span>
+                    </div>
+
+                    {/* Desktop Table */}
+                    <div className="hidden sm:block overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400">
+                                <tr>
+                                    <th className="px-6 py-4">Date</th>
+                                    <th className="px-6 py-4">Description</th>
+                                    <th className="px-6 py-4 text-right text-emerald-600 dark:text-emerald-400">Credit</th>
+                                    <th className="px-6 py-4 text-right text-rose-600 dark:text-rose-400">Debit</th>
+                                    <th className="px-6 py-4 text-right">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
+                                {transactions.length === 0 ? (
+                                    <tr><td colSpan="5" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">No transactions recorded.</td></tr>
+                                ) : (
+                                    transactions.map((t, idx) => (
+                                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{t.date || "—"}</td>
+                                            <td className="px-6 py-4">
+                                                <span className="font-medium text-slate-900 dark:text-white">{t.description}</span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                                {t.credit && t.credit !== "0.00" ? asMoney(t.credit) : "—"}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-mono text-rose-600 dark:text-rose-400">
+                                                {t.debit && t.debit !== "0.00" ? asMoney(t.debit) : "—"}
+                                            </td>
+                                            <td className="px-6 py-4 text-right font-bold font-mono text-slate-900 dark:text-white">
+                                                {asMoney(t.balanceAfter ?? 0)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="block sm:hidden divide-y divide-slate-100 dark:divide-white/5">
+                        {transactions.length === 0 ? (
+                            <div className="p-10 text-center text-slate-500 dark:text-slate-400 text-sm">No transactions.</div>
+                        ) : (
+                            transactions.map((t, idx) => (
+                                <div key={idx} className="p-4 space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <div className="font-semibold text-slate-900 dark:text-white text-sm">{t.description}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{t.date || "—"}</div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-xs border-t border-slate-100 dark:border-white/5 pt-3">
+                                        <div>
+                                            <div className="text-[10px] uppercase opacity-60 dark:text-slate-400">Credit</div>
+                                            <div className="font-mono text-emerald-600 dark:text-emerald-400">
+                                                {t.credit && t.credit !== "0.00" ? asMoney(t.credit) : "—"}
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-[10px] uppercase opacity-60 dark:text-slate-400">Debit</div>
+                                            <div className="font-mono text-rose-600 dark:text-rose-400">
+                                                {t.debit && t.debit !== "0.00" ? asMoney(t.debit) : "—"}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] uppercase opacity-60 dark:text-slate-400">Balance</div>
+                                            <div className="font-mono font-bold text-slate-900 dark:text-white">
+                                                {asMoney(t.balanceAfter ?? 0)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+        </AdminSidebarLayout>
+    );
+}
+
+// --- SUB COMPONENTS ---
+
+function StatCard({ label, value, icon: Icon, color, prefix = "", suffix = "", subtext }) {
+    const colors = {
+        emerald: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+        blue: "bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400",
+        amber: "bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
+        purple: "bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400",
+    };
+    return (
+        <div className="rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 shadow-sm flex items-center gap-4 transition-colors">
+            <div className={`p-3 rounded-xl ${colors[color] || colors.emerald}`}>
+                <Icon size={24} />
+            </div>
+            <div>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
+                <div className="text-xl font-bold text-slate-900 dark:text-white font-mono mt-0.5">
+                    {prefix}<CountUp end={toNumber(value)} duration={1} separator="," decimals={2} />{suffix}
+                </div>
+                {subtext && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{subtext}</p>}
+            </div>
+        </div>
+    );
+}
+
+function DetailRow({ label, value, badge }) {
+    return (
+        <div className="flex justify-between items-center">
+            <span className="text-slate-500 dark:text-slate-400">{label}</span>
+            {badge ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 uppercase tracking-wide">
+                    {value}
+                </span>
+            ) : (
+                <span className="font-medium text-slate-900 dark:text-white">{value || "—"}</span>
+            )}
+        </div>
     );
 }

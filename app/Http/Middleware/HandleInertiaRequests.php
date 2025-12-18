@@ -31,7 +31,11 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        $user = $request->user();
+        // Check for Admin User specifically
+        $adminUser = $request->user('admin'); 
+        
+        // Fallback to standard user if admin guard isn't active (e.g. standard web routes)
+        $user = $adminUser ?? $request->user();
 
         $member = Auth::guard('member')->user();
 
@@ -46,7 +50,16 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $user,
+                // Manually build the user array to ENSURE role is sent
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'branch' => $user->branch,
+                    'permissions' => $user->permissions ?? [],
+                ] : null,
+                
                 'member' => $member
             ],
             

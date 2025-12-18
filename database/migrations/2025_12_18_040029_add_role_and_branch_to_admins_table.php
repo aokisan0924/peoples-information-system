@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('admins', function (Blueprint $table) {
+            // Adding role with a default fallback
+            $table->string('role')->default('loan-processor')->after('email'); 
+            
+            // Adding branch (nullable, as Super Admin might not be bound to one)
+            $table->string('branch')->nullable()->after('role'); 
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('admins', function (Blueprint $table) {
+            $table->dropColumn(['role', 'branch']);
+        });
+    }
+};

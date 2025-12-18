@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CapitalContribution;
 use App\Models\Member;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth; // <--- Import Auth
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
@@ -41,6 +42,7 @@ class ShareCapitalController extends Controller
         ]);
     }
 
+    // --- KEEPING YOUR WORKING API INDEX LOGIC ---
     public function apiIndex(Request $request) {
         $search   = trim((string) $request->string('search'));
         $status   = (string) $request->string('status');
@@ -168,10 +170,12 @@ class ShareCapitalController extends Controller
         $perPage = (int) $request->integer('perPage', 10);
         $page    = max(1, (int) $request->integer('page', 1));
 
-        $all = CapitalContribution::where('memberId', $memberId)
+        // --- UPDATED: Added processor relationship ---
+        $all = CapitalContribution::with('processor:id,name') 
+            ->where('memberId', $memberId)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->get(['id','transactionType','amount','status','is_Paid','reference_number','paid_at','created_at']);
+            ->get(['id','transactionType','amount','status','is_Paid','reference_number','paid_at','created_at','processed_by']); // Make sure to select processed_by
 
         $totalNet = 0.0;
         foreach ($all as $r) {
@@ -198,6 +202,8 @@ class ShareCapitalController extends Controller
                 'debit'            => $debit,
                 'balance'          => $balanceNow,
                 'status'           => $r->status ?? 'pending',
+                // --- NEW: Processor info for frontend ---
+                'processor'        => $r->processor ? ['name' => $r->processor->name] : null,
             ];
         });
 
@@ -256,7 +262,6 @@ class ShareCapitalController extends Controller
                 ? $now->copy()
                 : $now->copy()->startOfMonth()->addMonth();
         } else {
-            // withdrawals: always current date
             $paidAt = $now->copy();
         }
 
@@ -279,17 +284,15 @@ class ShareCapitalController extends Controller
             }
         }
 
-        // Save the transaction (pure Eloquent)
         $entry = new CapitalContribution();
-        $entry->memberId         = $memberId;
-        $entry->transactionType  = $type;
-        $entry->amount           = $type === 'withdrawal'
-            ? -1 * abs($amount)
-            : abs($amount);
+        $entry->memberId        = $memberId;
+        $entry->transactionType = $type; // Ensure this is saving
+        $entry->amount          = $type === 'withdrawal' ? -1 * abs($amount) : abs($amount);
         $entry->reference_number = $reference; 
-        $entry->status           = 'posted';
-        $entry->is_Paid          = true;
-        $entry->paid_at          = $paidAt;
+        $entry->status          = 'posted';
+        $entry->is_Paid         = true;
+        $entry->paid_at         = $paidAt;
+        $entry->processed_by    = Auth::id(); // <--- TRACKING: Save Admin ID
         $entry->save();
 
         $totalShareCapital = (float) CapitalContribution::sum('amount');
@@ -298,7 +301,6 @@ class ShareCapitalController extends Controller
             $q->where('is_Paid', true)->orWhere('status', 'posted');
         })->sum('amount');
 
-        $now = now();
         $thisMonthShareCapital = (float) CapitalContribution::whereMonth('created_at', $now->month)
             ->whereYear('created_at', $now->year)
             ->sum('amount');
@@ -306,10 +308,10 @@ class ShareCapitalController extends Controller
         $contributorCount = (int) CapitalContribution::distinct('memberId')->count('memberId');
 
         $stats = [
-            'totalShareCapital'      => $totalShareCapital,
-            'postedShareCapital'     => $postedShareCapital,
-            'thisMonthShareCapital'  => $thisMonthShareCapital,
-            'contributorCount'       => $contributorCount,
+            'totalShareCapital'     => $totalShareCapital,
+            'postedShareCapital'    => $postedShareCapital,
+            'thisMonthShareCapital' => $thisMonthShareCapital,
+            'contributorCount'      => $contributorCount,
         ];
 
         return response()->json([
@@ -332,6 +334,7 @@ class ShareCapitalController extends Controller
     }
 
     public function exportCsv(Request $request) {
+        // (Keep your existing exportCsv logic intact here)
         $exportDate      = now();
         $formattedHeader = $exportDate->format('d F Y');
         $fileDate        = $exportDate->format('Y-m-d');

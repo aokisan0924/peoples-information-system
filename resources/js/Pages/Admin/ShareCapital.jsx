@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Download, Loader2, RefreshCcw, Search, Filter,  Eye, Plus, Banknote, Wallet, TrendingUp, Users, PiggyBank, X } from "lucide-react";
+import { 
+    Download, Loader2, Search, Plus, Banknote, Wallet, 
+    TrendingUp, Users, CheckCircle2, ChevronLeft, ChevronRight, 
+    ArrowRight 
+} from "lucide-react";
 import { motion, AnimatePresence } from 'framer-motion';
 import { Combobox } from "@headlessui/react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
@@ -8,8 +12,7 @@ import CountUp from "react-countup";
 import toast from "react-hot-toast";
 import axios from 'axios';
 
-const toNumber = (v) => (Number.isFinite(+v) ? +v : 0);
-
+// --- HELPERS ---
 const asMoney = (v) => {
     const num = Number(v);
     return Number.isFinite(num)
@@ -22,24 +25,32 @@ const asMoney = (v) => {
     : "₱0.00";
 };
 
+const toNumber = (v) => (Number.isFinite(+v) ? +v : 0);
+
 export default function ShareCapital() {
     const { props } = usePage();
     const { stats: initialStats = {}, defaults = {} } = props;
     const [ stats, setStats ] = useState(initialStats);
-    const [ status, setStatus ] = useState(defaults.status || 'all');
-    const [ memberQuery, setMemberQuery ] = useState("");
-
+    
+    // Filters
     const [ search, setSearch ] = useState(defaults.search || '');
     const [ dateFrom, setDateFrom ] = useState(defaults.dateFrom || '');
     const [ dateTo, setDateTo ] = useState(defaults.dateTo || '');
     const [ perPage, setPerPage ] = useState(defaults.perPage || 10);
 
+    // Data State
     const [ loading, setLoading ] = useState(false);
     const [ rows, setRows ] = useState([]);
-    const [ meta, setMeta ] = useState({ currentPage: 1, lastPage: 1, perPage: perPage, total: 0 });
+    const [ meta, setMeta ] = useState({ currentPage: 1, lastPage: 1, perPage: 10, total: 0 });
 
+    // Modal State
     const [ showModal, setShowModal ] = useState(false);
     const [ memberOptions, setMemberOptions ] = useState([]);
+    const [ memberQuery, setMemberQuery ] = useState("");
+    const [ loadMembers, setLoadMembers] = useState(false);
+    const [ submitting, setSubmitting] = useState(false);
+
+    // Form State
     const [ form, setForm ] = useState({
         memberId: '',
         transactionType: 'deposit',
@@ -47,28 +58,25 @@ export default function ShareCapital() {
         referenceNumber: '',
     });
 
-    const [ submitting, setSubmitting] = useState(false);
-    const [ loadMembers, setLoadMembers] = useState(false);
-
-    const filteredMembers =
-    memberQuery.trim() === ""
+    // --- COMPUTED ---
+    const filteredMembers = memberQuery.trim() === ""
         ? memberOptions
         : memberOptions.filter((m) =>
             m.label.toLowerCase().includes(memberQuery.toLowerCase())
         );
 
+    // --- FETCH DATA ---
     const loadData = async (page = 1) => {
         setLoading(true);
         try {
             const { data } = await axios.get(route('admin.share-capital.api-index'), {
-            params: { search, status, dateFrom, dateTo, perPage, page }
-        });
+                params: { search, dateFrom, dateTo, perPage, page }
+            });
             setRows(data.rows || []);
             setMeta(data.meta || { currentPage: 1, lastPage: 1, perPage, total: 0 });
         } catch (e) {
             console.error(e);
-            const msg = e?.response?.data?.message || e?.message || "Failed to load data.";
-            toast.error(msg);
+            toast.error("Failed to load data.");
         } finally {
             setLoading(false);
         }
@@ -79,6 +87,11 @@ export default function ShareCapital() {
         return () => clearTimeout(id);
     }, [search, dateFrom, dateTo, perPage]);
 
+    const handlePageChange = (page) => {
+        if (page >= 1 && page <= meta.lastPage) loadData(page);
+    };
+
+    // --- HANDLERS ---
     const openModal = async () => {
         setShowModal(true);
         if (!memberOptions.length) {
@@ -97,6 +110,7 @@ export default function ShareCapital() {
     const closeModal = () => {
         setShowModal(false);
         setForm({ memberId: '', transactionType: 'deposit', amount: '', referenceNumber: '' });
+        setMemberQuery("");
     };
 
     const submitEntry = async () => {
@@ -121,24 +135,11 @@ export default function ShareCapital() {
     
             toast.success(data.message || 'Transaction complete.');
             closeModal();
-    
             await loadData(1);
-    
-            if (data.stats) {
-                setStats(data.stats);
-            }
+            if (data.stats) setStats(data.stats);
         } catch (error) {
-            const httpStatus = error?.response?.status;
-            const resp       = error?.response?.data;
-    
-            if (httpStatus === 422) {
-                const msg = resp?.message
-                    || resp?.errors?.amount?.[0]
-                    || 'Withdrawal amount exceeds available balance.';
-                toast.error(msg);
-            } else {
-                toast.error('Failed to save entry. Please try again.');
-            }
+            const msg = error?.response?.data?.message || 'Failed to save entry.';
+            toast.error(msg);
         } finally {
             setSubmitting(false);
         }
@@ -152,543 +153,318 @@ export default function ShareCapital() {
         return route("admin.share-capital.export") + (qs ? `?${qs}` : "");
     };
 
-    const quickSetToday = () => {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = d.getMonth() + 1;
-        const day = String(d.getDate()).padStart(2, "0");
-        const mm = String(m).padStart(2, "0");
-        const iso = `${y}-${mm}-${day}`;
-        setDateFrom(iso);
-        setDateTo(iso);
-    };
-
-    const quickSetThisMonth = () => {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = d.getMonth() + 1;
-        const first = `${y}-${String(m).padStart(2, "0")}-01`;
-        const lastDate = new Date(y, m, 0).getDate();
-        const last = `${y}-${String(m).padStart(2, "0")}-${String(lastDate).padStart(2, "0")}`;
-        setDateFrom(first);
-        setDateTo(last);
-    };
-
-    const quickSetThisYear = () => {
-        const d = new Date();
-        const y = d.getFullYear();
-        const first = `${y}-01-01`;
-        const last = `${y}-12-31`;
-        setDateFrom(first);
-        setDateTo(last);
-    };
-
     return (
-        <>
-            <Head title="Share Capital Deposit">
-                <link rel="icon" href="/images/logo/pis_logo.png" />
-            </Head>
-            <AdminSidebarLayout>
-                <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                                <PiggyBank className="w-6 h-6 text-emerald-600" />
-                                Share Capital Contribution
-                            </h1>
-                            <p className="text-sm text-gray-500 mt-1">
-                                Monitor total share capital per member.
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <button
-                                type="button"
-                                href={buildExportHref({ search, dateFrom, dateTo })}
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"
-                            >
-                                <Download className="w-4 h-4" />
-                                Export CSV
-                            </button>
-                            <button
-                                type="button"
-                                onClick={openModal}
-                                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm hover:bg-emerald-700 shadow-sm"
-                            >
-                                <Plus className="w-4 h-4" />
-                                New Transaction
-                            </button>
-                        </div>
+        <AdminSidebarLayout>
+            <Head title="Share Capital" />
+            
+            <div className="space-y-6">
+                {/* --- HEADER --- */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <Banknote className="h-8 w-8 text-emerald-600" />
+                            Share Capital
+                        </h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Monitor member capital contributions.
+                        </p>
                     </div>
-
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-3 gap-3">
-
-                        {/* Total Share Capital */}
-                        <motion.div
-                            layout
-                            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3"
+                    
+                    {/* ACTIONS */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <a 
+                            href={buildExportHref({ search, dateFrom, dateTo })} 
+                            target="_blank"
+                            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-sm font-medium"
                         >
-                            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-                                <Wallet className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-sm text-gray-500 mb-1">Total Share Capital</div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    <CountUp
-                                        end={toNumber(stats.totalShareCapital || 0)}
-                                        duration={1.5}
-                                        separator=","
-                                        prefix="₱"
-                                        decimals={2}
-                                    />
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Total Paid-Up Capital */}
-                        <motion.div
-                            layout
-                            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3"
+                            <Download size={16} /> <span>Export</span>
+                        </a>
+                        <button
+                            onClick={openModal}
+                            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all text-sm font-bold active:scale-95"
                         >
-                            <div className="p-2 rounded-xl bg-yellow-50 text-yellow-600">
-                                <RefreshCcw className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-sm text-gray-500 mb-1">Total Paid Up Capital</div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    <CountUp
-                                        end={toNumber(stats.postedShareCapital/500)}
-                                        duration={1.5}
-                                        separator=","
-                                    />
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Contributors */}
-                        <motion.div
-                            layout
-                            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3"
-                        >
-                            <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-                                <Users className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-sm text-gray-500 mb-1">Contributors</div>
-                                <div className="text-lg font-semibold text-gray-900">
-                                    <CountUp
-                                        end={toNumber(stats.contributorCount || 0)}
-                                        duration={1}
-                                    />
-                                </div>
-                            </div>
-                        </motion.div>
+                            <Plus size={18} /> <span>New Transaction</span>
+                        </button>
                     </div>
+                </div>
 
-                    {/* Filters */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
-                        <div className="flex flex-col md:flex-row md:items-end gap-3">
-                            {/* Search */}
-                            <div className="md:flex-1">
-                                <label className="block text-xs font-medium text-gray-500 mb-1">
-                                    Search Member / Reference
-                                </label>
-                                <div className="relative">
-                                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                    <input
-                                        type="text"
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        placeholder="Name, username, or reference..."
-                                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                                    />
-                                </div>
-                            </div>
+                {/* --- STATS GRID --- */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <StatCard label="Total Share Capital" value={stats.totalShareCapital} icon={Wallet} color="emerald" prefix="₱" />
+                    <StatCard label="This Month" value={stats.thisMonthShareCapital} icon={TrendingUp} color="blue" prefix="₱" />
+                    <StatCard label="Contributors" value={stats.contributorCount} icon={Users} color="amber" />
+                    <StatCard label="Paid Up" value={stats.postedShareCapital} icon={CheckCircle2} color="purple" prefix="₱" />
+                </div>
 
-                            {/* Date range */}
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                                        From
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={dateFrom || ""}
-                                        onChange={(e) => setDateFrom(e.target.value)}
-                                        className="w-full sm:w-40 py-2 px-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                                        To
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={dateTo || ""}
-                                        onChange={(e) => setDateTo(e.target.value)}
-                                        className="w-full sm:w-40 py-2 px-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Per page */}
-                            <div className="flex gap-2 items-end">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                                        Per Page
-                                    </label>
-                                    <select
-                                        value={perPage}
-                                        onChange={(e) => setPerPage(Number(e.target.value))}
-                                        className="w-24 py-2 px-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"
-                                    >
-                                        {[10, 20, 50, 100].map((n) => (
-                                            <option key={n} value={n}>
-                                                {n}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Quick filters */}
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                            <button
-                                type="button"
-                                onClick={quickSetToday}
-                                className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
-                            >
-                                Today
-                            </button>
-                            <button
-                                type="button"
-                                onClick={quickSetThisMonth}
-                                className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
-                            >
-                                This Month
-                            </button>
-                            <button
-                                type="button"
-                                onClick={quickSetThisYear}
-                                className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
-                            >
-                                This Year
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setDateFrom("");
-                                    setDateTo("");
-                                }}
-                                className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
-                            >
-                                Clear Dates
-                            </button>
-                        </div>
+                {/* --- FILTERS --- */}
+                <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Search name, username..." 
+                            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white dark:bg-white/5 dark:border-white/10 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
                     </div>
+                    {/* Date Inputs: Grid on mobile for equal width */}
+                    <div className="grid grid-cols-2 md:flex gap-2 w-full md:w-auto">
+                        <input type="date" className="w-full md:w-auto rounded-xl border border-slate-200 bg-white dark:bg-white/5 dark:border-white/10 dark:text-white px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+                        <input type="date" className="w-full md:w-auto rounded-xl border border-slate-200 bg-white dark:bg-white/5 dark:border-white/10 dark:text-white px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+                    </div>
+                </div>
 
-                    {/* Table */}
-                    <div className="bg-white rounded-2xl shadow border border-gray-100 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-sm">
-                                <thead className="bg-gray-50 text-gray-600">
-                                    <tr>
-                                        <th className="text-left px-6 py-3 font-semibold">Member</th>
-                                        <th className="text-right px-6 py-3 font-semibold">Total Deposits</th>
-                                        <th className="text-right px-6 py-3 font-semibold">Total Withdrawals</th>
-                                        <th className="text-right px-6 py-3 font-semibold">Balance</th>
-                                        <th className="text-right px-6 py-3 font-semibold">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {loading ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-6 text-center text-gray-500">
-                                                <div className="inline-flex items-center gap-2">
-                                                <Loader2 className="animate-spin" /> Loading...
-                                                </div>
+                {/* --- DATA LIST --- */}
+                <div className="bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden shadow-sm">
+                    
+                    {/* 1. DESKTOP TABLE */}
+                    <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-medium">
+                                <tr>
+                                    <th className="px-6 py-4">Member</th>
+                                    <th className="px-6 py-4 text-right">Total Deposits</th>
+                                    <th className="px-6 py-4 text-right">Total Withdrawals</th>
+                                    <th className="px-6 py-4 text-right">Balance</th>
+                                    <th className="px-6 py-4 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                {loading ? (
+                                    <tr><td colSpan="5" className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-emerald-500" /></td></tr>
+                                ) : rows.length === 0 ? (
+                                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">No members found.</td></tr>
+                                ) : (
+                                    rows.map((r) => (
+                                        <tr key={r.memberId} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-slate-900 dark:text-white">{r.member}</div>
+                                                <div className="text-xs text-slate-500">@{r.username}</div>
                                             </td>
-                                        </tr>
-                                    ) : rows.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-6 py-6 text-center text-gray-500">No records found</td>
-                                        </tr>
-                                    ) : (
-                                        rows.map((r) => (
-                                        <tr key={r.memberId} className="border-t">
-                                            <td className="px-6 py-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium">
-                                                            {r.member}
-                                                        </span>
-                                                        {r.username && (
-                                                            <span className="text-xs text-gray-500">
-                                                                {r.username}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-3 text-right">{asMoney(r.totalDeposits)}</td>
-                                            <td className="px-6 py-3 text-right">{asMoney(r.totalWithdrawals)}</td>
-                                            <td className="px-6 py-3 text-right font-semibold">
-                                                <span className={(+r.balance) < 0 ? 'text-red-600' : 'text-gray-900'}>
-                                                    {asMoney(r.balance)}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-2 text-right whitespace-nowrap">
-                                                <Link
-                                                    href={route('admin.share-capital.member', r.memberId)}
-                                                    className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900"
-                                                >
-                                                    <Eye className="w-4 h-4" />
-                                                    View
+                                            <td className="px-6 py-4 text-right font-mono text-emerald-600">{asMoney(r.totalDeposits)}</td>
+                                            <td className="px-6 py-4 text-right font-mono text-rose-600">{asMoney(r.totalWithdrawals)}</td>
+                                            <td className="px-6 py-4 text-right font-mono font-bold text-slate-900 dark:text-white">{asMoney(r.balance)}</td>
+                                            <td className="px-6 py-4 text-center">
+                                                <Link href={route('admin.share-capital.member', r.memberId)} className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-500 text-xs font-bold uppercase tracking-wide transition-colors">
+                                                    View Ledger <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 -ml-1 transition-opacity"/>
                                                 </Link>
                                             </td>
                                         </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Pagination */}
-                        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-600">
-                            <div>
-                                Showing{" "}
-                                <span className="font-semibold">
-                                    {meta.total === 0
-                                        ? 0
-                                        : (meta.currentPage - 1) * meta.perPage + 1}
-                                </span>{" "}
-                                to{" "}
-                                <span className="font-semibold">
-                                    {Math.min(meta.currentPage * meta.perPage, meta.total)}
-                                </span>{" "}
-                                of <span className="font-semibold">{meta.total}</span> entries
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => handlePageChange(meta.currentPage - 1)}
-                                    disabled={meta.currentPage <= 1}
-                                    className="px-2 py-1 rounded-lg border border-gray-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                                >
-                                    Prev
-                                </button>
-                                <span className="px-2">
-                                    Page{" "}
-                                    <span className="font-semibold">{meta.currentPage}</span> of{" "}
-                                    <span className="font-semibold">{meta.lastPage}</span>
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() => handlePageChange(meta.currentPage + 1)}
-                                    disabled={meta.currentPage >= meta.lastPage}
-                                    className="px-2 py-1 rounded-lg border border-gray-200 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
-            </AdminSidebarLayout>
 
-            {/* New Entry Modal */}
-            <AnimatePresence>
-                {showModal && (
-                    <motion.div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={closeModal}
-                    >
-                        <motion.div
-                            className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 relative"
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-4">
-                                <div>
-                                    <h2 className="text-lg font-semibold text-gray-900">
-                                        Add Share Capital Entry
-                                    </h2>
-                                    <p className="text-xs text-gray-500">
-                                        Record a deposit or withdrawal for a member&apos;s share capital.
-                                    </p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={closeModal}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                                >
-                                    <span className="sr-only">Close</span>
-                                    <X size={16} />
-                                </button>
-                            </div>
-
-                            <div className="space-y-4">
-                                {/* Member */}
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                                        Member <span className="text-red-500">*</span>
-                                    </label>
-
-                                    <Combobox value={form.memberId} onChange={(val) => setForm({ ...form, memberId: val })}>
-                                        <div className="relative">
-                                            <Combobox.Input
-                                                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                                placeholder="Search member…"
-                                                onChange={(e) => setMemberQuery(e.target.value)}
-                                                displayValue={(id) => {
-                                                    const found = memberOptions.find((m) => m.id === id);
-                                                    return found ? found.label : "";
-                                                }}
-                                            />
-
-                                            {/* Dropdown Icon */}
-                                            <svg
-                                                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                            >
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-                                            </svg>
+                    {/* 2. MOBILE CARD LIST */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-white/5">
+                        {loading ? (
+                            <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-emerald-500" /></div>
+                        ) : rows.length === 0 ? (
+                            <div className="p-8 text-center text-slate-500">No records found.</div>
+                        ) : (
+                            rows.map((r) => (
+                                <div key={r.memberId} className="p-4 space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <div className="font-bold text-slate-900 dark:text-white">{r.member}</div>
+                                            <div className="text-xs text-slate-500">@{r.username}</div>
                                         </div>
-
-                                        {/* Dropdown List */}
-                                        <Combobox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-gray-200 bg-white py-1 text-sm shadow-lg focus:outline-none">
-                                            {loadMembers ? (
-                                                <div className="p-2 text-gray-400">Loading…</div>
-                                            ) : filteredMembers.length === 0 ? (
-                                                <div className="p-2 text-gray-400">No results found.</div>
-                                            ) : (
-                                                filteredMembers.map((m) => (
-                                                    <Combobox.Option
-                                                        key={m.id}
-                                                        value={m.id}
-                                                        className={({ active }) =>
-                                                            `cursor-pointer select-none px-3 py-2 ${
-                                                                active ? "bg-emerald-50 text-emerald-700" : "text-gray-700"
-                                                            }`
-                                                        }
-                                                    >
-                                                        {m.label}
-                                                    </Combobox.Option>
-                                                ))
-                                            )}
-                                        </Combobox.Options>
-                                    </Combobox>
-                                </div>
-
-                                {/* Transaction type + amount */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">
-                                            Transaction Type
-                                        </label>
-                                        <div className="relative">
-                                            <select
-                                                value={form.transactionType}
-                                                onChange={(e) =>
-                                                    setForm({
-                                                        ...form,
-                                                        transactionType: e.target.value,
-                                                    })
-                                                }
-                                                className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                            >
-                                                <option value="deposit">Deposit</option>
-                                                <option value="withdrawal">Withdrawal</option>
-                                            </select>
-                                            <svg
-                                                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M6 9l6 6 6-6"
-                                                />
-                                            </svg>
+                                        <div className="text-right">
+                                            <div className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Balance</div>
+                                            <div className="font-mono font-bold text-slate-900 dark:text-white text-lg">{asMoney(r.balance)}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Stats Row */}
+                                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-white/5 p-2 rounded-lg border border-slate-100 dark:border-white/5">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Deposits</span>
+                                            <span className="font-mono font-medium text-emerald-600">{asMoney(r.totalDeposits)}</span>
+                                        </div>
+                                        <div className="flex flex-col text-right">
+                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Withdrawals</span>
+                                            <span className="font-mono font-medium text-rose-600">{asMoney(r.totalWithdrawals)}</span>
                                         </div>
                                     </div>
 
+                                    <Link 
+                                        href={route('admin.share-capital.member', r.memberId)} 
+                                        className="flex items-center justify-center w-full py-2.5 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 rounded-xl transition-colors border border-emerald-100 dark:border-emerald-500/20"
+                                    >
+                                        View Ledger
+                                    </Link>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* PAGINATION (Loan.jsx Style) */}
+                    <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                            Page <span className="font-semibold text-slate-900 dark:text-white">{meta.currentPage}</span> of {meta.lastPage}
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => handlePageChange(meta.currentPage - 1)} 
+                                disabled={meta.currentPage <= 1} 
+                                className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 disabled:opacity-50 transition"
+                            >
+                                <ArrowRight className="h-4 w-4 rotate-180" />
+                            </button>
+                            <button 
+                                onClick={() => handlePageChange(meta.currentPage + 1)} 
+                                disabled={meta.currentPage >= meta.lastPage} 
+                                className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 disabled:opacity-50 transition"
+                            >
+                                <ArrowRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* --- NEW TRANSACTION MODAL --- */}
+            <AnimatePresence>
+                {showModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div 
+                            initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} 
+                            onClick={closeModal} className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+                        />
+                        <motion.div 
+                            initial={{scale:0.95, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:0.95, opacity:0}} 
+                            className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90vh]"
+                        >
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between mb-6 shrink-0">
+                                <div>
+                                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Add Share Capital Entry</h2>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Record a deposit or withdrawal.</p>
+                                </div>
+                                <button onClick={closeModal} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition"><X size={20} className="text-slate-400"/></button>
+                            </div>
+
+                            {/* Scrollable Body */}
+                            <div className="space-y-5 overflow-y-auto px-1">
+                                {/* Member Search */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Member</label>
+                                    <Combobox value={form.memberId} onChange={(val) => setForm({ ...form, memberId: val })}>
+                                        <div className="relative">
+                                            <Combobox.Input
+                                                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                                placeholder="Search member..."
+                                                onChange={(e) => setMemberQuery(e.target.value)}
+                                                displayValue={(id) => memberOptions.find((m) => m.id === id)?.label || ""}
+                                            />
+                                            <Combobox.Options className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-xl border border-slate-200 bg-white dark:bg-slate-800 dark:border-white/10 shadow-xl">
+                                                {loadMembers ? (
+                                                    <div className="p-3 text-sm text-slate-500">Loading...</div>
+                                                ) : filteredMembers.length === 0 ? (
+                                                    <div className="p-3 text-sm text-slate-500">No member found.</div>
+                                                ) : (
+                                                    filteredMembers.map((m) => (
+                                                        <Combobox.Option
+                                                            key={m.id}
+                                                            value={m.id}
+                                                            className={({ active }) =>
+                                                                `cursor-pointer px-4 py-2 text-sm ${active ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "text-slate-700 dark:text-slate-300"}`
+                                                            }
+                                                        >
+                                                            {m.label}
+                                                        </Combobox.Option>
+                                                    ))
+                                                )}
+                                            </Combobox.Options>
+                                        </div>
+                                    </Combobox>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">
-                                            Amount <span className="text-red-500">*</span>
-                                        </label>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Type</label>
+                                        <div className="flex gap-2 p-1 bg-slate-100 dark:bg-white/5 rounded-xl">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setForm({ ...form, transactionType: 'deposit' })} 
+                                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${form.transactionType === 'deposit' ? 'bg-white dark:bg-white/10 text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
+                                            >
+                                                Deposit
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setForm({ ...form, transactionType: 'withdrawal' })} 
+                                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${form.transactionType === 'withdrawal' ? 'bg-white dark:bg-white/10 text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
+                                            >
+                                                Withdrawal
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Amount</label>
                                         <input
                                             type="number"
-                                            min="0.01"
-                                            step="0.01"
                                             value={form.amount}
-                                            onChange={(e) =>
-                                                setForm({ ...form, amount: e.target.value })
-                                            }
-                                            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                                            onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                             placeholder="0.00"
                                         />
                                     </div>
                                 </div>
 
-                                {/* Reference number */}
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                                        Reference No. (optional)
-                                    </label>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Reference (Optional)</label>
                                     <input
                                         type="text"
                                         value={form.referenceNumber}
-                                        onChange={(e) =>
-                                            setForm({
-                                                ...form,
-                                                referenceNumber: e.target.value,
-                                            })
-                                        }
-                                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                        placeholder="e.g., OR#, bank ref#, etc."
+                                        onChange={(e) => setForm({ ...form, referenceNumber: e.target.value })}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                        placeholder="OR#, Ref#"
                                     />
                                 </div>
                             </div>
 
-                            {/* Actions */}
-                            <div className="mt-6 flex flex-col sm:flex-row sm:justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={closeModal}
-                                    className="inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            {/* Modal Footer */}
+                            <div className="mt-8 flex justify-end gap-3 shrink-0">
+                                <button onClick={closeModal} type="button" className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5 transition-colors">Cancel</button>
+                                <button 
+                                    onClick={submitEntry} 
+                                    disabled={submitting} 
+                                    type="button" 
+                                    className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-all ${form.transactionType === 'deposit' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'}`}
                                 >
-                                    Cancel
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={submitEntry}
-                                    disabled={submitting || !form.memberId || !form.amount}
-                                    className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-                                >
-                                    {submitting ? 'Saving…' : 'Save Entry'}
+                                    {submitting ? "Saving..." : "Save Transaction"}
                                 </button>
                             </div>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
-        </>
+        </AdminSidebarLayout>
+    );
+}
+
+// --- STAT CARD COMPONENT ---
+function StatCard({ label, value, icon: Icon, color, prefix = "" }) {
+    const colors = {
+        emerald: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+        blue: "bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400",
+        amber: "bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
+        purple: "bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400",
+    };
+    return (
+        <div className="rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 shadow-sm flex items-center gap-4 transition-colors">
+            <div className={`p-3 rounded-xl ${colors[color] || colors.emerald}`}>
+                <Icon size={24} />
+            </div>
+            <div>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
+                <div className="text-xl font-bold text-slate-900 dark:text-white font-mono mt-0.5">
+                    {prefix}<CountUp end={toNumber(value)} duration={1} separator="," decimals={2} />
+                </div>
+            </div>
+        </div>
     );
 }
