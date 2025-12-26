@@ -700,29 +700,49 @@ class LoanController extends Controller
     }
 
     public function downloadApplication(Request $request, string $loanReference) {
-        $loan = Loan::with('member')->where('loanReference', $loanReference)->firstOrFail();
-        $termMonths = (int) ($loan->termYears * 12);
-        
-        $baseDate = $loan->created_at ? Carbon::parse($loan->created_at) : now();
-        $rows = $this->buildLedgerRows($loan, $termMonths, $baseDate);
+        // 1. Fetch Loan with Member & Branch
+    $loan = Loan::with(['member.branchService', 'member.afpInfo'])
+    ->where('loanReference', $loanReference)
+    ->firstOrFail();
 
-        $data = [
-            'borrowerName'  => strtoupper(($loan->member->lastName ?? '').', '.($loan->member->firstName ?? '').' '.($loan->member->middleName ?? '')),
-            'address'       => $loan->member->address ?? $loan->member->presentAddress ?? $loan->member->permanentAddress ?? '—',
-            
-            // --- UPDATED: Pass the actual LRV number ---
-            'lvNo'          => $loan->lrvNumber ? $loan->lrvNumber : '—', 
-            
-            'loanRef'       => $loan->loanReference,
-            'loanAmount'    => (float) $loan->loanAmount,
-            'dateOfLoan'    => $baseDate->format('F d, Y'),
-            'maturityDate'  => $baseDate->copy()->addMonths($termMonths + (int)$loan->advanceInterestMonths)->format('F d, Y'),
-            'termMonths'    => $termMonths,
-            'schedule'      => $rows, 
-        ];
+// 2. Prepare Data for the View
+$data = [
+    'date' => now()->format('F d, Y'),
+    'loanReference' => $loan->loanReference,
+    'lvNo'             => $loan->lrvNumber ?? '—', 
+    'loanType' => $loan->loanType,
+    'loanClass' => $loan->loanClassification,
+    'termMonths' => (int)($loan->termYears * 12),
+    'loanAmount' => (float)$loan->loanAmount,
+    'monthlyAmortization' => (float)$loan->monthlyAmortization,
+    'netProceeds' => (float)$loan->netProceeds,
+    'processedBy' => Auth::user()->name ?? 'Loan Processor',
+    
+    // Pass member as an array or object (View supports both)
+    'member' => [
+        'firstName' => strtoupper($loan->member->firstName),
+        'middleName' => strtoupper($loan->member->middleName ?? ''),
+        'lastName' => strtoupper($loan->member->lastName),
+        'suffix' => strtoupper($loan->member->suffix ?? ''),
+        'username' => $loan->member->username,
+        'email' => $loan->member->email,
+        'contact' => $loan->member->contact,
+        'dob' => $loan->member->dob,
+        'age' => $loan->member->age,
+        'fullAddress' => strtoupper($loan->member->fullAddress ?? $loan->member->address ?? ''),
+        // Safe access for relations
+        'afpsn' => $loan->member->afpInfo->afpsn ?? 'N/A',
+        'rank' => $loan->member->afpInfo->rank ?? 'N/A',
+        'branchService' => $loan->member->branchService->branchService ?? 'N/A',
+        'unit' => $loan->member->afpInfo->presentAssignment ?? 'N/A',
+    ],
+];
 
-        $pdf = Pdf::loadView('pdf.loan-ledger', $data)->setPaper('A4', 'portrait');
-        return $pdf->stream('loan-ledger-'.$loanReference.'.pdf');
+// 3. Load the CORRECT View ('pdf.loan-application')
+$pdf = Pdf::loadView('pdf.loan-application', $data)
+    ->setPaper('A4', 'portrait');
+
+return $pdf->stream('loan-application-'.$loanReference.'.pdf');
     }
 
     public function downloadReleaseVoucher(Request $request, string $loanReference) {
