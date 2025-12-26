@@ -53,7 +53,9 @@ export default function AdminTwoFactor() {
 
     return (
         <>
-            <Head title="Two Factor Authentication" />
+            <Head title="Two Factor Authentication">
+                <link rel="icon" href="/images/logo/pis_logo.png" />
+            </Head>
             <Toaster
                 position="top-right"
                 toastOptions={{

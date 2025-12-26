@@ -50,70 +50,75 @@ export default function ManageAdmins({ admins }) {
     if ((auth?.user?.role || "").toLowerCase() !== 'super-admin') return null;
 
     return (
-        <AdminSidebarLayout>
-            <Head title="Manage Admins" />
-            <div className="space-y-6">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <ShieldCheck className="h-7 w-7 text-emerald-600" /> Admin Management
-                        </h1>
-                        <p className="text-sm text-slate-500">Manage staff access and granular permissions.</p>
+        <>
+            <Head title="Manage Admins">
+                <link rel="icon" href="/images/logo/pis_logo.png" />
+            </Head>
+            <AdminSidebarLayout>
+                <div className="space-y-6">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <ShieldCheck className="h-7 w-7 text-emerald-600" /> Admin Management
+                            </h1>
+                            <p className="text-sm text-slate-500">Manage staff access and granular permissions.</p>
+                        </div>
+                        <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 font-semibold shadow-lg shadow-emerald-500/20 transition-all">
+                            <UserPlus size={18} /> Add New Admin
+                        </button>
                     </div>
-                    <button onClick={openCreateModal} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 font-semibold shadow-lg shadow-emerald-500/20 transition-all">
-                        <UserPlus size={18} /> Add New Admin
-                    </button>
-                </div>
 
-                {/* Table */}
-                <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-white/5">
-                        <div className="relative max-w-sm">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                            <input type="text" placeholder="Search admins..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+                    {/* Table */}
+                    <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-white/5">
+                            <div className="relative max-w-sm">
+                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                <input type="text" placeholder="Search admins..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-medium">
+                                    <tr>
+                                        <th className="px-6 py-4">User</th>
+                                        <th className="px-6 py-4">Role</th>
+                                        <th className="px-6 py-4">Branch</th>
+                                        <th className="px-6 py-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                    {filteredAdmins.map(admin => (
+                                        <tr key={admin.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-slate-900 dark:text-white">{admin.name}</div>
+                                                <div className="text-xs text-slate-500">{admin.email}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-slate-300 uppercase">
+                                                    {admin.role.replace('-', ' ')}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-slate-500">{admin.branch}</td>
+                                            <td className="px-6 py-4">
+                                                <button onClick={() => openEditModal(admin)} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
+                                                    <Edit size={16}/>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 dark:bg-white/5 text-slate-500 font-medium">
-                                <tr>
-                                    <th className="px-6 py-4">User</th>
-                                    <th className="px-6 py-4">Role</th>
-                                    <th className="px-6 py-4">Branch</th>
-                                    <th className="px-6 py-4">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {filteredAdmins.map(admin => (
-                                    <tr key={admin.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-900 dark:text-white">{admin.name}</div>
-                                            <div className="text-xs text-slate-500">{admin.email}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-white/10 dark:text-slate-300 uppercase">
-                                                {admin.role.replace('-', ' ')}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-slate-500">{admin.branch}</td>
-                                        <td className="px-6 py-4">
-                                            <button onClick={() => openEditModal(admin)} className="p-2 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
-                                                <Edit size={16}/>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
                 </div>
-            </div>
 
-            <AnimatePresence>
-                {isModalOpen && <AdminFormModal adminToEdit={adminToEdit} onClose={() => setIsModalOpen(false)} />}
-            </AnimatePresence>
-        </AdminSidebarLayout>
+                <AnimatePresence>
+                    {isModalOpen && <AdminFormModal adminToEdit={adminToEdit} onClose={() => setIsModalOpen(false)} />}
+                </AnimatePresence>
+            </AdminSidebarLayout>
+        </>
+        
     );
 }
 

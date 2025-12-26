@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\BranchService; // Added this import
+use App\Models\BranchService;
 use App\Models\CapitalContribution;
 use App\Models\Loan;
 use App\Models\Member;
 use App\Models\SavingsDeposit;
 use App\Models\TimeDeposit;
+use App\Models\TimeDepositWithdrawal; 
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Inertia\Inertia;
@@ -16,16 +17,21 @@ use Inertia\Inertia;
 class AdminDashboardController extends Controller
 {
     public function showDashboard() {
-        // --- 1. CARD TOTALS ---
+        // --- 1. CARD TOTALS (Net Running Balances) ---
         $totalMembers = Member::count();
         
-        $totalShareCapital = (float) CapitalContribution::whereIn('status', ['Paid', 'Posted'])->sum('amount');
-        
-        $totalSavings = (float) SavingsDeposit::whereIn('status', ['Paid', 'Posted'])
-            ->where('transactionType', 'deposit')
+        $totalShareCapital = (float) CapitalContribution::whereIn('status', ['Paid', 'Posted'])
             ->sum('amount');
         
-        $totalTimeDeposits = (float) TimeDeposit::sum('principal');
+        $totalSavings = (float) SavingsDeposit::whereIn('status', ['Paid', 'Posted'])
+            ->sum('amount');
+        
+        $timePrincipal = (float) TimeDeposit::sum('principal');
+        $timeWithdraw = (float) TimeDepositWithdrawal::sum('amount');
+        $totalTimeDeposits = $timePrincipal - $timeWithdraw;
+
+        // --- NEW: TOTAL LOAN INCOME ---
+        $totalLoanIncome = (float) Loan::where('status', 'released')->sum('income');
 
         // --- 2. CHART DATA (Last 6 Months) ---
         $chartData = $this->getMonthlyData();
@@ -36,7 +42,7 @@ class AdminDashboardController extends Controller
             ->where('branchService', '!=', '')
             ->groupBy('branchService')
             ->orderByDesc('count')
-            ->limit(6) // Top 6 branches to keep chart clean
+            ->limit(6)
             ->get()
             ->map(function ($item) {
                 return [
@@ -51,9 +57,10 @@ class AdminDashboardController extends Controller
                 'totalShareCapital'  => $totalShareCapital,
                 'totalSavings'       => $totalSavings,
                 'totalTimeDeposits'  => $totalTimeDeposits,
+                'totalLoanIncome'    => $totalLoanIncome, // <--- Passed to View
             ],
             'chartData'  => $chartData,
-            'branchData' => $branchData // Passed to view
+            'branchData' => $branchData
         ]);
     }
 
@@ -64,35 +71,42 @@ class AdminDashboardController extends Controller
         });
 
         return $months->map(function ($date) {
-            $month = $date->month;
-            $year = $date->year;
             $monthName = $date->format('M');
+            $endOfMonth = $date->copy()->endOfMonth(); 
 
-            $capital = CapitalContribution::whereIn('status', ['Paid', 'Posted'])
-                ->whereMonth('created_at', $month)
-                ->whereYear('created_at', $year)
-                ->sum('amount');
-
-            $savings = SavingsDeposit::whereIn('status', ['Paid', 'Posted'])
-                ->where('transactionType', 'deposit')
-                ->whereMonth('created_at', $month)
-                ->whereYear('created_at', $year)
-                ->sum('amount');
-
-            $time = TimeDeposit::whereMonth('created_at', $month)
-                ->whereYear('created_at', $year)
-                ->sum('principal');
-
-            $members = Member::whereMonth('created_at', $month)
-                ->whereYear('created_at', $year)
+            // 1. MEMBERS 
+            $members = Member::whereMonth('created_at', $date->month)
+                ->whereYear('created_at', $date->year)
                 ->count();
 
+            // 2. SHARE CAPITAL (Net)
+            $capital = CapitalContribution::whereIn('status', ['Paid', 'Posted'])
+                ->where('created_at', '<=', $endOfMonth)
+                ->sum('amount');
+
+            // 3. SAVINGS (Net)
+            $savings = SavingsDeposit::whereIn('status', ['Paid', 'Posted'])
+                ->where('created_at', '<=', $endOfMonth)
+                ->sum('amount');
+
+            // 4. TIME DEPOSIT (Net)
+            $timePrincipal = TimeDeposit::where('created_at', '<=', $endOfMonth)->sum('principal');
+            $timeWithdrawals = TimeDepositWithdrawal::where('created_at', '<=', $endOfMonth)->sum('amount');
+            $time = $timePrincipal - $timeWithdrawals;
+
+            // 5. LOAN INCOME
+            $loanIncome = Loan::where('status', 'released')
+                ->whereMonth('updated_at', $date->month)
+                ->whereYear('updated_at', $date->year)
+                ->sum('income');
+
             return [
-                'name'    => $monthName,
-                'capital' => (float) $capital,
-                'savings' => (float) $savings,
-                'time'    => (float) $time,
-                'members' => $members,
+                'name'        => $monthName,
+                'members'     => $members,
+                'capital'     => (float) $capital,
+                'savings'     => (float) $savings,
+                'time'        => (float) $time,
+                'loan_income' => (float) $loanIncome,
             ];
         })->values();
     }

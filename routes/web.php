@@ -41,8 +41,14 @@ use App\Http\Controllers\TimeDepositCalculatorController;
 use App\Http\Middleware\AdminMiddleware;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+*/
+
 // =========================================================================
-// 1. PUBLIC ROUTES (RESTORED FROM ORIGINAL FILE)
+// 1. PUBLIC ROUTES
 // =========================================================================
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
@@ -100,15 +106,14 @@ Route::get('/login', fn () => Inertia::render('Auth/Login', [
 
 Route::post('/login', [MemberAuthController::class, 'memberLogin'])->name('member.login.post');
 
-
 // =========================================================================
-// 2. CLIENT / MEMBER PORTAL (RESTORED FROM ORIGINAL FILE)
+// 2. CLIENT / MEMBER PORTAL
 // =========================================================================
 Route::middleware('auth:member')->prefix('client')->name('member.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/capital-total', [DashboardController::class, 'getCapitalTotal'])->name('capital.total');
     Route::get('/capital-chart', [DashboardController::class, 'getCapitalChartData'])->name('capital.chart');
-    
+
     // Profile Data
     Route::get('/profile-data', [ClientController::class, 'showMemberProfile'])->name('show');
     Route::post('/update-basic-info', [ClientController::class, 'updateBasicInfo'])->name('update-basic-info');
@@ -173,45 +178,42 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
 // PayMongo Webhook
 Route::post('/paymongo/webhook', [PayMongoController::class, 'webhook'])->withoutMiddleware(VerifyCsrfToken::class)->name('paymongo.webhook');
 
-
 // =========================================================================
-// 3. ADMIN PORTAL (NEW GRANULAR PERMISSIONS SYSTEM)
+// 3. ADMIN PORTAL (GRANULAR PERMISSIONS SYSTEM)
 // =========================================================================
 Route::prefix('admin')->name('admin.')->group(function () {
 
-    // --- Guest Routes ---
+    // --- GUEST ADMIN ROUTES ---
     Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.post');
     Route::post('/logout', [AdminAuthController::class, 'logout'])->name('logout');
 
-    // --- Authenticated Admin Common Routes ---
-    Route::middleware('auth:admin')->group(function () {
-        
-        // 1. Dashboard & Security (Accessible to ALL Admins)
-        Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
-        Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->name('2fa.setup');
-        Route::get('/2fa', [AdminAuthController::class, 'show2faForm'])->name('2fa.form');
-        Route::post('/2fa', [AdminAuthController::class, 'verify2fa'])->name('2fa.verify');
+    // 2FA VERIFICATION
+    Route::get('/2fa', [AdminAuthController::class, 'show2faForm'])->name('2fa.form');
+    Route::post('/2fa', [AdminAuthController::class, 'verify2fa'])->name('2fa.verify');
 
-        // 2. Profile Management (Self - Accessible to ALL Admins)
+    // --- AUTHENTICATED ADMIN ROUTES ---
+    Route::middleware('auth:admin')->group(function () {
+
+        // 1. Dashboard & Security
+        Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
+        
+        Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->name('2fa.setup');
+        Route::post('/2fa/setup', [AdminAuthController::class, 'store2faSetup'])->name('2fa.setup.store');
+
+        // 2. Profile Management
         Route::get('/profile', [AdminProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [AdminProfileController::class, 'update'])->name('profile.update');
         Route::put('/password', [AdminProfileController::class, 'updatePassword'])->name('password.update');
 
-
-        // =================================================================
-        // PERMISSION GROUPS (NEW)
-        // =================================================================
-
-        // GROUP A: SUPER ADMIN ONLY (User Mgmt, Settings, Formulas)
+        // GROUP A: SUPER ADMIN ONLY
         Route::middleware(['auth:admin', 'role:super-admin'])->group(function () {
             Route::get('/create-user', [AdminUserController::class, 'create'])->name('create-user');
             Route::post('/create-user', [AdminUserController::class, 'store'])->name('store-user');
             Route::patch('/update-user/{id}', [AdminUserController::class, 'update'])->name('update-user');
-            
+
             Route::get('/settings', [SettingController::class, 'showSettingPage'])->name('settings');
-            
-            // Loan Computation Settings
+
             Route::get('/loan-settings', [AdminComputationController::class, 'showLoanSettings'])->name('loan-settings.index');
             Route::get('/computations', [AdminComputationController::class, 'computationList'])->name('computations.list');
             Route::post('/computations', [AdminComputationController::class, 'storeComputation'])->name('computations.store-computation');
@@ -222,34 +224,30 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // GROUP B: REPORTS
         Route::middleware('can_access:view_reports')->group(function () {
-            Route::get('/reports', [ReportController::class, 'showReportPage'])->name('reports');
+            Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+            Route::get('/reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
         });
 
         // GROUP C: LOAN MANAGEMENT
-        
-        // C.1 Read Access (View Pages & APIs)
         Route::middleware('can_access:view_loans')->group(function () {
             Route::get('/loans', [LoanController::class, 'showLoanPage'])->name('loans');
             Route::get('/loans/{loanReference}', [LoanController::class, 'showLoanDetails'])->name('loans.showLoan');
-            
-            // Documents View/Download
+
             Route::get('/loans/{loanReference}/documents/{documentId}/preview', [LoanController::class, 'previewPreApprovalDocuments'])->whereNumber('documentId')->name('loans.preDocuments.preview');
             Route::get('/admin/loans/{loanReference}/post-documents/{documentId}/preview',[LoanController::class, 'previewPostApprovalDocument'])->name('loans.postDocuments.preview');
             Route::get('/loans/{loanReference}/download/application', [LoanController::class, 'downloadapplication'])->name('loan.download.application');
             Route::get('/loans/{loanReference}/download/release-voucher', [LoanController::class, 'downloadReleaseVoucher'])->name('loan.download.releaseVoucher');
             Route::get('/loans/{loanReference}/download/ledger', [LoanController::class, 'downloadLedger'])->name('loan.download.ledger');
-            
-            // APIs
+
             Route::get('/api/loans', [LoanController::class, 'apiList'])->name('api.loans.index'); 
             Route::get('/api/loans/{loanReference}/details', [LoanController::class, 'apiDetails'])->name('api.loans.details');
         });
 
-        // C.2 Write Access (Processing Actions)
         Route::middleware('can_access:process_loans')->group(function () {
             Route::post('/compute-loan', [LoanController::class, 'compute']);
             Route::post('/submit-loan', [LoanController::class, 'storeLoan']);
             Route::post('/recompute-loan', [LoanController::class, 'recompute'])->name('loan.recompute');
-            
+
             Route::post('/loans/{loanReference}/approve', [LoanController::class, 'approve'])->name('loan.approve');
             Route::post('/loans/{loanReference}/decline', [LoanController::class, 'decline'])->name('loan.decline');
             Route::post('/loans/{loanReference}/release', [LoanController::class, 'release'])->name('loan.release');
@@ -260,28 +258,31 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/loans/{loanReference}/ack-downloads', [LoanController::class, 'acknowledgeDownloads'])->name('loan.ackDownloads');
         });
 
-        // GROUP D: MEMBERS (Unified Access)
+        // GROUP D: MEMBERS (FIXED ROUTES: Replaced {encrypted} with {id})
         Route::middleware('can_access:manage_members')->prefix('/members')->name('members.')->group(function () {
             Route::get('/', [MemberController::class, 'showMemberPage'])->name('index');
-            Route::get('/profile/{encrypted}', [MemberController::class, 'showEncrypted'])->name('show-member');
-            Route::get('/{encrypted}/loan-details/{loanReference}', [MemberController::class, 'apiMemberLoanDetails'])->name('loan-details');
+            
+            // FIXED: Use {id} instead of {encrypted}
+            Route::get('/profile/{id}', [MemberController::class, 'showMemberDetail'])->name('show-member');
+            
+            Route::get('/{id}/loan-details/{loanReference}', [MemberController::class, 'apiMemberLoanDetails'])->name('loan-details');
             Route::get('/api/members/search', [LoanController::class, 'apiSearchMembers'])->name('api.members.search'); 
-            
-            // Actions
-            Route::post('/{encrypted}/update-basic-info', [MemberController::class, 'updateBasicInfo'])->name('update-basic-info');
-            Route::post('/{encrypted}/update-branch-service', [MemberController::class, 'updateBranchService'])->name('update-branch-service');
-            Route::post('/{encrypted}/update-afp-info', [MemberController::class, 'updateAfpInfo'])->name('update-afp-info');
-            Route::post('/{encrypted}/update-spouse-info', [MemberController::class, 'updateSpouseInfo'])->name('update-spouse-info');
-            Route::post('/{encrypted}/update-parents-info', [MemberController::class, 'updateParentsInfo'])->name('update-parents-info');
-            Route::post('/{encrypted}/update-identification-info', [MemberController::class, 'updateIdentificationInfo'])->name('update-identification-info');
-            Route::post('/{encrypted}/update-emergency-info', [MemberController::class, 'updateEmergencyInfo'])->name('update-emergency-info');
-            Route::post('/{encrypted}/update-dependents-info', [MemberController::class, 'updateDependents'])->name('update-dependents-info');
-            
+
+            // Actions - Fixed update routes to use {id}
+            Route::post('/{id}/update-basic-info', [MemberController::class, 'updateBasicInfo'])->name('update-basic-info');
+            Route::post('/{id}/update-branch-service', [MemberController::class, 'updateBranchService'])->name('update-branch-service');
+            Route::post('/{id}/update-afp-info', [MemberController::class, 'updateAfpInfo'])->name('update-afp-info');
+            Route::post('/{id}/update-spouse-info', [MemberController::class, 'updateSpouseInfo'])->name('update-spouse-info');
+            Route::post('/{id}/update-parents-info', [MemberController::class, 'updateParentsInfo'])->name('update-parents-info');
+            Route::post('/{id}/update-identification-info', [MemberController::class, 'updateIdentificationInfo'])->name('update-identification-info');
+            Route::post('/{id}/update-emergency-info', [MemberController::class, 'updateEmergencyInfo'])->name('update-emergency-info');
+            Route::post('/{id}/update-dependents-info', [MemberController::class, 'updateDependents'])->name('update-dependents-info');
+
             Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
             Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');
         });
 
-        // GROUP E: DEPOSITS (Unified Access)
+        // GROUP E: DEPOSITS
         Route::middleware('can_access:manage_deposits')->group(function () {
             // Share Capital
             Route::prefix('/share-capital')->name('share-capital.')->group(function () {
@@ -331,7 +332,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 Route::get('/api-members-min',[TimeDepositController::class, 'apiMembersMin'])->name('api-members-min');
             });
         });
-
     }); 
 });
 

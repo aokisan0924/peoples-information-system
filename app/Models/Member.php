@@ -73,6 +73,10 @@ class Member extends Authenticatable
         return $this->hasMany(CapitalContribution::class, 'memberId');
     }
 
+    public function savingsDeposit() {
+        return $this->hasMany(SavingsDeposit::class, 'memberId');
+    }
+
     public function loans() {
         return $this->hasMany(Loan::class, 'memberId', 'id');
     }

@@ -29,7 +29,9 @@ export default function AdminTwoFactorSetup({ google2faUrl, secret }) {
 
     return (
         <>
-            <Head title="Setup Two Factor Authentication" />
+            <Head title="Setup Two Factor Authentication">
+                <link rel="icon" href="/images/logo/pis_logo.png" />
+            </Head>
             <Toaster
                 position="top-right"
                 toastOptions={{

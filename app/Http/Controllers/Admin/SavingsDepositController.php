@@ -8,7 +8,7 @@ use App\Models\MemberNotification;
 use App\Models\SavingsDeposit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Auth; // <--- ADDED THIS
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -155,12 +155,12 @@ class SavingsDepositController extends Controller
 
         $totalDeposits = (float) SavingsDeposit::where('memberId', $memberId)
         ->where('transactionType', 'deposit')
-        ->where('status', ['posted', 'Posted', 'POSTED'])
+        ->whereIn('status', ['posted', 'Posted', 'POSTED'])
         ->sum('amount');
 
         $totalWithdrawals = (float) SavingsDeposit::where('memberId', $memberId)
             ->where('transactionType', 'withdrawal')
-            ->where('status', ['posted', 'Posted', 'POSTED'])
+            ->whereIn('status', ['posted', 'Posted', 'POSTED'])
             ->sum('amount');
 
         $totalSavings = $totalDeposits + $totalWithdrawals;
@@ -189,7 +189,9 @@ class SavingsDepositController extends Controller
         $page    = max(1, (int) $request->integer('page', 1));
 
         // Get ALL rows for the member, latest first
-        $all = SavingsDeposit::where('memberId', $memberId)
+        // --- UPDATED: Added processor relationship and selected processed_by column
+        $all = SavingsDeposit::with('processor') 
+            ->where('memberId', $memberId)
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->get([
@@ -201,6 +203,7 @@ class SavingsDepositController extends Controller
                 'referenceNumber',
                 'paidAt',
                 'created_at',
+                'processed_by', // <--- IMPORTANT: Needed for the relationship to work
             ]);
 
         // Compute total net balance first
@@ -245,6 +248,9 @@ class SavingsDepositController extends Controller
                 // already-processed credit / debit (frontend can show directly)
                 'credit'          => $credit,
                 'debit'           => $debit,
+                
+                // --- UPDATED: Return processor info
+                'processor'       => $r->processor,
             ];
         });
 
@@ -329,6 +335,12 @@ class SavingsDepositController extends Controller
         $entry->status           = 'posted';
         $entry->isPaid           = true;
         $entry->paidAt           = $paidAt;
+        
+        // --- UPDATED: Save Processed By using Admin Guard ---
+        if (Auth::guard('admin')->check()) {
+            $entry->processed_by = Auth::guard('admin')->id(); 
+        }
+        
         $entry->save();
 
         $dateColumn = 'paidAt';
@@ -397,15 +409,6 @@ class SavingsDepositController extends Controller
 
     /**
      * Semiannual interest posting – 6.09% annual, compounded.
-     *
-     * Rules:
-     *  - Annual rate: 6.09%
-     *  - Per semester: 6.09 / 2 = 3.045%
-     *  - For each member:
-     *      - Compute month-end balances for the 6 months of the semester
-     *      - avgBalance = sum(monthEndBalances) / 6
-     *      - interest = avgBalance * (0.0609 / 2)
-     *      - Post interest as a SavingsDeposit row (transactionType = 'deposit', ref = "INT-YYYY-Hx")
      */
     public function postSemiAnnualInterest(Request $request) {
         $data = $request->validate([
@@ -517,7 +520,9 @@ class SavingsDepositController extends Controller
                     'referenceNumber' => sprintf('INT-%d-H%d, $year, $semester'),
                     'status' => 'posted',
                     'isPaid' => true,
-                    'paidAt' => $periodEnd->toDateString()
+                    'paidAt' => $periodEnd->toDateString(),
+                    // Optional: Track Interest posting user
+                    'processed_by' => Auth::guard('admin')->id() 
                 ]);
             }
         }
@@ -704,6 +709,7 @@ class SavingsDepositController extends Controller
         // APPROVE
         $withdrawal->update([
             'status'   => 'Approved',
+            'processed_by' => Auth::guard('admin')->id() // Track approval
         ]);
 
         // Notify member
@@ -758,6 +764,7 @@ class SavingsDepositController extends Controller
                 'isPaid' => true,
                 'status' => 'posted',
                 'paidAt' => now(),
+                'processed_by' => Auth::guard('admin')->id() // Track release
             ]);
         });
 
@@ -798,6 +805,7 @@ class SavingsDepositController extends Controller
         $withdrawal->update([
             'status' => 'Declined',
             'adminStatus'   => 'Declined',
+            'processed_by' => Auth::guard('admin')->id() // Track decline
         ]);
 
         /**

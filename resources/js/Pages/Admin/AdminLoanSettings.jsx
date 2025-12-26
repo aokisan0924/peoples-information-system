@@ -128,257 +128,260 @@ export default function AdminLoanSettings() {
     };
 
     return (
-        <AdminSidebarLayout>
-            <Head title="Loan Settings" />
-
-            <div className="space-y-6">
-                
-                {/* HEADER */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                            <Settings className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                            Loan Computation Settings
-                        </h1>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                            Configure loan formulas, interest rates, and fees.
-                        </p>
-                    </div>
-                    <button
-                        onClick={fetchItems}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 transition-colors"
-                    >
-                        <RefreshCw size={18} />
-                        <span>Refresh</span>
-                    </button>
-                </div>
-
-                {/* FILTER & ADD */}
-                <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-4 shadow-sm transition-colors">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 w-full md:w-auto">
-                            <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                                Category:
-                            </label>
-                            <select
-                                className="flex-1 md:flex-none rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 text-slate-900 dark:text-white text-sm px-4 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
-                                value={categoryFilter}
-                                onChange={(e) => setCategoryFilter(e.target.value)}
-                            >
-                                {/* FIX: Added explicit dark text color to options */}
-                                <option value="ACTIVE_PENSIONER_V1" className="text-slate-900 dark:text-slate-900">
-                                    ACTIVE_PENSIONER_V1
-                                </option>
-                                <option value="CDEA" className="text-slate-900 dark:text-slate-900">CDEA</option>
-                            </select>
+        <>
+            <Head title="Loan Settings">
+                <link rel="icon" href="/images/logo/pis_logo.png" />
+            </Head>
+            <AdminSidebarLayout>
+                <div className="space-y-6">
+                    
+                    {/* HEADER */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                                <Settings className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                                Loan Computation Settings
+                            </h1>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Configure loan formulas, interest rates, and fees.
+                            </p>
                         </div>
                         <button
-                            onClick={() => setShowAddForm(!showAddForm)}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg shadow-emerald-500/20 transition-all"
+                            onClick={fetchItems}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 transition-colors"
                         >
-                            {showAddForm ? <ChevronUp size={18} /> : <Plus size={18} />}
-                            <span>{showAddForm ? "Close Form" : "Add New Computation"}</span>
+                            <RefreshCw size={18} />
+                            <span>Refresh</span>
                         </button>
                     </div>
 
-                    {/* ADD FORM */}
-                    <AnimatePresence>
-                        {showAddForm && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: "auto", opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
+                    {/* FILTER & ADD */}
+                    <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-4 shadow-sm transition-colors">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                <label className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                                    Category:
+                                </label>
+                                <select
+                                    className="flex-1 md:flex-none rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 text-slate-900 dark:text-white text-sm px-4 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
+                                    value={categoryFilter}
+                                    onChange={(e) => setCategoryFilter(e.target.value)}
+                                >
+                                    {/* FIX: Added explicit dark text color to options */}
+                                    <option value="ACTIVE_PENSIONER_V1" className="text-slate-900 dark:text-slate-900">
+                                        ACTIVE_PENSIONER_V1
+                                    </option>
+                                    <option value="CDEA" className="text-slate-900 dark:text-slate-900">CDEA</option>
+                                </select>
+                            </div>
+                            <button
+                                onClick={() => setShowAddForm(!showAddForm)}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg shadow-emerald-500/20 transition-all"
                             >
-                                <div className="mt-6 pt-6 border-t border-slate-100 dark:border-white/5">
-                                    <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-400 mb-4 flex items-center gap-2">
-                                        <Calculator size={16} /> New Formula Configuration
-                                    </h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <InputGroup label="Title">
-                                            <input
-                                                className="input-field"
-                                                placeholder="e.g. Standard Pension Loan"
-                                                value={newRow.title}
-                                                onChange={(e) => setNewRow({ ...newRow, title: e.target.value })}
-                                            />
-                                        </InputGroup>
+                                {showAddForm ? <ChevronUp size={18} /> : <Plus size={18} />}
+                                <span>{showAddForm ? "Close Form" : "Add New Computation"}</span>
+                            </button>
+                        </div>
 
-                                        <InputGroup label="Category">
-                                            <select
-                                                className="input-field"
-                                                value={newRow.category}
-                                                onChange={(e) => setNewRow({ ...newRow, category: e.target.value })}
-                                            >
-                                                <option value="ACTIVE_PENSIONER_V1" className="text-slate-900 dark:text-slate-900">ACTIVE_PENSIONER_V1</option>
-                                                <option value="CDEA" className="text-slate-900 dark:text-slate-900">CDEA</option>
-                                            </select>
-                                        </InputGroup>
-
-                                        <InputGroup label="Term (Months)">
-                                            <select
-                                                className="input-field"
-                                                value={newRow.termMonths}
-                                                onChange={(e) => setNewRow({ ...newRow, termMonths: Number(e.target.value) })}
-                                            >
-                                                {[60, 48, 36, 24, 12].map((n) => (
-                                                    <option key={n} value={n} className="text-slate-900 dark:text-slate-900">{n} Months ({n/12} Years)</option>
-                                                ))}
-                                            </select>
-                                        </InputGroup>
-
-                                        <InputGroup label="Annual Rate Formula">
-                                            <input
-                                                className="input-field font-mono"
-                                                value={newRow.annualRateFormula}
-                                                onChange={(e) => setNewRow({ ...newRow, annualRateFormula: e.target.value })}
-                                            />
-                                        </InputGroup>
-
-                                        <InputGroup label="Monthly Rate Formula">
-                                            <input
-                                                className="input-field font-mono bg-slate-100 dark:bg-white/5 opacity-70"
-                                                readOnly
-                                                value={newRow.monthlyRateFormula}
-                                                onChange={(e) => setNewRow({ ...newRow, monthlyRateFormula: e.target.value })}
-                                            />
-                                        </InputGroup>
-
-                                        <InputGroup label="Service Fee Formula">
-                                            <input
-                                                className="input-field font-mono"
-                                                value={newRow.serviceFeeFormula}
-                                                onChange={(e) => setNewRow({ ...newRow, serviceFeeFormula: e.target.value })}
-                                            />
-                                        </InputGroup>
-
-                                        <InputGroup label="Insurance Formula">
-                                            <input
-                                                className="input-field font-mono"
-                                                value={newRow.insuranceFormula}
-                                                onChange={(e) => setNewRow({ ...newRow, insuranceFormula: e.target.value })}
-                                            />
-                                        </InputGroup>
-
-                                        <InputGroup label="Advance Interest Formula">
-                                            <input
-                                                className="input-field font-mono"
-                                                value={newRow.advanceInterestFormula}
-                                                onChange={(e) => setNewRow({ ...newRow, advanceInterestFormula: e.target.value })}
-                                            />
-                                        </InputGroup>
-
-                                        <InputGroup label="Effective Rate Formula">
-                                            <input
-                                                className="input-field font-mono bg-slate-100 dark:bg-white/5 opacity-70"
-                                                value={newRow.effectiveRateFormula || ""}
-                                                onChange={(e) => setNewRow({ ...newRow, effectiveRateFormula: e.target.value })}
-                                            />
-                                        </InputGroup>
-
-                                        <div className="md:col-span-3">
-                                            <InputGroup label="Notes (Optional)">
+                        {/* ADD FORM */}
+                        <AnimatePresence>
+                            {showAddForm && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="mt-6 pt-6 border-t border-slate-100 dark:border-white/5">
+                                        <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-400 mb-4 flex items-center gap-2">
+                                            <Calculator size={16} /> New Formula Configuration
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <InputGroup label="Title">
                                                 <input
                                                     className="input-field"
-                                                    placeholder="Additional remarks..."
-                                                    value={newRow.notes}
-                                                    onChange={(e) => setNewRow({ ...newRow, notes: e.target.value })}
+                                                    placeholder="e.g. Standard Pension Loan"
+                                                    value={newRow.title}
+                                                    onChange={(e) => setNewRow({ ...newRow, title: e.target.value })}
                                                 />
                                             </InputGroup>
+
+                                            <InputGroup label="Category">
+                                                <select
+                                                    className="input-field"
+                                                    value={newRow.category}
+                                                    onChange={(e) => setNewRow({ ...newRow, category: e.target.value })}
+                                                >
+                                                    <option value="ACTIVE_PENSIONER_V1" className="text-slate-900 dark:text-slate-900">ACTIVE_PENSIONER_V1</option>
+                                                    <option value="CDEA" className="text-slate-900 dark:text-slate-900">CDEA</option>
+                                                </select>
+                                            </InputGroup>
+
+                                            <InputGroup label="Term (Months)">
+                                                <select
+                                                    className="input-field"
+                                                    value={newRow.termMonths}
+                                                    onChange={(e) => setNewRow({ ...newRow, termMonths: Number(e.target.value) })}
+                                                >
+                                                    {[60, 48, 36, 24, 12].map((n) => (
+                                                        <option key={n} value={n} className="text-slate-900 dark:text-slate-900">{n} Months ({n/12} Years)</option>
+                                                    ))}
+                                                </select>
+                                            </InputGroup>
+
+                                            <InputGroup label="Annual Rate Formula">
+                                                <input
+                                                    className="input-field font-mono"
+                                                    value={newRow.annualRateFormula}
+                                                    onChange={(e) => setNewRow({ ...newRow, annualRateFormula: e.target.value })}
+                                                />
+                                            </InputGroup>
+
+                                            <InputGroup label="Monthly Rate Formula">
+                                                <input
+                                                    className="input-field font-mono bg-slate-100 dark:bg-white/5 opacity-70"
+                                                    readOnly
+                                                    value={newRow.monthlyRateFormula}
+                                                    onChange={(e) => setNewRow({ ...newRow, monthlyRateFormula: e.target.value })}
+                                                />
+                                            </InputGroup>
+
+                                            <InputGroup label="Service Fee Formula">
+                                                <input
+                                                    className="input-field font-mono"
+                                                    value={newRow.serviceFeeFormula}
+                                                    onChange={(e) => setNewRow({ ...newRow, serviceFeeFormula: e.target.value })}
+                                                />
+                                            </InputGroup>
+
+                                            <InputGroup label="Insurance Formula">
+                                                <input
+                                                    className="input-field font-mono"
+                                                    value={newRow.insuranceFormula}
+                                                    onChange={(e) => setNewRow({ ...newRow, insuranceFormula: e.target.value })}
+                                                />
+                                            </InputGroup>
+
+                                            <InputGroup label="Advance Interest Formula">
+                                                <input
+                                                    className="input-field font-mono"
+                                                    value={newRow.advanceInterestFormula}
+                                                    onChange={(e) => setNewRow({ ...newRow, advanceInterestFormula: e.target.value })}
+                                                />
+                                            </InputGroup>
+
+                                            <InputGroup label="Effective Rate Formula">
+                                                <input
+                                                    className="input-field font-mono bg-slate-100 dark:bg-white/5 opacity-70"
+                                                    value={newRow.effectiveRateFormula || ""}
+                                                    onChange={(e) => setNewRow({ ...newRow, effectiveRateFormula: e.target.value })}
+                                                />
+                                            </InputGroup>
+
+                                            <div className="md:col-span-3">
+                                                <InputGroup label="Notes (Optional)">
+                                                    <input
+                                                        className="input-field"
+                                                        placeholder="Additional remarks..."
+                                                        value={newRow.notes}
+                                                        onChange={(e) => setNewRow({ ...newRow, notes: e.target.value })}
+                                                    />
+                                                </InputGroup>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 flex justify-end">
+                                            <button
+                                                onClick={handleCreate}
+                                                className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all"
+                                            >
+                                                Save Computation
+                                            </button>
                                         </div>
                                     </div>
-
-                                    <div className="mt-4 flex justify-end">
-                                        <button
-                                            onClick={handleCreate}
-                                            className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all"
-                                        >
-                                            Save Computation
-                                        </button>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-
-                {/* TABLE CARD */}
-                <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 shadow-sm overflow-hidden transition-colors">
-                    
-                    {/* DESKTOP TABLE */}
-                    <div className="hidden xl:block overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400">
-                                <tr>
-                                    <th className="px-4 py-3 min-w-[150px]">Title</th>
-                                    <th className="px-4 py-3 w-24">Term</th>
-                                    <th className="px-4 py-3 min-w-[100px]">Annual</th>
-                                    <th className="px-4 py-3 min-w-[140px]">Service Fee</th>
-                                    <th className="px-4 py-3 min-w-[140px]">Insurance</th>
-                                    <th className="px-4 py-3 min-w-[140px]">Adv. Interest</th>
-                                    <th className="px-4 py-3 text-center w-28">Status</th>
-                                    <th className="px-4 py-3 text-center w-40">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
-                                {loading ? (
-                                    <tr><td colSpan="8" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">Loading configurations...</td></tr>
-                                ) : items.length === 0 ? (
-                                    <tr><td colSpan="8" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">No settings found.</td></tr>
-                                ) : (
-                                    items.map((row) => (
-                                        <EditableRow
-                                            key={row.id}
-                                            row={row}
-                                            onSave={handleUpdate}
-                                            onActivate={handleActivate}
-                                            onDelete={handleDelete}
-                                        />
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
 
-                    {/* MOBILE / TABLET CARDS */}
-                    <div className="block xl:hidden divide-y divide-slate-100 dark:divide-white/5">
-                        {items.map((row) => (
-                            <EditableCard
-                                key={row.id}
-                                row={row}
-                                onSave={handleUpdate}
-                                onActivate={handleActivate}
-                                onDelete={handleDelete}
-                            />
-                        ))}
+                    {/* TABLE CARD */}
+                    <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 shadow-sm overflow-hidden transition-colors">
+                        
+                        {/* DESKTOP TABLE */}
+                        <div className="hidden xl:block overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400">
+                                    <tr>
+                                        <th className="px-4 py-3 min-w-[150px]">Title</th>
+                                        <th className="px-4 py-3 w-24">Term</th>
+                                        <th className="px-4 py-3 min-w-[100px]">Annual</th>
+                                        <th className="px-4 py-3 min-w-[140px]">Service Fee</th>
+                                        <th className="px-4 py-3 min-w-[140px]">Insurance</th>
+                                        <th className="px-4 py-3 min-w-[140px]">Adv. Interest</th>
+                                        <th className="px-4 py-3 text-center w-28">Status</th>
+                                        <th className="px-4 py-3 text-center w-40">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
+                                    {loading ? (
+                                        <tr><td colSpan="8" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">Loading configurations...</td></tr>
+                                    ) : items.length === 0 ? (
+                                        <tr><td colSpan="8" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">No settings found.</td></tr>
+                                    ) : (
+                                        items.map((row) => (
+                                            <EditableRow
+                                                key={row.id}
+                                                row={row}
+                                                onSave={handleUpdate}
+                                                onActivate={handleActivate}
+                                                onDelete={handleDelete}
+                                            />
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* MOBILE / TABLET CARDS */}
+                        <div className="block xl:hidden divide-y divide-slate-100 dark:divide-white/5">
+                            {items.map((row) => (
+                                <EditableCard
+                                    key={row.id}
+                                    row={row}
+                                    onSave={handleUpdate}
+                                    onActivate={handleActivate}
+                                    onDelete={handleDelete}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* SHARED STYLES */}
-            <style>{`
-                .input-field {
-                    width: 100%;
-                    padding: 0.5rem 0.75rem;
-                    border-radius: 0.5rem;
-                    border: 1px solid #e2e8f0;
-                    background-color: #fff;
-                    font-size: 0.875rem;
-                    color: #0f172a;
-                    outline: none;
-                    transition: all 0.2s;
-                }
-                .dark .input-field {
-                    background-color: rgba(255,255,255,0.05);
-                    border-color: rgba(255,255,255,0.1);
-                    color: #fff;
-                }
-                .input-field:focus {
-                    border-color: #10b981;
-                    box-shadow: 0 0 0 1px #10b981;
-                }
-            `}</style>
-        </AdminSidebarLayout>
+                {/* SHARED STYLES */}
+                <style>{`
+                    .input-field {
+                        width: 100%;
+                        padding: 0.5rem 0.75rem;
+                        border-radius: 0.5rem;
+                        border: 1px solid #e2e8f0;
+                        background-color: #fff;
+                        font-size: 0.875rem;
+                        color: #0f172a;
+                        outline: none;
+                        transition: all 0.2s;
+                    }
+                    .dark .input-field {
+                        background-color: rgba(255,255,255,0.05);
+                        border-color: rgba(255,255,255,0.1);
+                        color: #fff;
+                    }
+                    .input-field:focus {
+                        border-color: #10b981;
+                        box-shadow: 0 0 0 1px #10b981;
+                    }
+                `}</style>
+            </AdminSidebarLayout>
+        </>
     );
 }
 

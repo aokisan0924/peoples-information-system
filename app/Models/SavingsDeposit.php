@@ -11,7 +11,7 @@ class SavingsDeposit extends Model
 
     protected $fillable = [
         'memberId', 'transactionType', 'amount',
-        'referenceNumber', 'status', 'isPaid', 'paidAt',
+        'referenceNumber', 'status', 'isPaid', 'paidAt', 'processed_by',
 
         'isWithdrawalRequest', 'withdrawalBankName', 'withdrawalAccountName',
         'withdrawalAccountNumber', 'withdrawalRemarks', 'requestStatus', 
@@ -29,5 +29,10 @@ class SavingsDeposit extends Model
 
     public function member() {
         return $this->belongsTo(Member::class, 'memberId');
+    }
+
+    public function processor() {
+        // Change User::class to Admin::class
+        return $this->belongsTo(Admin::class, 'processed_by');
     }
 }

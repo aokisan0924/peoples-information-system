@@ -48,4 +48,10 @@ return [
         'webhook' => env('PAYMONGO_WEBHOOK_SECRET'),
         'base_url' => env('PAYMONGO_BASE_URL')
     ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        // CHANGED: Updated from 1.5 to 2.5 (Current stable version for late 2025)
+        'base_url' => 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+    ],
 ];

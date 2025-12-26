@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, usePage, Link } from "@inertiajs/react";
 import axios from "axios";
 import { 
     Loader2, Plus, X, Wallet, ArrowUpRight, ArrowDownLeft, 
-    ArrowLeft, FileText, ChevronLeft, ChevronRight, PiggyBank 
+    ArrowRight, ArrowLeft, User, // Processed By User Icon
+    FileText, ChevronLeft, ChevronRight, PiggyBank 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
@@ -77,8 +78,16 @@ export default function SavingsDepositView() {
                 { params: { page } }
             );
 
-            // Sort locally if needed, though backend usually handles this
-            const sortedRows = (data.rows || []).slice().sort((a, b) => {
+            // Filter out Pending or Unpaid transactions
+            const validRows = (data.rows || []).filter(item => {
+                const status = (item.status || '').toLowerCase();
+                const isPaid = !!item.isPaid;
+                if (status === 'pending') return false;
+                if (!isPaid) return false;
+                return true;
+            });
+
+            const sortedRows = validRows.slice().sort((a, b) => {
                 const da = new Date(a.datePosted || a.date || 0);
                 const db = new Date(b.datePosted || b.date || 0);
                 return db.getTime() - da.getTime(); 
@@ -142,12 +151,7 @@ export default function SavingsDepositView() {
 
             toast.success("Transaction saved successfully.");
             closeModal();
-            
-            // Reload table
             await loadData(1);
-            
-            // Reload page to update stats (since stats come from props)
-            // primarily we rely on Inertia reload or manual fetch if endpoint available
             window.location.reload(); 
 
         } catch (error) {
@@ -159,277 +163,255 @@ export default function SavingsDepositView() {
     };
 
     return (
-        <AdminSidebarLayout>
-            <Head title={`Savings - ${member?.fullName}`} />
+        <>
+            <Head title={`Savings - ${member?.fullName || member?.name}`}>
+                <link rel="icon" href="/images/logo/pis_logo.png" />
+            </Head>
+            <AdminSidebarLayout>
+                <div className="space-y-6">
+                    
+                    {/* HEADER */}
+                    <div className="flex flex-col gap-4">
+                        <div>
+                            <Link
+                                href={route("admin.savings.index")}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-xs font-medium"
+                            >
+                                <ArrowLeft size={14} /> Back
+                            </Link>
+                        </div>
 
-            <div className="space-y-6">
-                
-                {/* HEADER */}
-                <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-2">
-                        <Link
-                            href={route("admin.savings.index")}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-xs font-medium"
-                        >
-                            <ArrowLeft size={14} /> Back
-                        </Link>
-                    </div>
-
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-lg">
-                                {member?.fullName ? member.fullName.charAt(0) : "M"}
-                            </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div>
-                                <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
-                                    {member?.fullName || "Member Savings"}
+                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <PiggyBank className="h-6 w-6 text-emerald-600" /> Savings Deposit Ledger
                                 </h1>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 font-mono flex items-center gap-2">
-                                    {member?.username && <span>@{member.username}</span>}
-                                    <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-white/20" />
-                                    <span>ID: {member?.id}</span>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    Viewing ledger for <span className="font-bold text-emerald-600">{member?.fullName || member?.name}</span>
                                 </p>
                             </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-3">
-                            <button 
-                                onClick={openModal} 
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg shadow-emerald-500/20 transition-all"
-                            >
-                                <Plus size={18} />
-                                <span>New Transaction</span>
+                            <button onClick={openModal} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-500 font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95">
+                                <Plus size={18} /> <span className="hidden sm:inline">New Transaction</span><span className="sm:hidden">Add</span>
                             </button>
                         </div>
                     </div>
-                </div>
 
-                {/* STAT CARDS */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <StatCard 
-                        label="Current Balance" 
-                        value={totalSavings} 
-                        icon={Wallet} 
-                        color="emerald" 
-                        prefix="₱"
-                    />
-                    <StatCard 
-                        label="Total Deposits" 
-                        value={totalDeposits} 
-                        icon={ArrowUpRight} 
-                        color="blue" 
-                        prefix="₱"
-                    />
-                    <StatCard 
-                        label="Total Withdrawals" 
-                        value={totalWithdrawals} 
-                        icon={ArrowDownLeft} 
-                        color="rose" 
-                        prefix="₱"
-                    />
-                </div>
+                    {/* STAT CARDS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <StatCard label="Current Balance" value={totalSavings} icon={Wallet} color="emerald" prefix="₱" />
+                        <StatCard label="Total Deposits" value={totalDeposits} icon={ArrowUpRight} color="blue" prefix="₱" />
+                        <StatCard label="Total Withdrawals" value={totalWithdrawals} icon={ArrowDownLeft} color="rose" prefix="₱" />
+                    </div>
 
-                {/* TRANSACTION TABLE */}
-                <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 shadow-sm overflow-hidden transition-colors">
-                    <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
-                        <div className="flex items-center gap-2">
-                            <FileText className="text-slate-400" size={18} />
-                            <h2 className="font-semibold text-slate-900 dark:text-white">Transaction History</h2>
+                    {/* TRANSACTION TABLE */}
+                    <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 shadow-sm overflow-hidden transition-colors">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
+                            <div className="flex items-center gap-2">
+                                <FileText className="text-slate-400" size={18} />
+                                <h2 className="font-semibold text-slate-900 dark:text-white">Transaction History</h2>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Desktop Table */}
-                    <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400">
-                                <tr>
-                                    <th className="px-6 py-4">Date</th>
-                                    <th className="px-6 py-4">Ref No.</th>
-                                    <th className="px-6 py-4 text-center">Type</th>
-                                    <th className="px-6 py-4 text-right text-emerald-600 dark:text-emerald-400">Credit</th>
-                                    <th className="px-6 py-4 text-right text-rose-600 dark:text-rose-400">Debit</th>
-                                    <th className="px-6 py-4 text-right">Balance</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
-                                {loading ? (
-                                    <tr><td colSpan="6" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2"/>Loading...</td></tr>
-                                ) : rows.length === 0 ? (
-                                    <tr><td colSpan="6" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">No transactions found.</td></tr>
-                                ) : (
-                                    rows.map((r) => {
-                                        const isDeposit = (r.transactionType || "").toLowerCase() === "deposit";
-                                        const amount = Number(r.amount) || 0;
-                                        return (
-                                            <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                                <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                                                    {formatDateShort(r.date || r.transactionDate)}
-                                                </td>
-                                                <td className="px-6 py-4 text-xs font-mono">
-                                                    {r.referenceNumber || "—"}
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${isDeposit ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                                        {isDeposit ? 'Deposit' : 'Withdrawal'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                                                    {isDeposit ? asMoney(amount) : "—"}
-                                                </td>
-                                                <td className="px-6 py-4 text-right font-mono text-rose-600 dark:text-rose-400">
-                                                    {!isDeposit ? asMoney(amount) : "—"}
-                                                </td>
-                                                <td className="px-6 py-4 text-right font-bold font-mono text-slate-900 dark:text-white">
-                                                    {asMoney(r.runningBalance ?? 0)}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                        {/* Desktop Table */}
+                        <div className="hidden sm:block overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs uppercase font-semibold text-slate-500 dark:text-slate-400">
+                                    <tr>
+                                        <th className="px-6 py-4">Date</th>
+                                        <th className="px-6 py-4">Ref No.</th>
+                                        <th className="px-6 py-4">Processed By</th>
+                                        <th className="px-6 py-4 text-center">Type</th>
+                                        <th className="px-6 py-4 text-right text-emerald-600 dark:text-emerald-400">Credit</th>
+                                        <th className="px-6 py-4 text-right text-rose-600 dark:text-rose-400">Debit</th>
+                                        <th className="px-6 py-4 text-right">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-200">
+                                    {loading ? (
+                                        <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2"/>Loading...</td></tr>
+                                    ) : rows.length === 0 ? (
+                                        <tr><td colSpan="7" className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">No posted transactions found.</td></tr>
+                                    ) : (
+                                        rows.map((r) => {
+                                            const isDeposit = (r.transactionType || "").toLowerCase() === "deposit";
+                                            const credit = r.credit; 
+                                            const debit = r.debit;
+                                            
+                                            return (
+                                                <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">
+                                                        {formatDateShort(r.date || r.transactionDate)}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-xs font-mono">
+                                                        {r.referenceNumber || "—"}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        {r.processor ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center text-slate-600 dark:text-slate-300 text-[10px] font-bold">
+                                                                    <User size={12} />
+                                                                </div>
+                                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                                    {typeof r.processor === 'object' ? (r.processor.name || r.processor.username) : r.processor}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-slate-400 italic pl-8">System</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${isDeposit ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                                            {isDeposit ? 'Deposit' : 'Withdrawal'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                                        {credit ? asMoney(credit) : "—"}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right font-mono text-rose-600 dark:text-rose-400">
+                                                        {debit ? asMoney(debit) : "—"}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right font-bold font-mono text-slate-900 dark:text-white">
+                                                        {asMoney(r.runningBalance ?? 0)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
 
-                    {/* Mobile Cards */}
-                    <div className="block sm:hidden divide-y divide-slate-100 dark:divide-white/5">
-                        {loading ? (
-                            <div className="p-10 text-center text-slate-500"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></div>
-                        ) : rows.length === 0 ? (
-                            <div className="p-10 text-center text-slate-500">No transactions found.</div>
-                        ) : (
-                            rows.map((r) => {
-                                const isDeposit = (r.transactionType || "").toLowerCase() === "deposit";
-                                const amount = Number(r.amount) || 0;
-                                return (
-                                    <div key={r.id} className="p-4 space-y-3">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${isDeposit ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
-                                                        {isDeposit ? 'DEPOSIT' : 'WITHDRAWAL'}
-                                                    </span>
-                                                    <span className="text-xs text-slate-500 font-mono">{r.referenceNumber || "#"}</span>
+                        {/* Mobile Cards */}
+                        <div className="block sm:hidden divide-y divide-slate-100 dark:divide-white/5">
+                            {loading ? (
+                                <div className="p-10 text-center text-slate-500"><Loader2 className="h-6 w-6 animate-spin mx-auto"/></div>
+                            ) : rows.length === 0 ? (
+                                <div className="p-10 text-center text-slate-500">No posted transactions found.</div>
+                            ) : (
+                                rows.map((r) => {
+                                    const isDeposit = (r.transactionType || "").toLowerCase() === "deposit";
+                                    const amount = Number(r.amount) || 0;
+                                    return (
+                                        <div key={r.id} className="p-4 space-y-3">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${isDeposit ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}`}>
+                                                            {isDeposit ? 'DEPOSIT' : 'WITHDRAWAL'}
+                                                        </span>
+                                                        <span className="text-xs text-slate-500 font-mono">{r.referenceNumber || "#"}</span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-400 mt-1">{formatDateShort(r.date || r.transactionDate)}</div>
                                                 </div>
-                                                <div className="text-xs text-slate-400 mt-1">{formatDateShort(r.date || r.transactionDate)}</div>
+                                                <div className="text-right">
+                                                    <div className={`font-mono font-bold ${isDeposit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                        {isDeposit ? '+' : '-'}{asMoney(amount)}
+                                                    </div>
+                                                    <div className="text-xs text-slate-400 mt-1">
+                                                        By: {r.processor ? (typeof r.processor === 'object' ? (r.processor.name || r.processor.username) : r.processor) : 'System'}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <div className={`font-mono font-bold ${isDeposit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                    {isDeposit ? '+' : '-'}{asMoney(amount)}
-                                                </div>
+                                            <div className="flex justify-between items-center pt-2 border-t border-slate-50 dark:border-white/5">
+                                                <span className="text-[10px] uppercase font-bold text-slate-400">Running Balance</span>
+                                                <span className="font-mono font-bold text-slate-900 dark:text-white">{asMoney(r.runningBalance ?? 0)}</span>
                                             </div>
                                         </div>
-                                        <div className="flex justify-between items-center pt-2 border-t border-slate-50 dark:border-white/5">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400">Running Balance</span>
-                                            <span className="font-mono font-bold text-slate-900 dark:text-white">{asMoney(r.runningBalance ?? 0)}</span>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Pagination */}
+                        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Page <span className="font-semibold text-slate-900 dark:text-white">{meta.currentPage}</span> of {meta.lastPage}
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handlePageChange(meta.currentPage - 1)} disabled={meta.currentPage <= 1} className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 disabled:opacity-50 transition"><ChevronLeft className="h-4 w-4" /></button>
+                                <button onClick={() => handlePageChange(meta.currentPage + 1)} disabled={meta.currentPage >= meta.lastPage} className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 disabled:opacity-50 transition"><ChevronRight className="h-4 w-4" /></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* MODAL */}
+                <AnimatePresence>
+                    {showModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={closeModal} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                            <motion.div initial={{scale:0.95}} animate={{scale:1}} exit={{scale:0.95}} className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 overflow-hidden">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Transaction</h2>
+                                    <button onClick={closeModal} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition"><X size={20} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"/></button>
+                                </div>
+                                
+                                <form onSubmit={submitForm} className="space-y-5">
+                                    {/* Type Toggle (Updated Style) */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase">Type</label>
+                                        <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-black/20 rounded-xl">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => handleFormChange("transactionType", 'deposit')} 
+                                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${form.transactionType === 'deposit' ? 'bg-white dark:bg-white/10 text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
+                                            >
+                                                Deposit
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => handleFormChange("transactionType", 'withdrawal')} 
+                                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${form.transactionType === 'withdrawal' ? 'bg-white dark:bg-white/10 text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
+                                            >
+                                                Withdrawal
+                                            </button>
                                         </div>
                                     </div>
-                                );
-                            })
-                        )}
-                    </div>
 
-                    {/* Pagination */}
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Page <span className="font-semibold text-slate-900 dark:text-white">{meta.currentPage}</span> of {meta.lastPage}
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => handlePageChange(meta.currentPage - 1)} disabled={meta.currentPage <= 1} className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 disabled:opacity-50 transition"><ChevronLeft className="h-4 w-4" /></button>
-                            <button onClick={() => handlePageChange(meta.currentPage + 1)} disabled={meta.currentPage >= meta.lastPage} className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 disabled:opacity-50 transition"><ChevronRight className="h-4 w-4" /></button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase">Amount</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="number" 
+                                                value={form.amount} 
+                                                onChange={(e) => handleFormChange("amount", e.target.value)}
+                                                className="w-full pl-8 px-4 py-2.5 rounded-xl border border-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-mono"
+                                                placeholder="0.00"
+                                            />
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₱</span>
+                                        </div>
+                                    </div>
 
-            {/* MODAL */}
-            <AnimatePresence>
-                {showModal && (
-                    <motion.div className="fixed inset-0 z-50 flex items-center justify-center px-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-                            
-                            <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
-                                <div>
-                                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Transaction</h2>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">Savings Deposit Entry</p>
-                                </div>
-                                <button onClick={closeModal} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 transition"><X size={20} /></button>
-                            </div>
-
-                            <form onSubmit={submitForm} className="p-6 space-y-5">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase tracking-wide">Type</label>
-                                    <select 
-                                        value={form.transactionType} 
-                                        onChange={(e) => handleFormChange("transactionType", e.target.value)}
-                                        className="input-field"
-                                    >
-                                        <option value="deposit" className="text-slate-900 dark:text-slate-900">Deposit</option>
-                                        <option value="withdrawal" className="text-slate-900 dark:text-slate-900">Withdrawal</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase tracking-wide">Amount</label>
-                                    <div className="relative">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase">Reference (Optional)</label>
                                         <input 
-                                            type="number" 
-                                            value={form.amount} 
-                                            onChange={(e) => handleFormChange("amount", e.target.value)}
-                                            className="input-field pl-8 font-mono"
-                                            placeholder="0.00"
+                                            type="text" 
+                                            value={form.referenceNumber} 
+                                            onChange={(e) => handleFormChange("referenceNumber", e.target.value)}
+                                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:bg-white/5 dark:border-white/10 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                            placeholder="OR#, Ref#, Note"
                                         />
                                     </div>
-                                </div>
 
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase tracking-wide">Reference (Optional)</label>
-                                    <input 
-                                        type="text" 
-                                        value={form.referenceNumber} 
-                                        onChange={(e) => handleFormChange("referenceNumber", e.target.value)}
-                                        className="input-field"
-                                        placeholder="OR#, Ref#, Note"
-                                    />
-                                </div>
-                            </form>
+                                    <button type="submit" disabled={submitting} className={`w-full py-3.5 rounded-xl text-sm font-bold text-white shadow-lg transition-all active:scale-95 disabled:opacity-50 ${form.transactionType === 'deposit' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-rose-600 hover:bg-rose-500 shadow-rose-500/20'}`}>
+                                        {submitting ? 'Saving...' : `Confirm ${form.transactionType === 'deposit' ? 'Deposit' : 'Withdrawal'}`}
+                                    </button>
+                                </form>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
 
-                            <div className="px-6 py-4 border-t border-slate-100 dark:border-white/10 flex justify-end gap-3 bg-slate-50 dark:bg-white/5">
-                                <button onClick={closeModal} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 transition">Cancel</button>
-                                <button onClick={submitForm} disabled={submitting} className="px-6 py-2 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50">
-                                    {submitting ? 'Saving...' : 'Save Transaction'}
-                                </button>
-                            </div>
-
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* STYLES */}
-            <style>{`
-                .input-field {
-                    width: 100%;
-                    padding: 0.6rem 0.8rem;
-                    border-radius: 0.75rem;
-                    border: 1px solid #e2e8f0;
-                    background-color: #fff;
-                    font-size: 0.875rem;
-                    color: #0f172a;
-                    outline: none;
-                    transition: all 0.2s;
-                }
-                .dark .input-field {
-                    background-color: rgba(255,255,255,0.05);
-                    border-color: rgba(255,255,255,0.1);
-                    color: #fff;
-                }
-                .input-field:focus {
-                    border-color: #10b981;
-                    box-shadow: 0 0 0 1px #10b981;
-                }
-            `}</style>
-        </AdminSidebarLayout>
+                <style>{`
+                    .dark .input-field { 
+                        background-color: rgba(255,255,255,0.05); 
+                        border-color: rgba(255,255,255,0.1); 
+                        color: #fff; 
+                    }
+                `}</style>
+            </AdminSidebarLayout>
+        </>
+        
     );
 }
 
@@ -447,9 +429,9 @@ function StatCard({ label, value, icon: Icon, color, prefix = "" }) {
             </div>
             <div>
                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white font-mono mt-0.5">
-                    <CountUp end={toNumber(value)} duration={1} separator="," prefix={prefix} decimals={2} />
-                </p>
+                <div className="text-xl font-bold text-slate-900 dark:text-white font-mono mt-0.5">
+                    {prefix}<CountUp end={toNumber(value)} duration={1} separator="," decimals={2} />
+                </div>
             </div>
         </div>
     );

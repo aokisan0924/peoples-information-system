@@ -9,32 +9,33 @@ export default function AdminProfile() {
     const user = auth.user;
 
     return (
-        <AdminSidebarLayout>
+        <>
             <Head title="My Profile">
                 <link rel="icon" href="/images/logo/pis_logo.png" />
             </Head>
+            <AdminSidebarLayout>
+                <div className="max-w-7xl mx-auto space-y-6">
+                    
+                    {/* Header */}
+                    <div className="flex flex-col gap-2">
+                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+                            My Profile
+                        </h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Manage your account settings and security preferences.
+                        </p>
+                    </div>
 
-            <div className="max-w-7xl mx-auto space-y-6">
-                
-                {/* Header */}
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                        My Profile
-                    </h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Manage your account settings and security preferences.
-                    </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* LEFT COLUMN: Profile Info */}
+                        <UpdateProfileInformationForm user={user} />
+
+                        {/* RIGHT COLUMN: Password */}
+                        <UpdatePasswordForm />
+                    </div>
                 </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* LEFT COLUMN: Profile Info */}
-                    <UpdateProfileInformationForm user={user} />
-
-                    {/* RIGHT COLUMN: Password */}
-                    <UpdatePasswordForm />
-                </div>
-            </div>
-        </AdminSidebarLayout>
+            </AdminSidebarLayout>
+        </>
     );
 }
 

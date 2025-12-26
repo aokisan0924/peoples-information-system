@@ -12,7 +12,8 @@ class Loan extends Model
         'serviceFee','insurance','advanceInterest','loanAmount',
         'monthlyAmortization','gross','income','percentIncome',
         'effectiveInterestRate','monthlyInterestRate','numberOfPayments',
-        'status', 'downloadsAcknowledged', 'loanType', 'loanClassification'
+        'status', 'downloadsAcknowledged', 'loanType', 'loanClassification', 
+        'processed_by', 'lrvNumber',
     ];
 
     public function member(){
@@ -25,5 +26,9 @@ class Loan extends Model
 
     public function postApprovalDocuments() {
         return $this->hasMany(PostApprovalDocuments::class, 'loanId', 'id');
+    }
+
+    public function processor() {
+        return $this->belongsTo(Admin::class, 'processed_by');
     }
 }

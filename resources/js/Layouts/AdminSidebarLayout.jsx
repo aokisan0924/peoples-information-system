@@ -61,8 +61,7 @@ export default function AdminSidebarLayout({ children }) {
             case 'reports':
                 // Controls Reports link
                 return permissions.includes('view_reports');
-            
-            case 'settings':
+
             case 'create-user':
                 return false; // Still strictly Super Admin only
 
@@ -274,14 +273,6 @@ export default function AdminSidebarLayout({ children }) {
                                 <NavLink name="admin.reports" label="Reports" icon={BarChart3} />
                             )}
 
-                            {/* SYSTEM SETTINGS (Super Admin Only) */}
-                            {isSuperAdmin && (
-                                <>
-                                    <NavLink name="#" label="Security" icon={ShieldCheck} />
-                                    <NavLink name="admin.settings" label="System Settings" icon={Settings} />
-                                </>
-                            )}
-
                         </nav>
                         
                         <div className="mt-auto pt-6 text-[10px] text-slate-400 dark:text-white/20 text-center">
@@ -367,14 +358,6 @@ export default function AdminSidebarLayout({ children }) {
                                                         <span>Add Admin</span>
                                                     </Link>
                                                 )}
-
-                                                <Link 
-                                                    href="#" 
-                                                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors"
-                                                >
-                                                    <Settings size={16} />
-                                                    <span>Settings</span>
-                                                </Link>
                                             </div>
 
                                             <div className="p-1 border-t border-slate-100 dark:border-white/5">
