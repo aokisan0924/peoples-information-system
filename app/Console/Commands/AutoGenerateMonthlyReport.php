@@ -33,9 +33,10 @@ class AutoGenerateMonthlyReport extends Command
         $start = $targetDate->copy()->startOfMonth();
         $end = $targetDate->copy()->endOfMonth();
         $monthName = $targetDate->format('F Y');
-        $reportTitle = "Branch Report - " . $monthName;
+        // UPDATED: Title to match your request
+        $reportTitle = "President's Report - " . $monthName;
 
-        // 2. DEFINE BRANCHES & INIT STATS AND LOGS
+        // 2. DEFINE BRANCHES & INIT STATS
         $branches = ['Cubao', 'Fort Magsaysay', 'Isabela'];
         $stats = [];
         $logs = []; 
@@ -54,112 +55,68 @@ class AutoGenerateMonthlyReport extends Command
                 'dismembers' => 0,
             ];
             $logs[$branch] = [
-                'loans' => [],
-                'share_capital' => [],
-                'savings' => [],
-                'time_deposit' => [],
-                'new_members' => [],
-                'dismembers' => []
+                'loans' => [], 'share_capital' => [], 'savings' => [],
+                'time_deposit' => [], 'new_members' => [], 'dismembers' => []
             ];
         }
 
-        // 3. GATHER DATA
-        
-        // --- A. LOANS (UPDATED) ---
-        $loans = Loan::where('status', 'released')
-            ->whereBetween('updated_at', [$start, $end])
-            ->with(['member.branchService']) 
-            ->get();
-
+        // 3. GATHER DATA (Same as before...)
+        $loans = Loan::where('status', 'released')->whereBetween('updated_at', [$start, $end])->with(['member.branchService'])->get();
         foreach ($loans as $loan) {
             $b = $this->getBranch($loan->member);
             if (isset($stats[$b])) {
                 $stats[$b]['loans_released_count']++;
                 $stats[$b]['loans_released_amount'] += $loan->gross;
                 $stats[$b]['total_income'] += $loan->income;
-
-                // --- NEW: FETCHING GROSS, NET, AMORTIZATION ---
                 $logs[$b]['loans'][] = [
                     'name' => $this->getMemberName($loan->member),
-                    'gross' => $loan->gross, 
-                    'net' => $loan->netProceeds, // Ensure column name matches DB
-                    'amortization' => $loan->monthlyAmortization, // Ensure column name matches DB
-                    'date' => $loan->updated_at->format('M d')
+                    'gross' => $loan->gross, 'net' => $loan->net,
+                    'amortization' => $loan->monthlyAmortization, 'date' => $loan->updated_at->format('M d')
                 ];
             }
         }
 
-        // --- B. SHARE CAPITAL ---
-        $caps = CapitalContribution::whereBetween('created_at', [$start, $end])
-            ->with(['member.branchService'])
-            ->get();
-
+        $caps = CapitalContribution::whereBetween('created_at', [$start, $end])->with(['member.branchService'])->get();
         foreach ($caps as $cap) {
             $b = $this->getBranch($cap->member);
             if (isset($stats[$b])) {
                 $type = strtolower($cap->transactionType);
-                if ($type === 'deposit') {
-                    $stats[$b]['share_cap_deposit'] += $cap->amount;
-                } elseif ($type === 'withdrawal') {
-                    $stats[$b]['share_cap_withdrawal'] += $cap->amount;
-                }
-
+                if ($type === 'deposit') $stats[$b]['share_cap_deposit'] += $cap->amount;
+                elseif ($type === 'withdrawal') $stats[$b]['share_cap_withdrawal'] += $cap->amount;
                 $logs[$b]['share_capital'][] = [
-                    'name' => $this->getMemberName($cap->member),
-                    'type' => ucfirst($type),
-                    'amount' => $cap->amount,
-                    'date' => $cap->created_at->format('M d')
+                    'name' => $this->getMemberName($cap->member), 'type' => ucfirst($type),
+                    'amount' => $cap->amount, 'date' => $cap->created_at->format('M d')
                 ];
             }
         }
 
-        // --- C. SAVINGS ---
-        $savings = SavingsDeposit::whereBetween('created_at', [$start, $end])
-            ->with(['member.branchService'])
-            ->get();
-
+        $savings = SavingsDeposit::whereBetween('created_at', [$start, $end])->with(['member.branchService'])->get();
         foreach ($savings as $saving) {
             $b = $this->getBranch($saving->member);
             if (isset($stats[$b])) {
                 $type = strtolower($saving->transactionType);
-                if ($type === 'deposit') {
-                    $stats[$b]['savings_deposit'] += $saving->amount;
-                } elseif ($type === 'withdrawal') {
-                    $stats[$b]['savings_withdrawal'] += $saving->amount;
-                }
-
+                if ($type === 'deposit') $stats[$b]['savings_deposit'] += $saving->amount;
+                elseif ($type === 'withdrawal') $stats[$b]['savings_withdrawal'] += $saving->amount;
                 $logs[$b]['savings'][] = [
-                    'name' => $this->getMemberName($saving->member),
-                    'type' => ucfirst($type),
-                    'amount' => $saving->amount,
-                    'date' => $saving->created_at->format('M d')
+                    'name' => $this->getMemberName($saving->member), 'type' => ucfirst($type),
+                    'amount' => $saving->amount, 'date' => $saving->created_at->format('M d')
                 ];
             }
         }
 
-        // --- D. TIME DEPOSIT ---
-        $tds = TimeDeposit::whereBetween('created_at', [$start, $end])
-            ->with(['member.branchService'])
-            ->get();
-
+        $tds = TimeDeposit::whereBetween('created_at', [$start, $end])->with(['member.branchService'])->get();
         foreach ($tds as $td) {
             $b = $this->getBranch($td->member);
             if (isset($stats[$b])) {
                 $stats[$b]['time_deposit_amount'] += $td->principal;
-
                 $logs[$b]['time_deposit'][] = [
                     'name' => $this->getMemberName($td->member),
-                    'amount' => $td->principal,
-                    'date' => $td->created_at->format('M d')
+                    'amount' => $td->principal, 'date' => $td->created_at->format('M d')
                 ];
             }
         }
 
-        // --- E. MEMBERSHIP ---
-        $newMembers = Member::whereBetween('created_at', [$start, $end])
-            ->with('branchService')
-            ->get();
-
+        $newMembers = Member::whereBetween('created_at', [$start, $end])->with('branchService')->get();
         foreach ($newMembers as $mem) {
             $b = $this->getBranch($mem);
             if (isset($stats[$b])) {
@@ -167,12 +124,7 @@ class AutoGenerateMonthlyReport extends Command
                 $logs[$b]['new_members'][] = $this->getMemberName($mem);
             }
         }
-
-        $dismembers = Member::whereBetween('updated_at', [$start, $end])
-            ->where('accountStatus', 'Terminated') 
-            ->with('branchService')
-            ->get();
-
+        $dismembers = Member::whereBetween('updated_at', [$start, $end])->where('accountStatus', 'Terminated')->with('branchService')->get();
         foreach ($dismembers as $mem) {
             $b = $this->getBranch($mem);
             if (isset($stats[$b])) {
@@ -182,8 +134,8 @@ class AutoGenerateMonthlyReport extends Command
         }
 
         // 4. AI ANALYSIS
-        $prompt = "Act as the Chief Financial Analyst for PMPC. Write a Monthly Executive Report for {$monthName}.\n";
-        $prompt .= "Analyze the following Branch Performance Data:\n\n";
+        // --- CHANGED: Explicit instructions to REMOVE the header from AI output ---
+        $prompt = "You are Col. Alexander L. Feria (RET), CPA, MNSA. Analyze the PMPC Branch Data for {$monthName}.\n";
         
         foreach ($stats as $branch => $data) {
             $prompt .= "BRANCH: {$branch}\n";
@@ -197,14 +149,24 @@ class AutoGenerateMonthlyReport extends Command
 
         $prompt .= "INSTRUCTIONS:\n";
         $prompt .= "1. Output valid HTML (<h3>, <p>, <ul>). Do NOT use Markdown.\n";
-        $prompt .= "2. Write an 'Executive Summary' comparing the branches.\n";
-        $prompt .= "3. Write a 'Branch Analysis' highlighting the top performing branch.\n";
-        $prompt .= "4. Provide 'Recommendations' for growth.\n";
-        $prompt .= "5. Write a 'Conclusion' summarizing the overall financial health of the cooperative.\n";
+        $prompt .= "2. DO NOT include a Header (To/From/Date/Subject). Start directly with the Executive Summary.\n"; // <--- CRITICAL
+        $prompt .= "3. DO NOT sign the document at the bottom. The signature block is already pre-printed.\n";
+        $prompt .= "4. Write an 'Executive Summary' comparing the branches.\n";
+        $prompt .= "5. Write a 'Branch Analysis' highlighting the top performing branch.\n";
+        $prompt .= "6. Provide 'Recommendations' for growth.\n";
+        $prompt .= "7. Write a 'Conclusion'.\n";
 
         $this->info("Contacting Gemini AI...");
         $aiContent = $gemini->generateContent($prompt);
+        
+        // --- CLEANUP ---
         $aiContent = str_replace('₱', '&#8369;', $aiContent);
+        // Safety: Remove accidental headers if the AI ignores the instruction
+        $aiContent = str_ireplace(
+            ['From: Chief Financial Analyst', 'To: PMPC Board', 'Subject:', 'Date:'], 
+            '', 
+            $aiContent
+        );
 
         // 5. GENERATE PDF
         $pdf = Pdf::loadView('pdf.monthly-report', [
@@ -215,7 +177,7 @@ class AutoGenerateMonthlyReport extends Command
             'date' => now()->format('F d, Y')
         ])->setPaper('A4', 'portrait');
 
-        $fileName = 'reports/Branch_Report_' . str_replace(' ', '_', $monthName) . '_' . time() . '.pdf';
+        $fileName = 'reports/Presidents_Report_' . str_replace(' ', '_', $monthName) . '_' . time() . '.pdf';
         Storage::disk('public')->put($fileName, $pdf->output());
 
         Report::updateOrCreate(
@@ -226,7 +188,7 @@ class AutoGenerateMonthlyReport extends Command
             ]
         );
 
-        $this->info("Generated Report for: {$monthName}");
+        $this->info("Generated Report: {$reportTitle}");
     }
 
     private function getBranch($member) {

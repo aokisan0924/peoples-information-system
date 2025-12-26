@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Monthly Branch Report</title>
+    <title>President's Report</title>
     <style>
         @page { margin: 0.5in; }
         body { font-family: 'DejaVu Sans', sans-serif; font-size: 9pt; color: #111; line-height: 1.3; }
@@ -13,8 +13,16 @@
         .logo-img { width: 70px; height: auto; }
         .coop-name { font-size: 12pt; font-weight: bold; color: #047857; text-transform: uppercase; }
         
-        .report-title { text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-        .report-subtitle { text-align: center; font-size: 10pt; color: #555; margin-bottom: 20px; }
+        /* NEW ADDRESS BLOCK STYLES */
+        .address-block { font-size: 7pt; color: #444; line-height: 1.2; margin-top: 5px; }
+        .address-line { display: block; margin-bottom: 1px; }
+
+        /* MEMO HEADER STYLES */
+        .memo-container { margin-bottom: 20px; }
+        .memo-title { font-size: 14pt; font-weight: bold; color: #047857; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 15px; }
+        .memo-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+        .memo-table td { padding: 4px 0; vertical-align: top; }
+        .memo-label { font-weight: bold; width: 60px; }
         
         /* DATA TABLE */
         .data-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
@@ -25,7 +33,12 @@
         .ai-section h3 { border-bottom: 1px solid #eee; padding-bottom: 5px; color: #047857; font-size: 11pt; margin-top: 15px; }
         .ai-section p { text-align: justify; margin-bottom: 10px; }
 
-        /* ACTIVITY LOGS STYLES */
+        /* SIGNATURE BLOCK */
+        .signature-block { margin-top: 40px; page-break-inside: avoid; }
+        .sig-name { font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; display: inline-block; min-width: 250px; margin-top: 50px; }
+        .sig-title { font-size: 9pt; margin-top: 5px; color: #333; }
+
+        /* LOGS */
         .page-break { page-break-before: always; }
         .log-header { background-color: #eee; padding: 5px; font-weight: bold; margin-top: 15px; border-bottom: 1px solid #ccc; }
         .log-table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 10px; }
@@ -48,15 +61,57 @@
             <td class="logo-cell">@if($logoData) <img src="{{ $logoData }}" class="logo-img"/> @endif</td>
             <td class="text-cell">
                 <div class="coop-name">PEOPLE'S MULTI-PURPOSE COOPERATIVE</div>
-                <div style="font-size:8pt;">Monthly Performance Report</div>
+                
+                {{-- UPDATED ADDRESS BLOCK --}}
+                <div class="address-block">
+                    <span class="address-line"><strong>Main Office:</strong> stall#2, Principe Bldg., Upi, Gamu, Isabela (+63) 965-953-2196</span>
+                    <span class="address-line"><strong>Cubao Satellite Office:</strong> 20-E Main Ave. cor. 15th Ave., Brgy. San Roque, Murphy, Cubao, Quezon City (02) 8848-9760, (+63) 953-033-1580</span>
+                    <span class="address-line"><strong>Fort Magsaysay Satellite Office:</strong> Purok 3, Brgy. Militar, Fort Magsaysay, Palayan City, Nueva Ecija (+63) 968-263-5186</span>
+                </div>
             </td>
             <td class="logo-cell"></td>
         </tr>
     </table>
 
-    <div class="report-title">Branch Performance Report</div>
-    <div class="report-subtitle">Period: {{ $monthName }}</div>
+    {{-- HARDCODED MEMO HEADER --}}
+    <div class="memo-container">
+        <div class="memo-title">President's Report - {{ $monthName }}</div>
+        <table class="memo-table">
+            <tr>
+                <td class="memo-label">To:</td>
+                <td>PMPC Board of Directors</td>
+            </tr>
+            <tr>
+                <td class="memo-label">From:</td>
+                <td>COL. ALEXANDER L. FERIA (RET), CPA, MNSA</td>
+            </tr>
+            <tr>
+                <td class="memo-label">Date:</td>
+                <td>{{ $date }}</td>
+            </tr>
+            <tr>
+                <td class="memo-label">Subject:</td>
+                <td>President's Report - {{ $monthName }}</td>
+            </tr>
+        </table>
+    </div>
 
+    {{-- AI CONTENT SECTION (Start with Executive Summary) --}}
+    <div class="ai-section">
+        {!! $aiContent !!}
+        
+        <div class="signature-block">
+            <p>Respectfully prepared by:</p>
+            <div class="sig-name">Col. Alexander L. Feria (RET), CPA, MNSA</div>
+            <div class="sig-title">President</div>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <div class="report-title" style="margin-top: 20px;">Detailed Statistical Data</div>
+    
+    {{-- STATS TABLE --}}
     <table class="data-table">
         <thead>
             <tr>
@@ -148,10 +203,6 @@
             </tr>
         </tbody>
     </table>
-
-    <div class="ai-section">
-        {!! $aiContent !!}
-    </div>
 
     <div class="page-break"></div>
     <div class="report-title">Detailed Transaction Activity</div>
