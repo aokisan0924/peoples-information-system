@@ -41,6 +41,13 @@ use App\Http\Controllers\TimeDepositCalculatorController;
 use App\Http\Middleware\AdminMiddleware;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
+// --- FIXED IMPORTS ---
+use App\Http\Controllers\Admin\NewsController;
+use App\Http\Controllers\Admin\GalleryController as AdminGalleryController; // Aliased for Admin
+use App\Http\Controllers\GalleryController;
+use App\Http\Controllers\Public\PageController; // Assuming you created this for Public views
+use App\Http\Controllers\NewsFeedController;
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -53,6 +60,8 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
+Route::get('/news', [NewsFeedController::class, 'index'])->name('public.news');
+
 Route::prefix('about')->group(function () {
     Route::get('/pmpc', fn() => Inertia::render('About'))->name('about.pmpc');
     Route::get('/board-of-directors', fn() => Inertia::render('BoardMembers'))->name('about.board');
@@ -61,7 +70,10 @@ Route::prefix('about')->group(function () {
 
 Route::get('/member-benefit', fn() => Inertia::render('Membership'));
 Route::get('/products-services', fn() => Inertia::render('ProductsAndServices'));
-Route::get('/gallery', fn() => Inertia::render('Gallery'))->name('gallery');
+
+// FIXED: Using PageController for public gallery (Ensure you created this controller)
+// If you haven't created PageController yet, run: php artisan make:controller Public/PageController
+Route::get('/gallery', [GalleryController::class, 'gallery'])->name('gallery');
 
 Route::get('/contact', [ContactController::class, 'showContactPage'])->name('contact');
 Route::post('/contact/send', [ContactController::class, 'send']);
@@ -206,6 +218,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/profile', [AdminProfileController::class, 'update'])->name('profile.update');
         Route::put('/password', [AdminProfileController::class, 'updatePassword'])->name('password.update');
 
+        // --- ADMIN NEWS ROUTES ---
+        Route::get('/news', [NewsController::class, 'index'])->name('news.index');
+        Route::post('/news', [NewsController::class, 'store'])->name('news.store');
+        Route::delete('/news/{id}', [NewsController::class, 'destroy'])->name('news.destroy');
+        Route::post('/news/generate-ai', [NewsController::class, 'generateAiContent'])->name('news.generate-ai');
+
+        // --- ADMIN GALLERY ROUTES (FIXED) ---
+        Route::get('/gallery', [AdminGalleryController::class, 'index'])->name('gallery.index');
+        Route::post('/gallery', [AdminGalleryController::class, 'store'])->name('gallery.store');
+        Route::delete('/gallery/{id}', [AdminGalleryController::class, 'destroy'])->name('gallery.destroy');
+
         // GROUP A: SUPER ADMIN ONLY
         Route::middleware(['auth:admin', 'role:super-admin'])->group(function () {
             Route::get('/create-user', [AdminUserController::class, 'create'])->name('create-user');
@@ -258,17 +281,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/loans/{loanReference}/ack-downloads', [LoanController::class, 'acknowledgeDownloads'])->name('loan.ackDownloads');
         });
 
-        // GROUP D: MEMBERS (FIXED ROUTES: Replaced {encrypted} with {id})
+        // GROUP D: MEMBERS
         Route::middleware('can_access:manage_members')->prefix('/members')->name('members.')->group(function () {
             Route::get('/', [MemberController::class, 'showMemberPage'])->name('index');
-            
-            // FIXED: Use {id} instead of {encrypted}
             Route::get('/profile/{id}', [MemberController::class, 'showMemberDetail'])->name('show-member');
             
             Route::get('/{id}/loan-details/{loanReference}', [MemberController::class, 'apiMemberLoanDetails'])->name('loan-details');
             Route::get('/api/members/search', [LoanController::class, 'apiSearchMembers'])->name('api.members.search'); 
 
-            // Actions - Fixed update routes to use {id}
+            // Actions
             Route::post('/{id}/update-basic-info', [MemberController::class, 'updateBasicInfo'])->name('update-basic-info');
             Route::post('/{id}/update-branch-service', [MemberController::class, 'updateBranchService'])->name('update-branch-service');
             Route::post('/{id}/update-afp-info', [MemberController::class, 'updateAfpInfo'])->name('update-afp-info');

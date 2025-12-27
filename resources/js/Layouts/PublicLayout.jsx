@@ -145,6 +145,21 @@ export default function PublicLayout({ children }) {
                                 )}
                             </div>
 
+                            {/* NEWS (New Link) */}
+                            <Link
+                                href="/news"
+                                className={`relative px-3 py-1 transition ${
+                                    isActive("/news")
+                                        ? "text-green-700 font-semibold"
+                                        : "text-gray-700 hover:text-green-700"
+                                }`}
+                            >
+                                {isActive("/news") && (
+                                    <span className="absolute bottom-0 inset-x-0 h-[2px] bg-green-600 rounded-full" />
+                                )}
+                                News
+                            </Link>
+
                             {/* GALLERY */}
                             <Link
                                 href="/gallery"
@@ -230,7 +245,7 @@ export default function PublicLayout({ children }) {
                     {/* MOBILE MENU */}
                     <div
                         className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
-                            mobileOpen ? "max-h-[420px] opacity-100" : "max-h-0 opacity-0"
+                            mobileOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"
                         }`}
                     >
                         <div className="bg-white/90 backdrop-blur-md shadow-lg border-t border-gray-200 flex flex-col">
@@ -304,6 +319,19 @@ export default function PublicLayout({ children }) {
                                     </Link>
                                 </div>
                             )}
+
+                            {/* NEWS (Mobile Link) */}
+                            <Link
+                                href="/news"
+                                onClick={() => setMobileOpen(false)}
+                                className={`px-6 py-3 border-b border-gray-100 text-[15px] ${
+                                    isActive("/news")
+                                        ? "bg-green-50 text-green-700 font-semibold"
+                                        : "text-gray-700 hover:bg-gray-100"
+                                }`}
+                            >
+                                News
+                            </Link>
 
                             {/* GALLERY */}
                             <Link

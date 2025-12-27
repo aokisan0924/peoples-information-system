@@ -18,7 +18,9 @@ import {
     Sun,
     Moon,
     User,
-    UserPlus 
+    UserPlus,
+    Megaphone,
+    Image // <--- Imported Image Icon for Gallery
 } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react"; 
 import { AnimatePresence, motion } from "framer-motion";
@@ -257,6 +259,12 @@ export default function AdminSidebarLayout({ children }) {
                                     </div>
                                 </>
                             )}
+
+                            {/* CONTENT SECTION */}
+                            <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Content</p>
+                            <NavLink name="admin.news.index" label="News & Updates" icon={Megaphone} />
+                            {/* GALLERY LINK ADDED HERE */}
+                            <NavLink name="admin.gallery.index" label="Gallery" icon={Image} />
 
                             {/* MAINTENANCE SECTION */}
                             {(isSuperAdmin || canAccess('reports')) && (
