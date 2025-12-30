@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Loan extends Model
 {
     protected $fillable = [
-        'memberId','loanReference','netProceeds','capCon',
+        'memberId','loanReference','deductionCode','netProceeds','capCon',
         'membershipFee','termYears','advanceInterestMonths',
         'serviceFee','insurance','advanceInterest','loanAmount',
         'monthlyAmortization','gross','income','percentIncome',

@@ -10,6 +10,15 @@ import toast from "react-hot-toast";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 import CountUp from "react-countup";
 
+// --- DEDUCTION CODES LIST ---
+const DEDUCTION_CODES = [
+    "578 SL", "579 E/HL", "580 EdL", "581 MAL", 
+    "P95 SBL", "583 CC", "584 SA", "691 PL", 
+    "692 E/HL", "693 EdL", "694 MAL", "695 SBL", 
+    "696 CC", "697 SA", "CASH ADVANCE", 
+    "BARANGAY CAPTAIN collection", "BARANGAY TREASURER", "Management 1"
+];
+
 // --- HELPERS ---
 const maskRef = (ref) => ref ? `${ref.slice(0, 3)}...${ref.slice(-4)}` : "N/A";
 
@@ -104,6 +113,7 @@ export default function Loan() {
     const [perPage, setPerPage] = useState(10);
     const [loading, setLoading] = useState(false);
     const [loans, setLoans] = useState([]);
+    const [deductionCode, setDeductionCode] = useState("");
     const [meta, setMeta] = useState({ currentPage: 1, lastPage: 1, perPage: 10, total: 0 });
 
     // Modal State
@@ -177,12 +187,13 @@ export default function Loan() {
     // --- SUBMISSION (Keep existing) ---
     const handleSubmitLoan = () => {
         if (!memberId) return toast.error("Please select a member.");
+        if (!deductionCode) return toast.error("Please select a deduction code.");
         if (!loanType) return toast.error("Please select a loan type.");
         if (!loanClassification) return toast.error("Please select a classification.");
 
         axios.post("/admin/submit-loan", {
             memberId, category, netProceeds, membershipFee, capCon, termYears,
-            advanceInterestMonths, loanType, loanClassification, status: "pending", computed: results,
+            advanceInterestMonths, loanType, loanClassification,deductionCode, status: "pending", computed: results,
         })
         .then((res) => {
             toast.success("Loan saved successfully.");
@@ -203,6 +214,7 @@ export default function Loan() {
         setMemberId("");
         setLoanType("");
         setLoanClassification("");
+        setDeductionCode("");
         setResults({});
     };
 
@@ -419,13 +431,27 @@ export default function Loan() {
                                                 </select>
                                             </InputGroup>
                                             
+                                            {/* --- DEDUCTION CODE DROPDOWN --- */}
+                                            <InputGroup label="Deduction Code">
+                                                <select 
+                                                    value={deductionCode} 
+                                                    onChange={(e) => setDeductionCode(e.target.value)} 
+                                                    className="input-field"
+                                                >
+                                                    <option value="">— Select Code —</option>
+                                                    {DEDUCTION_CODES.map(code => (
+                                                        <option key={code} value={code}>{code}</option>
+                                                    ))}
+                                                </select>
+                                            </InputGroup>
+
                                             <InputGroup label="Category">
                                                 <select value={category} onChange={(e) => setCategory(e.target.value)} className="input-field">
                                                     <option value="ACTIVE_PENSIONER_V1">ACTIVE PENSIONER</option>
                                                     <option value="CDEA">CDEA</option>
                                                 </select>
                                             </InputGroup>
-
+                                            
                                             <div className="grid grid-cols-2 gap-4">
                                                 <InputGroup label="Type">
                                                     <select value={loanType} onChange={(e) => setLoanType(e.target.value)} className="input-field">

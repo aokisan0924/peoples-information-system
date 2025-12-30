@@ -78,6 +78,7 @@ class LoanController extends Controller
         $data = array_map(function ($loan){
             return [
                 'id' => $loan->id,
+                'deductionCode' => $loan->deductionCode,
                 'loanReference' => $loan->loanReference,
                 'firstName' => $loan->member->firstName ?? '',
                 'lastName' => $loan->member->lastName ?? '',
@@ -288,6 +289,7 @@ class LoanController extends Controller
     public function storeLoan(Request $request){
         $data = $request->validate([
             'memberId' => ['required', 'exists:members,id'],
+            'deductionCode' => ['required', 'string'],
             'loanType' => ['required','string','max:50'],
             'loanClassification' => ['required','string','max:50'], 
             'netProceeds' => ['required','numeric','min:1'],
@@ -318,6 +320,7 @@ class LoanController extends Controller
         // Save loan
         $loan = Loan::create([
             'memberId' => $data['memberId'],
+            'deductionCode' => $data['deductionCode'],
             'loanType' => $data['loanType'],
             'loanClassification' => $data['loanClassification'],
             'netProceeds' => $data['netProceeds'],
