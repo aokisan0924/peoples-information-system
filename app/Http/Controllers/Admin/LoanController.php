@@ -31,7 +31,7 @@ class LoanController extends Controller
         $loanStats = [
             'totalGross'  => (float) $releasedLoans->sum('gross'),
             'totalNet'    => (float) $releasedLoans->sum('netProceeds'),
-            'totalIncome' => (float) $releasedLoans->sum('income'),
+            'loanAmount' => (float) $releasedLoans->sum('loanAmount'),
         ];
 
         $members = Member::query()
@@ -708,44 +708,44 @@ class LoanController extends Controller
     ->where('loanReference', $loanReference)
     ->firstOrFail();
 
-// 2. Prepare Data for the View
-$data = [
-    'date' => now()->format('F d, Y'),
-    'loanReference' => $loan->loanReference,
-    'lvNo'             => $loan->lrvNumber ?? '—', 
-    'loanType' => $loan->loanType,
-    'loanClass' => $loan->loanClassification,
-    'termMonths' => (int)($loan->termYears * 12),
-    'loanAmount' => (float)$loan->loanAmount,
-    'monthlyAmortization' => (float)$loan->monthlyAmortization,
-    'netProceeds' => (float)$loan->netProceeds,
-    'processedBy' => Auth::user()->name ?? 'Loan Processor',
-    
-    // Pass member as an array or object (View supports both)
-    'member' => [
-        'firstName' => strtoupper($loan->member->firstName),
-        'middleName' => strtoupper($loan->member->middleName ?? ''),
-        'lastName' => strtoupper($loan->member->lastName),
-        'suffix' => strtoupper($loan->member->suffix ?? ''),
-        'username' => $loan->member->username,
-        'email' => $loan->member->email,
-        'contact' => $loan->member->contact,
-        'dob' => $loan->member->dob,
-        'age' => $loan->member->age,
-        'fullAddress' => strtoupper($loan->member->fullAddress ?? $loan->member->address ?? ''),
-        // Safe access for relations
-        'afpsn' => $loan->member->afpInfo->afpsn ?? 'N/A',
-        'rank' => $loan->member->afpInfo->rank ?? 'N/A',
-        'branchService' => $loan->member->branchService->branchService ?? 'N/A',
-        'unit' => $loan->member->afpInfo->presentAssignment ?? 'N/A',
-    ],
-];
+    // 2. Prepare Data for the View
+    $data = [
+        'date' => now()->format('F d, Y'),
+        'loanReference' => $loan->loanReference,
+        'lvNo'             => $loan->lrvNumber ?? '—', 
+        'loanType' => $loan->loanType,
+        'loanClass' => $loan->loanClassification,
+        'termMonths' => (int)($loan->termYears * 12),
+        'loanAmount' => (float)$loan->loanAmount,
+        'monthlyAmortization' => (float)$loan->monthlyAmortization,
+        'netProceeds' => (float)$loan->netProceeds,
+        'processedBy' => Auth::user()->name ?? 'Loan Processor',
+        
+        // Pass member as an array or object (View supports both)
+        'member' => [
+            'firstName' => strtoupper($loan->member->firstName),
+            'middleName' => strtoupper($loan->member->middleName ?? ''),
+            'lastName' => strtoupper($loan->member->lastName),
+            'suffix' => strtoupper($loan->member->suffix ?? ''),
+            'username' => $loan->member->username,
+            'email' => $loan->member->email,
+            'contact' => $loan->member->contact,
+            'dob' => $loan->member->dob,
+            'age' => $loan->member->age,
+            'fullAddress' => strtoupper($loan->member->fullAddress ?? $loan->member->address ?? ''),
+            // Safe access for relations
+            'afpsn' => $loan->member->afpInfo->afpsn ?? 'N/A',
+            'rank' => $loan->member->afpInfo->rank ?? 'N/A',
+            'branchService' => $loan->member->branchService->branchService ?? 'N/A',
+            'unit' => $loan->member->afpInfo->presentAssignment ?? 'N/A',
+        ],
+    ];
 
-// 3. Load the CORRECT View ('pdf.loan-application')
-$pdf = Pdf::loadView('pdf.loan-application', $data)
-    ->setPaper('A4', 'portrait');
+    // 3. Load the CORRECT View ('pdf.loan-application')
+    $pdf = Pdf::loadView('pdf.loan-application', $data)
+        ->setPaper('A4', 'portrait');
 
-return $pdf->stream('loan-application-'.$loanReference.'.pdf');
+    return $pdf->stream('loan-application-'.$loanReference.'.pdf');
     }
 
     public function downloadReleaseVoucher(Request $request, string $loanReference) {

@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from "react";
 import { Head, router, Link, usePage } from "@inertiajs/react";
 import { 
     Users, Eye, Upload, Download, Search, Loader2, Filter, 
-    ChevronLeft, ChevronRight, FileText, Briefcase, UserCheck
+    ChevronLeft, ChevronRight, FileText, Briefcase, UserCheck, Mail
 } from "lucide-react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 import CountUp from "react-countup";
@@ -30,6 +30,22 @@ export default function Members() {
         const timer = setTimeout(() => setIsLoading(false), 300); 
         return () => clearTimeout(timer);
     }, [initialMembers]);
+
+    const handleBulkSend = () => {
+        if (confirm("⚠️ SEND CREDENTIALS?\n\nThis will generate NEW passwords for all members imported TODAY and send them via Email & SMS.\n\nAre you sure?")) {
+            router.post(route('admin.members.bulk-send-credentials'), {}, {
+                onStart: () => toast.loading("Sending credentials... (Do not close this page)"),
+                onSuccess: () => {
+                    toast.dismiss();
+                    toast.success("Credentials Sent Successfully!");
+                },
+                onError: () => {
+                    toast.dismiss();
+                    toast.error("Failed to send credentials.");
+                }
+            });
+        }
+    };
 
     // --- HANDLERS ---
     const handleImportClick = () => fileInputRef.current?.click();
@@ -144,6 +160,22 @@ export default function Members() {
                                 <Upload size={18} />
                                 <span>Import</span>
                             </button>
+                            {/* Send Credentials Button */}
+                            <button 
+                                onClick={handleBulkSend}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 transition-all"
+                            >
+                                <Mail size={18} />
+                                <span>Send Credentials (Today)</span>
+                            </button>
+                            <a 
+    href="/admin/members/download-template" 
+    target="_blank"
+    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition-colors"
+>
+    <FileText size={18} />
+    <span>Download Template</span>
+</a>
                             <input type="file" accept=".xlsx" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
                         </div>
                     </div>

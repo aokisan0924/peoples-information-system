@@ -30,7 +30,6 @@ class AdminDashboardController extends Controller
         $timeWithdraw = (float) TimeDepositWithdrawal::sum('amount');
         $totalTimeDeposits = $timePrincipal - $timeWithdraw;
 
-        // --- NEW: TOTAL LOAN INCOME ---
         $totalLoanIncome = (float) Loan::where('status', 'released')->sum('income');
 
         // --- 2. CHART DATA (Last 6 Months) ---

@@ -301,6 +301,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
             Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
             Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');
+            // Inside your Admin -> Members group
+            Route::post('/bulk-send-credentials', [MemberDataController::class, 'bulkSendCredentials'])->name('bulk-send-credentials');
+            Route::get('/download-template', [MemberDataController::class, 'downloadTemplate'])->name('download-template');
         });
 
         // GROUP E: DEPOSITS

@@ -16,7 +16,7 @@ const DEDUCTION_CODES = [
     "P95 SBL", "583 CC", "584 SA", "691 PL", 
     "692 E/HL", "693 EdL", "694 MAL", "695 SBL", 
     "696 CC", "697 SA", "CASH ADVANCE", 
-    "BARANGAY CAPTAIN collection", "BARANGAY TREASURER", "Management 1"
+    "BARANGAY CAPTAIN collection", "BARANGAY TREASURER", "MANAGEMENT 1"
 ];
 
 // --- HELPERS ---
@@ -102,7 +102,7 @@ function StatusBadge({ status }) {
 
 export default function Loan() {
     const { props } = usePage();
-    const { loanStats = { totalGross: 0, totalNet: 0, totalIncome: 0 }, members = [], auth } = props;
+    const { loanStats = { totalGross: 0, totalNet: 0, loanAmount: 0 }, members = [], auth } = props;
     
     // --- AUTH ROLE CHECK ---
     const userRole = (auth?.user?.role || "").toLowerCase();
@@ -255,7 +255,7 @@ export default function Loan() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <StatCard label="Total Gross Loans" value={loanStats.totalGross} icon={Banknote} color="emerald" subtext={`As of ${todayStr}`} />
                         <StatCard label="Total Net Loans" value={loanStats.totalNet} icon={Wallet} color="blue" subtext={`As of ${todayStr}`} />
-                        <StatCard label="Total Income" value={loanStats.totalIncome} icon={TrendingUp} color="amber" subtext={`As of ${todayStr}`} />
+                        <StatCard label="Total Loan Amount" value={loanStats.loanAmount} icon={TrendingUp} color="amber" subtext={`As of ${todayStr}`} />
                     </div>
 
                     {/* FILTERS */}
@@ -451,7 +451,7 @@ export default function Loan() {
                                                     <option value="CDEA">CDEA</option>
                                                 </select>
                                             </InputGroup>
-                                            
+
                                             <div className="grid grid-cols-2 gap-4">
                                                 <InputGroup label="Type">
                                                     <select value={loanType} onChange={(e) => setLoanType(e.target.value)} className="input-field">

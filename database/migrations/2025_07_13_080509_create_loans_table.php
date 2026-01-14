@@ -20,8 +20,6 @@ return new class extends Migration
             $table->decimal('netProceeds', 15, 2)->default(0);
             $table->integer('termYears')->default(1);
             $table->unsignedTinyInteger('advanceInterestMonths')->default(2);
-            $table->string('loanType')->nullable();        
-            $table->string('loanClassification')->nullable();
 
             // Computed fields
             $table->decimal('serviceFee', 15, 2)->default(0);

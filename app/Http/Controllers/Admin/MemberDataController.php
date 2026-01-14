@@ -3,32 +3,36 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Member;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use App\Models\BranchService;
-use App\Models\AfpInfo;
-use App\Models\ParentsInfo;
-use App\Models\IdentificationInfo;
-use App\Models\SpouseInfo;
-use App\Models\EmergencyContact;
-use App\Models\Dependent;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate; // <--- ADDED THIS
+
+// Models
+use App\Models\Member;
+use App\Models\BranchService;
+use App\Models\CapitalContribution;
+use App\Models\Dependent;
+use App\Models\Loan;
+use App\Models\SavingsDeposit;
+use App\Models\TimeDeposit;
+use App\Models\MembershipPayment;
 
 class MemberDataController extends Controller
 {
-    // Export Function
+    // =========================================================================
+    // 1. EXPORT FUNCTION
+    // =========================================================================
     public function exportSpreadsheet() {
         $spreadsheet = new Spreadsheet();
-
-        // Sheet 1: Members
         $membersSheet = $spreadsheet->setActiveSheetIndex(0);
         $membersSheet->setTitle('Members');
 
@@ -51,7 +55,7 @@ class MemberDataController extends Controller
 
         $row = 2;
         foreach ($members as $member) {
-            $membersSheet->fromArray([
+            $data = [
                 $member->id, $member->username, $member->firstName, $member->middleName, $member->lastName, $member->suffix, $member->nickname, $member->dob, $member->religion, $member->age, $member->gender, $member->civilStatus, $member->nationality, $member->email, $member->contact, $member->fullAddress, $member->region, $member->province, $member->city, $member->barangay,
                 $member->branchService->branchService ?? '', $member->branchService->subBranch ?? '',
                 $member->afpInfo->afpsn ?? '', $member->afpInfo->rank ?? '', $member->afpInfo->designation ?? '', $member->afpInfo->afpId ?? '', $member->afpInfo->presentAssignment ?? '', $member->afpInfo->controlNo ?? '', $member->afpInfo->yearsInService ?? '', $member->afpInfo->cadEnlistment ?? '', $member->afpInfo->retirementDate ?? '', $member->afpInfo->pensionDate ?? '',
@@ -59,21 +63,8 @@ class MemberDataController extends Controller
                 $member->identificationInfo->tinNo ?? '', $member->identificationInfo->gsisNo ?? '', $member->identificationInfo->crnUmidNo ?? '',
                 $member->spouseInfo->spouseName ?? '', $member->spouseInfo->spouseAge ?? '', $member->spouseInfo->spouseDob ?? '', $member->spouseInfo->dateMarriage ?? '',
                 $member->emergencyContact->contactPersonName ?? '', $member->emergencyContact->contactPersonAddress ?? '', $member->emergencyContact->contactPersonPhone ?? '', $member->emergencyContact->contactPersonRelation ?? ''
-            ], NULL, 'A'.$row);
-            $row++;
-        }
-
-        // Sheet 2: Dependents
-        $dependentsSheet = $spreadsheet->createSheet();
-        $dependentsSheet->setTitle('Dependents');
-        $dependentsSheet->fromArray(['Member ID', 'Name', 'DOB', 'Gender'], NULL, 'A1');
-
-        $dependents = Dependent::all();
-        $row = 2;
-        foreach ($dependents as $dependent) {
-            $dependentsSheet->fromArray([
-                $dependent->memberId, $dependent->name, $dependent->dob, $dependent->gender
-            ], NULL, 'A'.$row);
+            ];
+            $membersSheet->fromArray($data, NULL, 'A'.$row);
             $row++;
         }
 
@@ -85,232 +76,405 @@ class MemberDataController extends Controller
         return Response::download($temp_file, $filename)->deleteFileAfterSend(true);
     }
 
-    // Import function
+    // =========================================================================
+    // 2. IMPORT FUNCTION
+    // =========================================================================
     public function importSpreadsheet(Request $request) {
-        $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls'],
-        ]);
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls']]);
 
         $file = $request->file('file');
             
         DB::transaction(function () use ($file) {
-            $spreadsheet     = IOFactory::load($file->getPathname());
-            $membersSheet    = $spreadsheet->getSheetByName('Members');
-            $dependentsSheet = $spreadsheet->getSheetByName('Dependents');
-
-
+            $spreadsheet = IOFactory::load($file->getPathname());
             $importKeyMap = [];
 
-            /**
-             * =========================
-             *   MEMBERS SHEET IMPORT
-             * =========================
-             */
+            // -----------------------------------------------------------------
+            // SHEET 1: MEMBERS
+            // -----------------------------------------------------------------
+            $membersSheet = $spreadsheet->getSheetByName('Members');
             if ($membersSheet) {
-                $membersData = $membersSheet->toArray(null, true, true, true);
+                $rows = $membersSheet->toArray(null, true, true, true);
+                
+                foreach (array_slice($rows, 1) as $row) {
+                    $importKey = trim((string)($row['A'] ?? ''));
+                    if (!$importKey && empty($row['C']) && empty($row['E'])) continue;
 
-                foreach (array_slice($membersData, 1) as $row) {
-                    $importKey = isset($row['A']) ? trim((string) $row['A']) : null;
-
-                    // Same skip condition you already use
-                    if (empty($row['A']) && empty($row['C']) && empty($row['E'])) {
-                        continue;
+                    // MAPPING
+                    $firstName = $row['C'] ?? 'Unknown';
+                    $lastName  = $row['E'] ?? 'Member';
+                    
+                    // FIXED: Date of Birth Parsing
+                    $dob = $this->parseDate($row['H'] ?? null) ?? '1900-01-01';
+                    
+                    // Auto-Compute Age
+                    try {
+                        $age = Carbon::parse($dob)->age;
+                    } catch (\Exception $e) {
+                        $age = 0;
                     }
 
-                    $plainPassword  = Str::random(10);
-                    $hashedPassword = bcrypt($plainPassword);
+                    $email     = !empty($row['N']) ? trim($row['N']) : null;
+                    $contact   = !empty($row['O']) ? trim($row['O']) : null;
+                    $address   = !empty($row['P']) ? $row['P'] : 'To be updated';
+                    
+                    // FIXED: Membership Date Parsing
+                    $joinedAt  = $this->parseDate($row['Q'] ?? null) ?? now(); 
 
                     $member = Member::create([
-                        'firstName'   => $row['C'] ?? null,
+                        'firstName'   => $firstName,
                         'middleName'  => $row['D'] ?? null,
-                        'lastName'    => $row['E'] ?? null,
+                        'lastName'    => $lastName,
                         'suffix'      => $row['F'] ?? null,
                         'nickname'    => $row['G'] ?? null,
-                        'dob'         => $row['H'] ?? null,
+                        
+                        'dob'         => $dob,
+                        'age'         => $age,
                         'religion'    => $row['I'] ?? null,
-                        'age'         => $row['J'] ?? null,
-                        'gender'      => $row['K'] ?? null,
-                        'civilStatus' => $row['L'] ?? null,
-                        'nationality' => $row['M'] ?? null,
-                        'email'       => $row['N'] ?? null,
-                        'contact'     => $row['O'] ?? null,
-                        'fullAddress' => $row['P'] ?? null,
-                        'region'      => $row['Q'] ?? null,
-                        'province'    => $row['R'] ?? null,
-                        'city'        => $row['S'] ?? null,
-                        'barangay'    => $row['T'] ?? null,
-                        'password'    => $hashedPassword,
+                        'gender'      => $row['K'] ?? 'Unspecified',
+                        'civilStatus' => $row['L'] ?? 'Single',
+                        'nationality' => $row['M'] ?? 'Filipino',
+                        
+                        'email'       => $email,
+                        'contact'     => $contact,
+                        'fullAddress' => $address,
+                        
+                        'password'    => bcrypt(Str::random(10)),
+                        'created_at'  => $joinedAt,
+                        'updated_at'  => now(),
                     ]);
 
-                    $username = 'PMPC-' . str_pad($member->id, 3, '0', STR_PAD_LEFT);
-                    $member->username = $username;
-                    $member->save();
+                    $member->update(['username' => 'PMPC-' . str_pad($member->id, 3, '0', STR_PAD_LEFT)]);
 
-                    BranchService::updateOrCreate(
-                        ['memberId' => $member->id],
-                        [
-                            'branchService' => $row['U'] ?? null,
-                            'subBranch'     => $row['V'] ?? null,
-                        ]
-                    );
+                    if ($importKey) $importKeyMap[$importKey] = $member->id;
 
-                    AfpInfo::updateOrCreate(
-                        ['memberId' => $member->id],
-                        [
-                            'afpsn'             => $row['W'] ?? null,
-                            'rank'              => $row['X'] ?? null,
-                            'designation'       => $row['Y'] ?? null,
-                            'afpId'             => $row['Z'] ?? null,
-                            'presentAssignment' => $row['AA'] ?? null,
-                            'controlNo'         => $row['AB'] ?? null,
-                            'yearsInService'    => $row['AC'] ?? null,
-                            'cadEnlistment'     => $row['AD'] ?? null,
-                            'retirementDate'    => $row['AE'] ?? null,
-                            'pensionDate'       => $row['AF'] ?? null,
-                        ]
-                    );
+                    MembershipPayment::create([
+                        'memberId'         => $member->id,
+                        'amount'           => 300, 
+                        'reference_number' => 'IMP-'.$importKey,
+                        'status'           => 'Posted',
+                        'is_paid'          => true,
+                        'paid_at'          => $joinedAt,
+                        'created_at'       => $joinedAt,
+                    ]);
 
-                    ParentsInfo::updateOrCreate(
-                        ['memberId' => $member->id],
-                        [
-                            'motherName' => $row['AG'] ?? null,
-                            'motherAge'  => $row['AH'] ?? null,
-                            'fatherName' => $row['AI'] ?? null,
-                            'fatherAge'  => $row['AJ'] ?? null,
-                        ]
-                    );
+                    BranchService::updateOrCreate(['memberId' => $member->id], [
+                        'branchService' => $row['U'] ?? 'Main Office',
+                        'subBranch'     => $row['V'] ?? null
+                    ]);
+                }
+            }
 
-                    IdentificationInfo::updateOrCreate(
-                        ['memberId' => $member->id],
-                        [
-                            'tinNo'     => $row['AK'] ?? null,
-                            'gsisNo'    => $row['AL'] ?? null,
-                            'crnUmidNo' => $row['AM'] ?? null,
-                        ]
-                    );
-
-                    SpouseInfo::updateOrCreate(
-                        ['memberId' => $member->id],
-                        [
-                            'spouseName'   => $row['AN'] ?? null,
-                            'spouseAge'    => $row['AO'] ?? null,
-                            'spouseDob'    => $row['AP'] ?? null,
-                            'dateMarriage' => $row['AQ'] ?? null,
-                        ]
-                    );
-
-                    EmergencyContact::updateOrCreate(
-                        ['memberId' => $member->id],
-                        [
-                            'contactPersonName'     => $row['AR'] ?? null,
-                            'contactPersonAddress'  => $row['AS'] ?? null,
-                            'contactPersonPhone'    => $row['AT'] ?? null,
-                            'contactPersonRelation' => $row['AU'] ?? null,
-                        ]
-                    );
-
-                    // map importKey → memberId for Dependents
-                    if (!empty($importKey)) {
-                        $importKeyMap[$importKey] = $member->id;
-                    }
-
-                    /**
-                     * ======================================
-                     *   PER-MEMBER EMAIL + SMS NOTIFICATION
-                     * ======================================
-                     */
-
-                    if (!empty($member->email)) {
-                        $emailBody =
-                            "Welcome to People's Multi-Purpose Cooperative!\n\n" .
-                            "Your PMPC Online Access credentials are ready.\n\n" .
-                            "Login Link: https://peoplesmpcoop.com/\n\n" .
-                            "USERNAME: {$member->username}\n" .
-                            "PASSWORD: {$plainPassword}\n\n" .
-                            "-----------------------------------------\n" .
-                            " DO'S AND DON'TS (IMPORTANT)\n" .
-                            "-----------------------------------------\n" .
-                            "✔ DO change your password immediately after logging in.\n" .
-                            "✔ DO keep your username and password confidential.\n" .
-                            "✔ DO report any suspicious activity to PMPC Admin.\n\n" .
-                            "✘ DON'T share your login details with anyone.\n" .
-                            "✘ DON'T use easily guessed passwords (e.g., birthdays).\n" .
-                            "✘ DON'T log in on public or untrusted devices.\n\n" .
-                            "This account is strictly for your personal use. Protect your credentials at all times.\n\n" .
-                            "Thank you for being part of PMPC!";
-
-                        Mail::raw($emailBody, function ($message) use ($member) {
-                            $message->to($member->email)
-                                ->subject('Your PMPC Login Credentials & Important Reminders');
-                        });
-                    }
-
-                    if (!empty($member->contact)) {
-                        $number          = trim($member->contact);
-                        $formattedNumber = preg_replace('/^0/', '63', $number);
-
-                        $smsMessage =
-                            "Welcome to People's Multi-Purpose Cooperative!\n\n" .
-                            "Your PMPC Online Access credentials are ready.\n\n" .
-                            "USERNAME: {$member->username}\n" .
-                            "PASSWORD: {$plainPassword}\n\n" .
-                            "Login: peoplesmpcoop.com\n\n" .
-                            "REMINDERS:\n" .
-                            "✔ Change your password ASAP.\n" .
-                            "✔ Keep your account private.\n" .
-                            "✘ Don't share your password with anyone.\n" .
-                            "This account is strictly for your personal use. Protect your credentials at all times.\n\n" .
-                            "Thank you for being part of PMPC!";
-
-                        Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
-                            'apikey'     => config('services.semaphore.api_key'),
-                            'number'     => $formattedNumber,
-                            'message'    => $smsMessage,
-                            'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
+            // -----------------------------------------------------------------
+            // SHEET: DEPENDENTS
+            // -----------------------------------------------------------------
+            $depSheet = $spreadsheet->getSheetByName('Dependents');
+            if ($depSheet && !empty($importKeyMap)) {
+                $rows = $depSheet->toArray(null, true, true, true);
+                foreach (array_slice($rows, 1) as $row) {
+                    $key = $row['A'] ?? null;
+                    if ($key && isset($importKeyMap[$key])) {
+                        Dependent::create([
+                            'memberId' => $importKeyMap[$key],
+                            'name'     => $row['B'] ?? 'Unknown',
+                            // FIXED: Date parsing for dependents too
+                            'dob'      => $this->parseDate($row['C'] ?? null),
+                            'gender'   => $row['D'] ?? null,
                         ]);
                     }
                 }
             }
 
-            /**
-             * ==========================
-             *   DEPENDENTS SHEET IMPORT
-             * ==========================
-             */
-            if ($dependentsSheet && !empty($importKeyMap)) {
-                $dependentsData = $dependentsSheet->toArray(null, true, true, true);
+            // -----------------------------------------------------------------
+            // SHEET: LOANS
+            // -----------------------------------------------------------------
+            $loansSheet = $spreadsheet->getSheetByName('Loans');
+            if ($loansSheet && !empty($importKeyMap)) {
+                $rows = $loansSheet->toArray(null, true, true, true);
+                foreach (array_slice($rows, 1) as $row) {
+                    $key = $row['A'] ?? null;
+                    if ($key && isset($importKeyMap[$key])) {
+                        
+                        $loanType       = $row['B'] ?? 'Legacy';
+                        $loanClass      = $row['C'] ?? 'Salary Loan';
+                        $deductionCode  = $row['D'] ?? 'MIGRATION';
+                        
+                        $netProceeds    = (float) ($row['E'] ?? 0);
+                        $loanAmount     = (float) ($row['F'] ?? $netProceeds);
+                        $grossAmount    = (float) ($row['G'] ?? $loanAmount);
+                        $monthlyAmort   = (float) ($row['H'] ?? 0);
+                        
+                        $termYears      = (int)   ($row['I'] ?? 1);
+                        $advInterestMos = (int)   ($row['J'] ?? 0);
+                        
+                        // FIXED: Loan Dates Parsing
+                        $dateApplied    = $this->parseDate($row['K'] ?? null) ?? now();
+                        $dateReleased   = $this->parseDate($row['L'] ?? null) ?? now();
+                        $status         = $row['M'] ?? 'Released';
 
-                foreach (array_slice($dependentsData, 1) as $row) {
-                    $importKey     = isset($row['A']) ? trim((string) $row['A']) : null;
-                    $dependentName = isset($row['B']) ? trim((string) $row['B']) : null;
-                    $dob           = $row['C'] ?? null;
-                    $gender        = $row['D'] ?? null;
+                        Loan::create([
+                            'memberId'              => $importKeyMap[$key],
+                            'loanReference'         => 'MIG-' . Str::upper(Str::random(6)) . '-' . $key,
+                            'loanType'              => $loanType,
+                            'loanClassification'    => $loanClass,
+                            'deductionCode'         => $deductionCode,
+                            'netProceeds'           => $netProceeds,
+                            'loanAmount'            => $loanAmount,
+                            'gross'                 => $grossAmount,
+                            'monthlyAmortization'   => $monthlyAmort,
+                            'termYears'             => $termYears,
+                            'advanceInterestMonths' => $advInterestMos,
+                            'status'                => $status,
+                            'created_at'            => $dateApplied,
+                            'releasedAt'            => $dateReleased,
 
-                    if (empty($importKey) || empty($dependentName)) {
-                        continue;
+                            'numberOfPayments'      => $termYears * 12,
+                            'income'                => $grossAmount - $netProceeds,
+
+                            'serviceFee'            => 0,
+                            'insurance'             => 0,
+                            'advanceInterest'       => 0,
+                            'effectiveInterestRate' => 0,
+                            'monthlyInterestRate'   => 0,
+                            'processed_by'          => null,
+                        ]);
                     }
+                }
+            }
+            
+            // -----------------------------------------------------------------
+            // FINANCIAL SHEETS
+            // -----------------------------------------------------------------
+            $sheets = [
+                'ShareCapital'   => CapitalContribution::class, 
+                'SavingsDeposit' => SavingsDeposit::class, 
+                'TimeDeposit'    => TimeDeposit::class
+            ];
 
-                    if (!isset($importKeyMap[$importKey])) {
-                        Log::warning('Dependent import: no member found for importKey ' . $importKey);
-                        continue;
+            foreach ($sheets as $sheetName => $Model) {
+                $sheet = $spreadsheet->getSheetByName($sheetName);
+                if ($sheet && !empty($importKeyMap)) {
+                    $rows = $sheet->toArray(null, true, true, true);
+                    foreach (array_slice($rows, 1) as $row) {
+                        $key = $row['A'] ?? null;
+                        if ($key && isset($importKeyMap[$key])) {
+                            $data = [
+                                'memberId' => $importKeyMap[$key],
+                                'amount'   => $row['B'] ?? 0,
+                                'status'   => 'Posted'
+                            ];
+
+                            // FIXED: Financial Date Parsing
+                            if ($sheetName === 'TimeDeposit') {
+                                $data['start_date']    = $this->parseDate($row['C'] ?? null) ?? now();
+                                $data['maturity_date'] = $this->parseDate($row['D'] ?? null) ?? now()->addYear();
+                                $data['interest_rate'] = $row['E'] ?? 0.05;
+                                $data['status']        = 'active';
+                            } else {
+                                $data['date']      = $this->parseDate($row['C'] ?? null) ?? now();
+                                $data['reference'] = $row['D'] ?? 'Beginning Balance';
+                            }
+
+                            $Model::create($data);
+                        }
                     }
-
-                    $memberId = $importKeyMap[$importKey];
-
-                    Dependent::updateOrCreate(
-                        [
-                            'memberId' => $memberId,
-                            'name'     => $dependentName,
-                        ],
-                        [
-                            'dob'    => $dob,
-                            'gender' => $gender,
-                        ]
-                    );
                 }
             }
         });
 
-        return back()->with('success', 'Import success');
+        return back()->with('success', 'Import Completed Successfully.');
+    }
+
+    // =========================================================================
+    // HELPER: DATE PARSER (Fixes the "Incorrect date value" error)
+    // =========================================================================
+    private function parseDate($value) {
+        if (empty($value)) return null;
+
+        try {
+            // Case 1: Excel Serial Date (e.g. 44562)
+            if (is_numeric($value)) {
+                return ExcelDate::excelToDateTimeObject($value)->format('Y-m-d');
+            }
+
+            // Case 2: String Date (e.g. "9/18/1967", "18-Sep-1967", "1967/09/18")
+            // Carbon is smart enough to handle slashes or dashes
+            return Carbon::parse($value)->format('Y-m-d');
+        } catch (\Exception $e) {
+            // If completely invalid, return null to avoid SQL crash (or set a default)
+            return null;
+        }
+    }
+
+    // =========================================================================
+    // 3. BULK SEND CREDENTIALS
+    // =========================================================================
+    public function bulkSendCredentials(Request $request) {
+        set_time_limit(0);
+
+        $members = Member::whereDate('updated_at', now()->format('Y-m-d'))
+            ->where(function($q) {
+                $q->whereNotNull('email')->orWhereNotNull('contact');
+            })
+            ->get();
+        
+        $count = 0;
+        foreach ($members as $member) {
+            $password = Str::random(10);
+            $member->update(['password' => bcrypt($password)]);
+
+            $msg = "Welcome to PMPC!\nUser: {$member->username}\nPass: {$password}\nLogin: peoplesmpcoop.com\n\nREMINDERS:\n- Change pass ASAP\n- Update info\n- Keep secure.";
+
+            if ($member->email) {
+                try {
+                    Mail::raw($msg, fn($m) => $m->to($member->email)->subject('PMPC Credentials'));
+                } catch (\Exception $e) {}
+            }
+
+            if ($member->contact) {
+                try {
+                    Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
+                        'apikey'     => config('services.semaphore.api_key'),
+                        'number'     => preg_replace('/^0/', '63', trim($member->contact)),
+                        'message'    => $msg,
+                        'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
+                    ]);
+                } catch (\Exception $e) {}
+            }
+            $count++;
+        }
+
+        return back()->with('success', "Credentials sent to {$count} members.");
+    }
+    // =========================================================================
+    // 4. DOWNLOAD TEMPLATE FUNCTION
+    // =========================================================================
+    public function downloadTemplate() {
+        $spreadsheet = new Spreadsheet();
+
+        // --- SHEET 1: MEMBERS ---
+        $sheet = $spreadsheet->setActiveSheetIndex(0);
+        $sheet->setTitle('Members');
+        $sheet->setCellValue('A1', 'Import Key (Required)');
+        $sheet->setCellValue('B1', '(Ignored)');
+        $sheet->setCellValue('C1', 'First Name');
+        $sheet->setCellValue('D1', 'Middle Name');
+        $sheet->setCellValue('E1', 'Last Name');
+        $sheet->setCellValue('F1', 'Suffix');
+        $sheet->setCellValue('G1', 'Nickname');
+        $sheet->setCellValue('H1', 'DOB (YYYY-MM-DD)');
+        $sheet->setCellValue('I1', 'Religion');
+        $sheet->setCellValue('J1', 'Age');
+        $sheet->setCellValue('K1', 'Gender');
+        $sheet->setCellValue('L1', 'Civil Status');
+        $sheet->setCellValue('M1', 'Nationality');
+        $sheet->setCellValue('N1', 'Email');
+        $sheet->setCellValue('O1', 'Contact No');
+        $sheet->setCellValue('P1', 'Address');
+        $sheet->setCellValue('Q1', 'Membership Date (YYYY-MM-DD)');
+
+        // Add example row
+        $sheet->setCellValue('A2', 'MEM-001');
+        $sheet->setCellValue('C2', 'Juan');
+        $sheet->setCellValue('E2', 'Dela Cruz');
+        $sheet->setCellValue('H2', '1980-01-01');
+        $sheet->setCellValue('N2', 'juan@example.com');
+        $sheet->setCellValue('O2', '09171234567');
+        $sheet->setCellValue('AV2', '2023-01-15');
+
+        // --- SHEET 2: LOANS ---
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('Loans');
+        $headers = [
+            'A' => 'Import Key', 
+            'B' => 'Loan Type', 
+            'C' => 'Classification', 
+            'D' => 'Deduction Code', 
+            'E' => 'Net Proceeds', 
+            'F' => 'Loan Amount', 
+            'G' => 'Gross Amount', 
+            'H' => 'Monthly Amort', 
+            'I' => 'Term (Years)', 
+            'J' => 'Adv. Interest (Mos)', 
+            'K' => 'Date Applied', 
+            'L' => 'Date Released', 
+            'M' => 'Status'
+        ];
+        foreach($headers as $col => $val) $sheet->setCellValue($col.'1', $val);
+        // Example
+        $sheet->setCellValue('A2', 'MEM-001');
+        $sheet->setCellValue('B2', 'Salary Loan');
+        $sheet->setCellValue('C2', 'New');
+        $sheet->setCellValue('D2', '578 SL');
+        $sheet->setCellValue('E2', 20000);
+        $sheet->setCellValue('F2', 25000);
+        $sheet->setCellValue('G2', 25000);
+        $sheet->setCellValue('H2', 2083.33);
+        $sheet->setCellValue('I2', 1);
+        $sheet->setCellValue('J2', 0);
+        $sheet->setCellValue('K2', '2023-11-01');
+        $sheet->setCellValue('L2', '2023-11-05');
+        $sheet->setCellValue('M2', 'Released');
+
+        // --- SHEET 3: SHARE CAPITAL ---
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('ShareCapital');
+        $sheet->setCellValue('A1', 'Import Key');
+        $sheet->setCellValue('B1', 'Amount');
+        $sheet->setCellValue('C1', 'Date');
+        $sheet->setCellValue('D1', 'Reference');
+        // Example
+        $sheet->setCellValue('A2', 'MEM-001');
+        $sheet->setCellValue('B2', 15000);
+        $sheet->setCellValue('C2', '2023-01-15');
+        $sheet->setCellValue('D2', 'Beginning Balance');
+
+        // --- SHEET 4: SAVINGS DEPOSIT ---
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('SavingsDeposit');
+        $sheet->setCellValue('A1', 'Import Key');
+        $sheet->setCellValue('B1', 'Amount');
+        $sheet->setCellValue('C1', 'Date');
+        $sheet->setCellValue('D1', 'Reference');
+        // Example
+        $sheet->setCellValue('A2', 'MEM-001');
+        $sheet->setCellValue('B2', 5000);
+        $sheet->setCellValue('C2', '2023-01-15');
+        $sheet->setCellValue('D2', 'Deposit');
+
+        // --- SHEET 5: TIME DEPOSIT ---
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('TimeDeposit');
+        $sheet->setCellValue('A1', 'Import Key');
+        $sheet->setCellValue('B1', 'Amount');
+        $sheet->setCellValue('C1', 'Start Date');
+        $sheet->setCellValue('D1', 'Maturity Date');
+        $sheet->setCellValue('E1', 'Rate');
+        // Example
+        $sheet->setCellValue('A2', 'MEM-001');
+        $sheet->setCellValue('B2', 50000);
+        $sheet->setCellValue('C2', '2023-06-01');
+        $sheet->setCellValue('D2', '2024-06-01');
+        $sheet->setCellValue('E2', 0.05);
+
+        // --- SHEET 6: DEPENDENTS ---
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('Dependents');
+        $sheet->setCellValue('A1', 'Import Key');
+        $sheet->setCellValue('B1', 'Name');
+        $sheet->setCellValue('C1', 'DOB');
+        $sheet->setCellValue('D1', 'Gender');
+        // Example
+        $sheet->setCellValue('A2', 'MEM-001');
+        $sheet->setCellValue('B2', 'Junior Doe');
+        $sheet->setCellValue('C2', '2015-05-20');
+        $sheet->setCellValue('D2', 'Male');
+
+        // Download
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'PMPC_Import_Template.xlsx';
+        
+        return response()->streamDownload(function() use ($writer) {
+            $writer->save('php://output');
+        }, $filename);
     }
 }
