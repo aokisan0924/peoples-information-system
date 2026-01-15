@@ -93,6 +93,7 @@ export default function MemberView() {
         "CIVILIAN EMPLOYEES": ["AFFC", "PNFC", "FCPA"],
         "PMPC": ["BOARD OF DIRECTORS", "MANAGEMENT", "STAFF", "PROBATIONARY"],
         "CDEA": [],
+        "BRGY": ["CAMP AGUINALDO", "FORT MAGSAYSAY", "UPI"],
     };
     const [availableSubBranches, setAvailableSubBranches] = useState([]);
 
