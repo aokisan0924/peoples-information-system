@@ -93,7 +93,7 @@ export default function ClientCapitalContribution() {
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                                     <span className="h-8 w-8 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400"><ArrowUpRight className="h-4 w-4" /></span>
-                                    Add Capital
+                                    Add Share Capital
                                 </h2>
                                 <span className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-bold tracking-wide">PayMongo</span>
                             </div>

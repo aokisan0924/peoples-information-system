@@ -43,8 +43,8 @@ return [
     ],
 
     'paymongo' => [
-        'secret' => env('TEST_PAYMONGO_SECRET_KEY'),
-        'public' => env('TEST_PAYMONGO_PUBLIC_KEY'),
+        'secret' => env('LIVE_PAYMONGO_SECRET_KEY'),
+        'public' => env('LIVE_PAYMONGO_PUBLIC_KEY'),
         'webhook' => env('PAYMONGO_WEBHOOK_SECRET'),
         'base_url' => env('PAYMONGO_BASE_URL')
     ],
