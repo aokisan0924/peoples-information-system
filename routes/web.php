@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\Accounting\AccChartofAccountController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -206,6 +207,21 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     // --- AUTHENTICATED ADMIN ROUTES ---
     Route::middleware('auth:admin')->group(function () {
+
+        Route::prefix('accounting')->name('accounting.')->group(function () {
+            
+            // 1. Chart of Accounts Management
+            // Controller Path: App\Http\Controllers\Admin\Accounting\AccChartOfAccountController
+            Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');
+            Route::get('/chart', [AccChartofAccountController::class, 'index'])->name('chart.index');
+            Route::post('/chart/import', [AccChartofAccountController::class, 'import'])->name('chart.import');
+            Route::post('/chart', [AccChartofAccountController::class, 'store'])->name('chart.store');
+            Route::put('/chart/{id}', [AccChartofAccountController::class, 'update'])->name('chart.update');
+            Route::delete('/chart/{id}', [AccChartofAccountController::class, 'destroy'])->name('chart.destroy');
+
+            // 2. General Ledger / Bank Records (Placeholder for next step)
+            // Route::get('/ledger', [App\Http\Controllers\Admin\Accounting\AccBankRecordController::class, 'index'])->name('ledger.index');
+        });
 
         // 1. Dashboard & Security
         Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');

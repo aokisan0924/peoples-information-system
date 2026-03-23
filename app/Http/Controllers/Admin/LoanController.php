@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccBankRecord;
+use App\Models\AccChartOfAccount;
 use App\Models\CapitalContribution;
 use App\Models\Computations;
 use App\Models\Loan;
@@ -39,9 +41,14 @@ class LoanController extends Controller
             ->orderBy('lastName')
             ->get();
 
+        $chartOfAccount = AccChartOfAccount::select('id', 'accountCode', 'accountName')
+            ->orderBy('accountCode')
+            ->get();
+
         return Inertia::render('Admin/Loan', [ 
             'loanStats' => $loanStats,
             'members'   => $members,
+            'chartOfAccounts' => $chartOfAccount,
         ]);
     }
 
@@ -292,30 +299,36 @@ class LoanController extends Controller
             'deductionCode' => ['required', 'string'],
             'loanType' => ['required','string','max:50'],
             'loanClassification' => ['required','string','max:50'], 
-            'netProceeds' => ['required','numeric','min:1'],
+            'termYears' => ['required','integer','min:1','max:5'],
+            
+            // Financials (Manual)
+            'netProceeds' => ['required','numeric','min:0'],
             'capCon' => ['nullable','numeric','min:0'],
             'membershipFee' => ['nullable','numeric','min:0'],
-            'termYears' => ['required','integer','min:1','max:5'],
-            'advanceInterestMonths' => ['required','integer','min:0','max:12'],
+            'grossAmount' => ['required','numeric','min:0'],
+            'loanAmount' => ['required','numeric','min:0'], // Principal
+            'monthlyAmortization' => ['required','numeric','min:0'],
+            
+            // Rates for Ledger PDF
+            'monthlyInterestRate' => ['required','numeric','min:0'],
+            'effectiveInterestRate' => ['required','numeric','min:0'],
+            
+            // Deductions
+            'serviceFee' => ['required','numeric','min:0'],
+            'insurance' => ['required','numeric','min:0'],
+            'advanceInterest' => ['required','numeric','min:0'],
+
+            // Journal Entries validation
+            'journalEntries' => ['required', 'array'],
+            'journalEntries.*.accountCode' => ['required', 'string'],
+            'journalEntries.*.debit' => ['required', 'numeric', 'min:0'],
+            'journalEntries.*.credit' => ['required', 'numeric', 'min:0'],
         ]);
 
-        $term = (int)$data['termYears'];
-        $setting = LoanSetting::where('term', $term)->firstOrFail();
-
-        // Computations
-        $months = $term * 12;
-        $monthlyInterestRate = $setting->annual_interest_rate / 12;
-        $effectiveInterestRate = pow(1 + $monthlyInterestRate, 12) - 1;
-
-        $serviceFee = $data['netProceeds'] * $setting->service_fee_rate;
-        $insurance = ($data['netProceeds'] / 1000) * $months;
-        $advanceInterest = $monthlyInterestRate * $data['netProceeds'] * $setting->advance_interest_months;
-
-        $loanAmount = $data['netProceeds'] + $serviceFee + $insurance + $advanceInterest + ($data['capCon'] ?? 0) + ($data['membershipFee'] ?? 0);
-        $factor = pow(1 + $monthlyInterestRate, $months);
-        $monthlyAmortization = ($factor * $monthlyInterestRate * $loanAmount) / ($factor - 1);
-        $gross = $monthlyAmortization * $months;
-        $income = $gross - $data['netProceeds'];
+        $months = (int)$data['termYears'] * 12;
+        // Calculate income (Gross - Net) based on manual inputs
+        $income  = $data['grossAmount'] - $data['netProceeds'];
+        $percentIncome = $data['grossAmount'] > 0 ? ($income / $data['grossAmount']) * 100 : 0;
 
         // Save loan
         $loan = Loan::create([
@@ -323,23 +336,26 @@ class LoanController extends Controller
             'deductionCode' => $data['deductionCode'],
             'loanType' => $data['loanType'],
             'loanClassification' => $data['loanClassification'],
-            'netProceeds' => $data['netProceeds'],
             'termYears' => $data['termYears'],
-            'advanceInterestMonths' => $data['advanceInterestMonths'],
-            'serviceFee' => round($serviceFee, 2),
-            'insurance' => round($insurance, 2),
-            'advanceInterest' => round($advanceInterest, 2),
-            'monthlyInterestRate' => round($monthlyInterestRate, 5),
-            'effectiveInterestRate' => round($effectiveInterestRate, 5),
-            'numberOfPayments' => $months,
-            'loanAmount' => round($loanAmount, 2),
-            'monthlyAmortization' => round($monthlyAmortization, 2),
-            'gross' => round($gross, 2),
+            
+            'netProceeds' => round($data['netProceeds'], 2),
+            'serviceFee' => round($data['serviceFee'], 2),
+            'insurance' => round($data['insurance'], 2),
+            'advanceInterest' => round($data['advanceInterest'], 2),
+            'loanAmount' => round($data['loanAmount'], 2), // Principal
+            'monthlyAmortization' => round($data['monthlyAmortization'], 2),
+            'monthlyInterestRate' => round($data['monthlyInterestRate'] / 100, 5), 
+            'effectiveInterestRate' => round($data['effectiveInterestRate'] / 100, 5),
+            'gross' => round($data['grossAmount'], 2),
             'income' => round($income, 2),
-            'percentIncome' => round(($income / $gross) * 100, 2),
+            'percentIncome' => round($percentIncome, 2),
+
+            'numberOfPayments' => $months,
             'status' => 'Pending',
             'loanReference' => $this->makeLoanReference(),
             'processed_by' => Auth::guard('admin')->id(),
+
+            'advanceInterestMonths' => 2,
         ]);
 
         if ($data['capCon'] > 0) {
@@ -362,6 +378,29 @@ class LoanController extends Controller
                 'is_paid' => '0',
                 'status' => 'Pending'
             ]);
+        }
+
+        if (!empty($data['journalEntries'])) {
+            foreach ($data['journalEntries'] as $entry) {
+
+                if ($entry['debit'] == 0 && $entry['credit'] == 0) {
+                    continue;
+                }
+
+                $chartAccount = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+                $accountName = $chartAccount ? $chartAccount->accountName : 'Unknown Account';
+
+                AccBankRecord::create([
+                    'referenceNo'     => $loan->loanReference,
+                    'memberId'        => $loan->memberId,
+                    'accountCode'     => $entry['accountCode'],
+                    'accountName'     => $accountName,
+                    'debit'           => round($entry['debit'], 2),
+                    'credit'          => round($entry['credit'], 2),
+                    'particulars'     => 'Loan Application - ' . $data['loanType'],
+                    'transactionDate' => now(),
+                ]);
+            }
         }
 
         return redirect()->route('admin.loans.showLoan', ['loanReference' => $loan->loanReference]);

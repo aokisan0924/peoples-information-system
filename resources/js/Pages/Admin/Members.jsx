@@ -169,13 +169,13 @@ export default function Members() {
                                 <span>Send Credentials (Today)</span>
                             </button>
                             <a 
-    href="/admin/members/download-template" 
-    target="_blank"
-    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition-colors"
->
-    <FileText size={18} />
-    <span>Download Template</span>
-</a>
+                                href="/admin/members/download-template" 
+                                target="_blank"
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition-colors"
+                            >
+                                <FileText size={18} />
+                                <span>Download Template</span>
+                            </a>
                             <input type="file" accept=".xlsx" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
                         </div>
                     </div>
