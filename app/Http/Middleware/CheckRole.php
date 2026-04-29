@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Auth\AuthenticationException;
 
 class CheckRole
 {
@@ -18,13 +19,12 @@ class CheckRole
         // 1. Get the authenticated admin user
         $user = $request->user('admin');
 
-        // 2. Check if user is logged in
+        // IF SESSION IS DEAD -> Throw proper Auth Exception to force a redirect
         if (! $user) {
-            abort(403, 'Unauthorized access.');
+            throw new AuthenticationException('Unauthenticated.', ['admin'], route('admin.login'));
         }
 
-        // 3. Check if the user's role matches any of the allowed roles
-        // This allows usage like: middleware('role:super-admin,manager')
+        // 3. Check if the user's role matches
         if (! in_array($user->role, $roles)) {
             abort(403, 'You do not have permission to access this page.');
         }

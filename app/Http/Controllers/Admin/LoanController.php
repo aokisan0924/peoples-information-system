@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\AccBankRecord;
 use App\Models\AccChartOfAccount;
+use App\Models\AccGeneralLedger;
 use App\Models\CapitalContribution;
 use App\Models\Computations;
 use App\Models\Loan;
@@ -121,6 +121,13 @@ class LoanController extends Controller
         $member = $loan->member;
         $branchServiceName = $this->getBranchServiceName($member);
 
+        $capCon = CapitalContribution::where('reference_number', $loanReference)->value('amount') ?? 0;
+        $membershipFee = MembershipPayment::where('reference_number', $loanReference)->value('amount') ?? 0; 
+
+        $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
+            ->orderBy('debit','desc')
+            ->get();
+            
         $requiredLabels = $this->mapPreRequirementsByBranchService(
             (string) $branchServiceName
         );
@@ -164,13 +171,29 @@ class LoanController extends Controller
                 'memberId'              => $loan->memberId,
                 'status'                => $loan->status,
                 'downloadsAcknowledged' => (bool) $loan->downloadsAcknowledged,
-                'loanAmount'            => $loan->loanAmount,
-                'netProceeds'           => $loan->netProceeds,
-                'monthlyAmortization'   => $loan->monthlyAmortization,
+                
+                // Financials
+                'loanAmount'            => (float) $loan->loanAmount,
+                'grossAmount'           => (float) $loan->gross,
+                'netProceeds'           => (float) $loan->netProceeds,
+                'monthlyAmortization'   => (float) $loan->monthlyAmortization,
+                'serviceFee'            => (float) $loan->serviceFee,
+                'insurance'             => (float) $loan->insurance,
+                'advanceInterest'       => (float) $loan->advanceInterest,
+                'capCon'                => (float) $capCon,
+                'membershipFee'         => (float) $membershipFee,
+                'monthlyInterestRate'   => (float) $loan->monthlyInterestRate,
+                'effectiveInterestRate' => (float) $loan->effectiveInterestRate,
+
+                // Classifications
                 'termYears'             => $loan->termYears,
+                'loanType'              => $loan->loanType,
+                'loanClassification'    => $loan->loanClassification,
+                'deductionCode'         => $loan->deductionCode,
+                
                 'created_at'            => $loan->created_at,
                 'processed_by'          => $loan->processed_by,
-                'processor'             => $loan->processor,
+                'processor'             => $loan->processor ? ($loan->processor->name ?? 'Admin') : 'System',
             ],
             'member' => [
                 'id'            => $member?->id,
@@ -182,10 +205,40 @@ class LoanController extends Controller
                 'suffix'        => $member?->suffix,
                 'branchService' => $branchServiceName,
             ],
+            'journalEntries'        => $journalEntries,
             'requiredType'          => $requiredType,
             'existingDocuments'     => $preDocs->map($mapPreDoc)->values(),
             'postApprovalDocuments' => $postDocs->map($mapPostDoc)->values(),
         ]);
+    }
+
+    public function downloadAccountingEntry(Request $request, string $loanReference) {
+        $loan = Loan::with(['member', 'processor'])->where('loanReference', $loanReference)->firstOrFail();
+        
+        // Fetch the exact journal entries saved to the database
+        $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
+            ->orderBy('debit', 'desc')
+            ->orderBy('id', 'asc')
+            ->get();
+            
+        $totalDebits = $journalEntries->sum('debit');
+        $totalCredits = $journalEntries->sum('credit');
+
+        $data = [
+            'coopName'         => "PEOPLE'S MULTI-PURPOSE COOPERATIVE",
+            'loanRef'          => $loan->loanReference,
+            'lvNo'             => $loan->lrvNumber ?? '—',
+            'date'             => ($loan->created_at ? Carbon::parse($loan->created_at) : now())->format('d-M-Y'),
+            'borrowerName'     => strtoupper(($loan->member->firstName ?? '').' '.($loan->member->middleName ?? '').' '.($loan->member->lastName ?? '')),
+            'particulars'      => 'To record Loan Application - ' . $loan->loanClassification,
+            'entries'          => $journalEntries,
+            'totalDebits'      => $totalDebits,
+            'totalCredits'     => $totalCredits,
+            'processedBy'      => $loan->processor ? strtoupper($loan->processor->name) : 'SYSTEM PROCESSOR',
+        ];
+
+        $pdf = Pdf::loadView('pdf.loan-accounting-entry', $data)->setPaper('A4', 'portrait');
+        return $pdf->stream('loan-accounting-entry-'.$loanReference.'.pdf');
     }
 
     public function compute(Request $request) {
@@ -295,6 +348,7 @@ class LoanController extends Controller
 
     public function storeLoan(Request $request){
         $data = $request->validate([
+            'applicationDate' => ['required', 'date'],
             'memberId' => ['required', 'exists:members,id'],
             'deductionCode' => ['required', 'string'],
             'loanType' => ['required','string','max:50'],
@@ -330,6 +384,7 @@ class LoanController extends Controller
         $income  = $data['grossAmount'] - $data['netProceeds'];
         $percentIncome = $data['grossAmount'] > 0 ? ($income / $data['grossAmount']) * 100 : 0;
 
+        $appDate = Carbon::parse($data['applicationDate'])->toDateTimeString();
         // Save loan
         $loan = Loan::create([
             'memberId' => $data['memberId'],
@@ -356,6 +411,8 @@ class LoanController extends Controller
             'processed_by' => Auth::guard('admin')->id(),
 
             'advanceInterestMonths' => 2,
+            'created_at' => $appDate,
+            'updated_at' => $appDate,
         ]);
 
         if ($data['capCon'] > 0) {
@@ -367,6 +424,8 @@ class LoanController extends Controller
                 'is_paid' => '0',
                 'status' => 'Pending',
                 'processed_by' => Auth::guard('admin')->id(),
+                'created_at' => $appDate,
+                'updated_at' => $appDate,
             ]);
         }
 
@@ -376,7 +435,9 @@ class LoanController extends Controller
                 'amount' => round($data['membershipFee'], 2),
                 'reference_number' => $loan->loanReference,
                 'is_paid' => '0',
-                'status' => 'Pending'
+                'status' => 'Pending',
+                'created_at' => $appDate,
+                'updated_at' => $appDate,
             ]);
         }
 
@@ -390,7 +451,7 @@ class LoanController extends Controller
                 $chartAccount = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
                 $accountName = $chartAccount ? $chartAccount->accountName : 'Unknown Account';
 
-                AccBankRecord::create([
+                AccGeneralLedger::create([
                     'referenceNo'     => $loan->loanReference,
                     'memberId'        => $loan->memberId,
                     'accountCode'     => $entry['accountCode'],
@@ -398,7 +459,9 @@ class LoanController extends Controller
                     'debit'           => round($entry['debit'], 2),
                     'credit'          => round($entry['credit'], 2),
                     'particulars'     => 'Loan Application - ' . $data['loanType'],
-                    'transactionDate' => now(),
+                    'transactionDate' => $appDate,
+                    'created_at'      => $appDate,
+                    'updated_at'      => $appDate,
                 ]);
             }
         }

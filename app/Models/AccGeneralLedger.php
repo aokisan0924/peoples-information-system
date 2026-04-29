@@ -1,0 +1,16 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class AccGeneralLedger extends Model
+{
+    
+    protected $table = 'acc_general_ledgers';
+    protected $fillable = [
+        'branch', 'referenceNo', 'memberId', 'accountCode', 'accountName', 
+        'debit', 'credit', 'particulars', 'transactionDate', 'petty_cash_id'
+    ];
+    
+}

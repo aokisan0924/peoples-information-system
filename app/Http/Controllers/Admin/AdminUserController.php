@@ -30,9 +30,10 @@ class AdminUserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:admins',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => 'required|string',
+            'role' => ['required', 'string', 'in:super-admin,loan-processor,accounting-clerk,cashier,admin-officer'],
             'branch' => 'required|string',
-            'permissions' => 'array' // <--- Validate array
+            'permissions' => 'nullable|array',
+            'permissions.*' => ['string', 'in:view_loans,process_loans,manage_members,manage_deposits,view_reports,manage_accounting']
         ]);
 
         Admin::create([
@@ -41,7 +42,7 @@ class AdminUserController extends Controller
             'password' => Hash::make($request->password),
             'role' => $request->role,
             'branch' => $request->branch,
-            'permissions' => $request->permissions ?? [], // <--- Save array
+            'permissions' => $request->permissions ?? [], 
         ]);
 
         return redirect()->back()->with('success', 'Admin user created successfully.');
@@ -54,10 +55,11 @@ class AdminUserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('admins')->ignore($admin->id)],
-            'role' => 'required|string',
+            'role' => ['required', 'string', 'in:super-admin,loan-processor,accounting-clerk,cashier,admin-officer'],
             'branch' => 'required|string',
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
-            'permissions' => 'array'
+            'permissions' => 'nullable|array',
+            'permissions.*' => ['string', 'in:view_loans,process_loans,manage_members,manage_deposits,view_reports,manage_accounting']
         ]);
 
         $data = [
@@ -65,7 +67,7 @@ class AdminUserController extends Controller
             'email' => $request->email,
             'role' => $request->role,
             'branch' => $request->branch,
-            'permissions' => $request->permissions ?? [], // <--- Update array
+            'permissions' => $request->permissions ?? [], 
         ];
 
         if ($request->filled('password')) {

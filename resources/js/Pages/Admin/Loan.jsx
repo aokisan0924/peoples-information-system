@@ -3,7 +3,7 @@ import { Link, Head, usePage, router } from "@inertiajs/react";
 import { 
     Eye, Banknote, Wallet, TrendingUp, Search, Plus, Loader2, 
     FileText, CheckCircle2, AlertCircle, Clock, XCircle, ArrowRight, 
-    X, User, Layers, BookOpen, Calculator, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Link as LinkIcon, ShieldCheck
+    X, User, Layers, BookOpen, Calculator, ChevronDown, ChevronLeft, ChevronRight, Link as LinkIcon, ShieldCheck
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -287,9 +287,9 @@ export default function Loan() {
     const [showModal, setShowModal] = useState(false);
     
     // --- MANUAL FORM STATE ---
+    const [applicationDate, setApplicationDate] = useState(new Date().toISOString().split('T')[0]);
     const [memberId, setMemberId] = useState("");
     const [deductionCode, setDeductionCode] = useState("");
-    const [category, setCategory] = useState("ACTIVE_PENSIONER_V1");
     const [loanType, setLoanType] = useState("");
     const [loanClassification, setLoanClassification] = useState("");
     const [termYears, setTermYears] = useState(5);
@@ -365,10 +365,10 @@ export default function Loan() {
     const expectedNetProceeds = toNumber(netProceeds);
     
     const totalDebit = activeEntries.filter(e => e.type === 'debit').reduce((sum, e) => sum + e.amount, 0)
-                     + manualEntries.reduce((sum, e) => sum + toNumber(e.debit), 0);
+                    + manualEntries.reduce((sum, e) => sum + toNumber(e.debit), 0);
 
     const totalCredit = activeEntries.filter(e => e.type === 'credit').reduce((sum, e) => sum + e.amount, 0)
-                      + manualEntries.reduce((sum, e) => sum + toNumber(e.credit), 0);
+                    + manualEntries.reduce((sum, e) => sum + toNumber(e.credit), 0);
 
     // True Accounting Balance: Debits = Deductions (Credits) + Expected Net Proceeds
     const isBalanced = totalDebit === (totalCredit + expectedNetProceeds) && totalDebit > 0;
@@ -403,6 +403,7 @@ export default function Loan() {
     };
 
     const handleSubmitLoan = () => {
+        if (!applicationDate) return toast.error("Please select an application date.");
         if (!memberId) return toast.error("Please select a member.");
         if (!deductionCode) return toast.error("Please select a deduction code.");
         if (!loanType) return toast.error("Please select a loan type.");
@@ -432,7 +433,8 @@ export default function Loan() {
         ];
 
         axios.post("/admin/submit-loan", {
-            memberId, category, termYears, loanType, loanClassification, deductionCode, status: "pending",
+            applicationDate,
+            memberId, termYears, loanType, loanClassification, deductionCode, status: "pending",
             netProceeds: toNumber(netProceeds), 
             membershipFee: toNumber(membershipFee), 
             capCon: toNumber(capCon),
@@ -456,7 +458,7 @@ export default function Loan() {
     };
 
     const resetForm = () => {
-        setCategory("ACTIVE_PENSIONER_V1");
+        setApplicationDate(new Date().toISOString().split('T')[0]);
         setMemberId("");
         setLoanType("");
         setLoanClassification("");
@@ -747,7 +749,16 @@ export default function Loan() {
                                             />
                                         </InputGroup>
                                         
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <InputGroup label="Application Date">
+                                                <input 
+                                                    type="date" 
+                                                    value={applicationDate} 
+                                                    onChange={(e) => setApplicationDate(e.target.value)} 
+                                                    className={inputClasses} 
+                                                />
+                                            </InputGroup>
+
                                             <InputGroup label="Deduction Code">
                                                 <div className="relative">
                                                     <select value={deductionCode} onChange={(e) => setDeductionCode(e.target.value)} className={inputClasses}>
@@ -769,9 +780,7 @@ export default function Loan() {
                                                     </select>
                                                 </div>
                                             </InputGroup>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-2 gap-4">
+
                                             <InputGroup label="Class">
                                                 <div className="relative">
                                                     <select value={loanClassification} onChange={(e) => setLoanClassification(e.target.value)} className={inputClasses}>
@@ -782,13 +791,15 @@ export default function Loan() {
                                                 </div>
                                             </InputGroup>
 
-                                            <InputGroup label="Term (Yrs)">
-                                                <div className="relative">
-                                                    <select value={termYears} onChange={(e) => setTermYears(Number(e.target.value))} className={inputClasses}>
-                                                        {[1,2,3,4,5].map(y => <option key={y} value={y}>{y}</option>)}
-                                                    </select>
-                                                </div>
-                                            </InputGroup>
+                                            <div className="sm:col-span-2">
+                                                <InputGroup label="Term (Yrs)">
+                                                    <div className="relative">
+                                                        <select value={termYears} onChange={(e) => setTermYears(Number(e.target.value))} className={inputClasses}>
+                                                            {[1,2,3,4,5].map(y => <option key={y} value={y}>{y}</option>)}
+                                                        </select>
+                                                    </div>
+                                                </InputGroup>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -992,22 +1003,12 @@ export default function Loan() {
                                                         </p>
                                                     </td>
 
-                                                    {/* Credit Totals & Net Summation */}
+                                                    {/* Credit Totals */}
                                                     <td className="px-6 py-5 text-right align-top">
                                                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total Credits</p>
-                                                        <div className="flex flex-col items-end">
-                                                            <p className="font-mono font-bold text-slate-600 dark:text-slate-300 text-sm">
-                                                                {asMoney(totalCredit)}
-                                                            </p>
-                                                            {expectedNetProceeds > 0 && (
-                                                                <p className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm border-b border-slate-200 dark:border-white/10 pb-2 mb-2 w-full text-right">
-                                                                    + {asMoney(expectedNetProceeds)} <span className="text-[9px] font-sans font-black tracking-widest uppercase ml-1 opacity-70">(Net)</span>
-                                                                </p>
-                                                            )}
-                                                            <p className={`font-mono font-black text-xl tracking-tight ${!isBalanced && totalDebit > 0 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}`}>
-                                                                {asMoney(totalCredit + expectedNetProceeds)}
-                                                            </p>
-                                                        </div>
+                                                        <p className={`font-mono font-black text-xl tracking-tight ${!isBalanced && totalDebit > 0 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}`}>
+                                                            {asMoney(totalCredit)}
+                                                        </p>
                                                     </td>
                                                     <td></td>
                                                 </tr>

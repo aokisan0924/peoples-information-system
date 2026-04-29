@@ -6,7 +6,7 @@ import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 import {
   FileText, CheckCircle2, XCircle, ExternalLink, ShieldCheck, UploadCloud,
   ArrowLeft, User, AlertCircle, Download, Trash2, Loader2, Lock, Paperclip,
-  Banknote, Wallet
+  Banknote, Wallet, BookOpen, Minus, Calculator
 } from "lucide-react";
 
 // --- HELPERS ---
@@ -34,6 +34,19 @@ const POST_DOC_TYPES = [
     { key: 'scannedCheck', label: 'Scanned Check' },
 ];
 
+function DataRow({ label, value, highlight, isTitle }) {
+    return (
+        <div className={`flex justify-between items-center py-1.5 ${isTitle ? 'border-t border-slate-200/50 dark:border-white/10 mt-2 pt-3' : ''}`}>
+            <span className={`text-[10px] uppercase tracking-widest ${isTitle ? 'font-black text-slate-700 dark:text-slate-300' : 'font-bold text-slate-500 dark:text-slate-400'}`}>
+                {label}
+            </span>
+            <span className={`font-mono text-xs ${highlight ? 'font-black text-emerald-600 dark:text-emerald-400' : 'font-bold text-slate-800 dark:text-slate-200'} ${isTitle ? 'text-sm font-black' : ''}`}>
+                {value}
+            </span>
+        </div>
+    );
+}
+
 export default function AdminLoanDetails({ loanReference }) {
     const { auth } = usePage().props;
     const userRole = (auth?.user?.role || "").toLowerCase();
@@ -46,6 +59,7 @@ export default function AdminLoanDetails({ loanReference }) {
     const [requirements, setRequirements] = useState([]); 
     const [existingDocuments, setExistingDocuments] = useState([]);
     const [postApprovalDocs, setPostApprovalDocs] = useState([]);
+    const [journalEntries, setJournalEntries] = useState([]);
     
     // Actions State
     const [processing, setProcessing] = useState(false);
@@ -61,13 +75,14 @@ export default function AdminLoanDetails({ loanReference }) {
             
             setLoan(data.loan);
             setMember(data.member);
+            setJournalEntries(data.journalEntries || []);
             
             let reqs = [];
-        if (data.requirements && data.requirements.length > 0) {
-            reqs = data.requirements;
-        } else if (data.requiredType && data.requiredType.length > 0) {
-            reqs = data.requiredType.map(key => ({ key, label: formatDocLabel(key) }));
-        }
+            if (data.requirements && data.requirements.length > 0) {
+                reqs = data.requirements;
+            } else if (data.requiredType && data.requiredType.length > 0) {
+                reqs = data.requiredType.map(key => ({ key, label: formatDocLabel(key) }));
+            }
             setRequirements(reqs);
 
             setExistingDocuments(data.existingDocuments || []);
@@ -239,6 +254,11 @@ export default function AdminLoanDetails({ loanReference }) {
     
     const canRelease = isApproved && hasAllPostApprovalDocs && downloadsAck;
 
+    // Calculations
+    const totalDeductions = (loan.serviceFee || 0) + (loan.insurance || 0) + (loan.advanceInterest || 0) + (loan.capCon || 0) + (loan.membershipFee || 0);
+    const totalDebits = journalEntries.reduce((sum, e) => sum + Number(e.debit), 0);
+    const totalCredits = journalEntries.reduce((sum, e) => sum + Number(e.credit), 0);
+
     return (
         <>
             <Head title={`Loan #${loanReference}`}>
@@ -324,8 +344,9 @@ export default function AdminLoanDetails({ loanReference }) {
 
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     
-                    {/* LEFT COLUMN: INFO */}
+                    {/* LEFT COLUMN: INFO & FINANCIALS */}
                     <div className="space-y-6 xl:col-span-1">
+                        
                         {/* BORROWER INFO */}
                         <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/10">
                             <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 flex items-center gap-2">
@@ -390,6 +411,26 @@ export default function AdminLoanDetails({ loanReference }) {
                                 </div>
                             </div>
                         </div>
+
+                        {/* FINANCIAL BREAKDOWN */}
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/10">
+                            <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 flex items-center gap-2">
+                                <Calculator size={14}/> Financial Breakdown
+                            </h3>
+                            <div className="space-y-1 mb-6">
+                                <DataRow label="Gross Loan" value={asMoney(loan.grossAmount)} />
+                                <DataRow label="Principal Amount" value={asMoney(loan.loanAmount)} isTitle />
+                            </div>
+                            <div className="space-y-1 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1"><Minus size={12} className="text-rose-500"/> Deductions</p>
+                                <DataRow label="Service Fee" value={asMoney(loan.serviceFee)} />
+                                <DataRow label="Insurance" value={asMoney(loan.insurance)} />
+                                <DataRow label="Advance Interest" value={asMoney(loan.advanceInterest)} />
+                                <DataRow label="Capital Contrib." value={asMoney(loan.capCon)} />
+                                <DataRow label="Membership Fee" value={asMoney(loan.membershipFee)} />
+                                <DataRow label="Total Deductions" value={asMoney(totalDeductions)} isTitle />
+                            </div>
+                        </div>
                         
                         {/* APPROVAL ACTIONS CARD (Downloads Confirmation) */}
                         {isApproved && canManage && !isReleased && (
@@ -411,8 +452,72 @@ export default function AdminLoanDetails({ loanReference }) {
                         )}
                     </div>
 
-                    {/* RIGHT COLUMN: REQUIREMENTS */}
+                    {/* RIGHT COLUMN: LEDGER & REQUIREMENTS */}
                     <div className="xl:col-span-2 space-y-6">
+
+                        {/* GENERAL LEDGER (ACCOUNTING ENTRIES) */}
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/10">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                                <h3 className="text-xs font-bold uppercase text-slate-400 flex items-center gap-2">
+                                    <BookOpen size={14}/> General Ledger
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 text-[8px] font-black uppercase tracking-widest">Posted</span>
+                                    
+                                    {/* PRINT ACCOUNTING ENTRY BUTTON */}
+                                    {hasRoute('admin.loan.download.accountingEntry') && (
+                                        <a 
+                                            href={route('admin.loan.download.accountingEntry', loanReference)} 
+                                            target="_blank"
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:text-indigo-400 dark:hover:bg-indigo-500/10 transition-all text-[9px] font-black uppercase tracking-widest shadow-sm active:scale-95"
+                                        >
+                                            <Download size={12} strokeWidth={2.5} /> Print Entry
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-white/5">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-[9px] uppercase font-black text-slate-400 tracking-widest border-b border-slate-100 dark:border-white/5">
+                                        <tr>
+                                            <th className="px-4 py-3">Account</th>
+                                            <th className="px-4 py-3 text-right">Debit</th>
+                                            <th className="px-4 py-3 text-right">Credit</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50 dark:divide-white/5">
+                                        {journalEntries.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="3" className="px-4 py-8 text-center text-[10px] font-bold text-slate-400">No Entries Found</td>
+                                            </tr>
+                                        ) : (
+                                            journalEntries.map(entry => (
+                                                <tr key={entry.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <div className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">{entry.accountName}</div>
+                                                        <div className="text-[10px] font-mono text-indigo-500">{entry.accountCode}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-mono font-bold text-xs text-slate-700 dark:text-slate-300">
+                                                        {Number(entry.debit) > 0 ? asMoney(entry.debit) : '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-mono font-bold text-xs text-slate-700 dark:text-slate-300">
+                                                        {Number(entry.credit) > 0 ? asMoney(entry.credit) : '-'}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                    <tfoot className="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-white/10">
+                                        <tr>
+                                            <td className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Total</td>
+                                            <td className="px-4 py-3 text-right font-mono font-black text-sm text-slate-900 dark:text-white">{asMoney(totalDebits)}</td>
+                                            <td className="px-4 py-3 text-right font-mono font-black text-sm text-slate-900 dark:text-white">{asMoney(totalCredits)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
                         
                         {/* PRE-APPROVAL REQUIREMENTS CHECKLIST */}
                         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-white/10 overflow-hidden">

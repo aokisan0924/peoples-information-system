@@ -60,8 +60,11 @@ class AdminAuthController extends Controller
             return redirect()->route('admin.login');
         }
 
-        // Already enabled
+        // Already enabled -> Redirect based on role
         if (!empty($admin->google2fa_secret)) {
+            if (strtolower($admin->role) === 'accounting-clerk') {
+                return redirect()->route('admin.accounting.ledger.index');
+            }
             return redirect()->route('admin.dashboard');
         }
 
@@ -144,6 +147,11 @@ class AdminAuthController extends Controller
             Auth::guard('admin')->login($admin);
             session()->forget(['admin2faLoginId']);
 
+            // --- REDIRECT LOGIC ---
+            if (strtolower($admin->role) === 'accounting-clerk') {
+                return redirect()->route('admin.accounting.ledger.index')->with('success', 'Two-Factor Authentication verified.');
+            }
+
             return redirect()->route('admin.dashboard')->with('success', 'Two-Factor Authentication verified.');
         }
 
@@ -170,6 +178,11 @@ class AdminAuthController extends Controller
         
                 session()->forget(['admin2faSetupId', 'admin2faPendingSecret']);
         
+                // --- REDIRECT LOGIC ---
+                if (strtolower($admin->role) === 'accounting-clerk') {
+                    return redirect()->route('admin.accounting.ledger.index')->with('success', 'Two-Factor Authentication enabled.');
+                }
+
                 return redirect()->route('admin.dashboard')->with('success', 'Two-Factor Authentication enabled.');
             }
         

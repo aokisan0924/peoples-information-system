@@ -56,14 +56,13 @@ class AccChartofAccountController extends Controller
 
         $file = $request->file('file');
         $handle = fopen($file->getRealPath(), 'r');
-        fgetcsv($handle); // Skip the header row
+        fgetcsv($handle);
 
         $imported = 0;
         $skipped = 0;
 
         while (($data = fgetcsv($handle, 1000, ',')) !== FALSE) {
             if (!empty($data[0]) && !empty($data[1])) {
-                // Check for existing code to prevent errors
                 $exists = AccChartOfAccount::where('accountCode', $data[0])->exists();
                 
                 if (!$exists) {
@@ -86,16 +85,13 @@ class AccChartofAccountController extends Controller
         $callback = function() {
             $file = fopen('php://output', 'w');
             
-            // Header Row
             fputcsv($file, ['accountCode', 'accountName']);
             
-            // Example Row
             fputcsv($file, ['105-01', 'Loans Receivable - Principal']);
             
             fclose($file);
         };
 
-        // streamDownload automatically injects the correct headers to force a file download
         return response()->streamDownload($callback, 'chart_of_accounts_template.csv', [
             'Content-Type' => 'text/csv',
         ]);

@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\Accounting\AccBankRecordController;
 use App\Http\Controllers\Admin\Accounting\AccChartofAccountController;
+use App\Http\Controllers\Admin\Accounting\AccEWalletController;
+use App\Http\Controllers\Admin\Accounting\AccGeneralLedgerController;
+use App\Http\Controllers\Admin\Accounting\AccPettyCashController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -208,10 +212,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
     // --- AUTHENTICATED ADMIN ROUTES ---
     Route::middleware('auth:admin')->group(function () {
 
-        Route::prefix('accounting')->name('accounting.')->group(function () {
+        // ==========================================
+        // ACCOUNTING CLERK EXCLUSIVE ZONE
+        // ==========================================
+        Route::middleware('can_access:manage_accounting')->prefix('accounting')->name('accounting.')->group(function () {
             
             // 1. Chart of Accounts Management
-            // Controller Path: App\Http\Controllers\Admin\Accounting\AccChartOfAccountController
             Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');
             Route::get('/chart', [AccChartofAccountController::class, 'index'])->name('chart.index');
             Route::post('/chart/import', [AccChartofAccountController::class, 'import'])->name('chart.import');
@@ -219,8 +225,26 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::put('/chart/{id}', [AccChartofAccountController::class, 'update'])->name('chart.update');
             Route::delete('/chart/{id}', [AccChartofAccountController::class, 'destroy'])->name('chart.destroy');
 
-            // 2. General Ledger / Bank Records (Placeholder for next step)
-            // Route::get('/ledger', [App\Http\Controllers\Admin\Accounting\AccBankRecordController::class, 'index'])->name('ledger.index');
+            // General Ledger
+            Route::get('/ledger', [AccGeneralLedgerController::class, 'index'])->name('ledger.index');
+
+            // Bank Records
+            Route::get('/bank-records', [AccBankRecordController::class, 'index'])->name('bank.index');
+            Route::post('/bank-records/bulk', [AccBankRecordController::class, 'bulkStore'])->name('bank.bulk-store');
+            Route::put('/bank-records/{id}', [AccBankRecordController::class, 'update'])->name('bank.update');
+
+            // Petty Cash Fund
+            Route::get('/petty-cash', [AccPettyCashController::class, 'index'])->name('petty.index');
+            Route::post('/petty-cash/bulk', [AccPettyCashController::class, 'bulkStore'])->name('petty.bulk-store');
+            Route::put('/petty-cash/{id}', [AccPettyCashController::class, 'update'])->name('petty.update');
+
+            Route::post('/petty-cash/journalize', [AccPettyCashController::class, 'journalize'])->name('petty.journalize');
+            Route::get('/petty-cash/print/{ids}', [AccPettyCashController::class, 'printVoucher'])->name('petty.print');
+
+            // E-Wallet
+            Route::get('/e-wallet', [AccEWalletController::class, 'index'])->name('ewallet.index');
+            Route::post('/e-wallet/bulk', [AccEWalletController::class, 'bulkStore'])->name('ewallet.bulk-store');
+            Route::put('/e-wallet/{id}', [AccEWalletController::class, 'update'])->name('ewallet.update');
         });
 
         // 1. Dashboard & Security
@@ -280,6 +304,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
             Route::get('/api/loans', [LoanController::class, 'apiList'])->name('api.loans.index'); 
             Route::get('/api/loans/{loanReference}/details', [LoanController::class, 'apiDetails'])->name('api.loans.details');
+
+            Route::get('/loans/{loanReference}/accounting-entry', [LoanController::class, 'downloadAccountingEntry'])->name('loan.download.accountingEntry');
         });
 
         Route::middleware('can_access:process_loans')->group(function () {

@@ -1,0 +1,6 @@
+import{j as e,L as t}from"./app-CW_3rqic.js";import{c as a}from"./createLucideIcon-DwmGcCIS.js";/**
+ * @license lucide-react v0.482.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const r=[["path",{d:"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",key:"wmoenq"}],["path",{d:"M12 9v4",key:"juzpu7"}],["path",{d:"M12 17h.01",key:"p32p05"}]],s=a("TriangleAlert",r);function i(){return e.jsx("div",{className:"min-h-screen flex items-center justify-center bg-gray-50 px-4",children:e.jsxs("div",{className:"bg-white shadow-lg rounded-2xl p-8 max-w-md w-full text-center",children:[e.jsx(s,{className:"mx-auto text-red-600",size:64}),e.jsx("h2",{className:"text-2xl font-bold text-gray-800 mt-4",children:"Payment Failed"}),e.jsx("p",{className:"text-gray-600 mt-2",children:"Unfortunately, your payment did not go through."}),e.jsxs("div",{className:"mt-6 border-t pt-4",children:[e.jsx("p",{className:"text-sm text-gray-500",children:"Please try again or contact support."}),e.jsx(t,{href:"/",className:"inline-block mt-6 bg-red-600 text-white px-6 py-2 rounded-xl hover:bg-red-700 transition-all",children:"Go Back Home"})]})]})})}export{i as default};

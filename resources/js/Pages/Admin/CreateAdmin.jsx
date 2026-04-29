@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Head, useForm, usePage, router } from "@inertiajs/react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 import { 
-    UserPlus, Search, ShieldCheck, User, X, Edit, CheckCircle2, Circle, CheckSquare, Loader2
+    UserPlus, Search, ShieldCheck, Edit, CheckCircle2, Circle, CheckSquare, Loader2, X
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,12 +14,14 @@ const PERMISSIONS_LIST = [
     { id: 'manage_members', label: 'Manage Members', desc: 'Add, edit, and view member profiles.' },
     { id: 'manage_deposits', label: 'Manage Deposits', desc: 'Access Share Capital, Savings, and Time Deposits.' },
     { id: 'view_reports', label: 'View Reports', desc: 'Access analytics and generated PDF reports.' },
+    { id: 'manage_accounting', label: 'Manage Accounting', desc: 'Access General Ledger and Chart of Accounts.' }, // <-- ADDED
 ];
 
 // DEFAULT PRESETS
 const ROLE_PRESETS = {
-    'super-admin': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits', 'view_reports'],
+    'super-admin': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits', 'view_reports', 'manage_accounting'],
     'loan-processor': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits'],
+    'accounting-clerk': ['manage_accounting'], // <-- ADDED
     'cashier': ['view_loans', 'manage_members', 'manage_deposits'],
     'admin-officer': ['view_loans', 'manage_members', 'manage_deposits', 'view_reports'],
 };
@@ -278,6 +280,7 @@ function AdminFormModal({ adminToEdit, onClose }) {
                         <InputGroup label="Role Preset" error={errors.role}>
                             <select className="input-field" value={data.role} onChange={handleRoleChange}>
                                 <option value="super-admin">Super Admin (Full Access)</option>
+                                <option value="accounting-clerk">Accounting Clerk</option> {/* <-- ADDED */}
                                 <option value="loan-processor">Loan Processor</option>
                                 <option value="cashier">Cashier</option>
                                 <option value="admin-officer">Admin Officer</option>

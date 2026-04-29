@@ -20,53 +20,44 @@ import {
     User,
     UserPlus,
     Megaphone,
-    Image // <--- Imported Image Icon for Gallery
+    Image,
+    BookOpen,
+    Layers,
+    Landmark,
+    Wallet2,
+    Smartphone
 } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react"; 
 import { AnimatePresence, motion } from "framer-motion";
 
 export default function AdminSidebarLayout({ children }) {
-    // --- STATE ---
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [depositsOpen, setDepositsOpen] = useState(true);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
-    
-    // --- AUTH & PERMISSIONS ---
     const { auth } = usePage().props;
     
     const userRole = (auth?.user?.role || "").toLowerCase();
     const isSuperAdmin = userRole === 'super-admin';
+    const isAccountingClerk = userRole === 'accounting-clerk';
     
-    // Get the permissions array passed from HandleInertiaRequests
     const permissions = auth?.user?.permissions || [];
 
-    // --- PERMISSION HELPER ---
-    // Now checks specific permissions instead of Roles
     const canAccess = (feature) => {
-        // 1. Super Admin always has full access
         if (isSuperAdmin) return true; 
 
-        // 2. Check Granular Permissions
         switch (feature) {
             case 'loans':
-                // Controls access to Loan Applications link
                 return permissions.includes('view_loans');
-            
             case 'deposits': 
-                // Controls Capital, Time Deposit, and Savings
                 return permissions.includes('manage_deposits');
-
             case 'members':  
-                // Controls Member Management
                 return permissions.includes('manage_members');
-
             case 'reports':
-                // Controls Reports link
                 return permissions.includes('view_reports');
-
+            case 'accounting':
+                return permissions.includes('manage_accounting');
             case 'create-user':
-                return false; // Still strictly Super Admin only
-
+                return false; 
             default:
                 return false;
         }
@@ -197,10 +188,27 @@ export default function AdminSidebarLayout({ children }) {
                         <nav className="space-y-1.5">
                             <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2">Main</p>
                             
-                            {/* DASHBOARD (Everyone) */}
-                            <NavLink name="admin.dashboard" label="Dashboard" icon={LayoutDashboard} />
+                            {/* DASHBOARD (Hidden from Accounting Clerk) */}
+                            {!isAccountingClerk && (
+                                <NavLink name="admin.dashboard" label="Dashboard" icon={LayoutDashboard} />
+                            )}
+
+                            {/* ACCOUNTING SECTION (Only visible if they have permission) */}
+                            {canAccess('accounting') && (
+                                <>
+                                    <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Accounting</p>
+                                    <NavLink name="admin.accounting.ledger.index" label="General Ledger" icon={BookOpen} />
+                                    <NavLink name="admin.accounting.bank.index" label="Bank Records" icon={Landmark} />
+                                    <NavLink name="admin.accounting.petty.index" label="Petty Cash Fund" icon={Wallet2} />
+                                    <NavLink name="admin.accounting.ewallet.index" label="E-Wallet Logs" icon={Smartphone} />
+                                    <NavLink name="admin.accounting.chart.index" label="Chart of Accounts" icon={Layers} />
+                                </>
+                            )}
                             
-                            <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Transactions</p>
+                            {/* TRANSACTIONS SECTION (Hide header if Clerk) */}
+                            {!isAccountingClerk && (
+                                <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Transactions</p>
+                            )}
 
                             {/* MEMBERS */}
                             {canAccess('members') && (
@@ -260,11 +268,14 @@ export default function AdminSidebarLayout({ children }) {
                                 </>
                             )}
 
-                            {/* CONTENT SECTION */}
-                            <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Content</p>
-                            <NavLink name="admin.news.index" label="News & Updates" icon={Megaphone} />
-                            {/* GALLERY LINK ADDED HERE */}
-                            <NavLink name="admin.gallery.index" label="Gallery" icon={Image} />
+                            {/* CONTENT SECTION (Hidden from Accounting Clerk) */}
+                            {!isAccountingClerk && (
+                                <>
+                                    <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Content</p>
+                                    <NavLink name="admin.news.index" label="News & Updates" icon={Megaphone} />
+                                    <NavLink name="admin.gallery.index" label="Gallery" icon={Image} />
+                                </>
+                            )}
 
                             {/* MAINTENANCE SECTION */}
                             {(isSuperAdmin || canAccess('reports')) && (
@@ -324,7 +335,7 @@ export default function AdminSidebarLayout({ children }) {
                                 >
                                     <div className="hidden md:block text-right leading-tight">
                                         <p className="text-xs font-bold text-slate-900 dark:text-white">{auth?.user?.name || 'Administrator'}</p>
-                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role || 'Staff'}</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace('-', ' ') || 'Staff'}</p>
                                     </div>
                                     <div className="h-9 w-9 rounded-full bg-emerald-600 border-2 border-white dark:border-emerald-500/30 flex items-center justify-center text-white font-bold shadow-md">
                                         {auth?.user?.name ? auth.user.name.charAt(0) : 'A'}
@@ -343,7 +354,7 @@ export default function AdminSidebarLayout({ children }) {
                                         >
                                             <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5 md:hidden">
                                                 <p className="text-xs font-bold text-slate-900 dark:text-white">{auth?.user?.name || 'Administrator'}</p>
-                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role || 'Staff'}</p>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace('-', ' ') || 'Staff'}</p>
                                             </div>
                                             
                                             <div className="p-1">

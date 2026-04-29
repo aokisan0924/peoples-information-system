@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Auth\AuthenticationException;
 
 class CheckPermission
 {
@@ -17,8 +18,9 @@ class CheckPermission
     {
         $user = $request->user('admin');
 
+        // IF SESSION IS DEAD -> Throw proper Auth Exception to force a redirect
         if (!$user) {
-            abort(403, 'Unauthorized');
+            throw new AuthenticationException('Unauthenticated.', ['admin'], route('admin.login'));
         }
 
         // 1. Super Admin has access to EVERYTHING
@@ -26,8 +28,7 @@ class CheckPermission
             return $next($request);
         }
 
-        // 2. Check if the user has the specific permission in their array
-        // We assume $user->permissions is an array like ['view_loans', 'manage_members']
+        // 2. Check if the user has the specific permission
         $userPermissions = $user->permissions ?? [];
 
         if (in_array($permission, $userPermissions)) {
