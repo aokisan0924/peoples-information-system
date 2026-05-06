@@ -35,10 +35,8 @@ const toNumber = (v) => {
     return Number.isFinite(n) ? n : 0;
 };
 
-// --- SHARED INPUT CLASSES ---
 const inputClasses = "w-full px-4 py-3.5 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none text-xs font-bold transition-all shadow-inner appearance-none";
 
-// --- CUSTOM SEARCHABLE DROPDOWN FOR MEMBERS ---
 function MemberComboBox({ value, onChange, options }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -128,7 +126,6 @@ function MemberComboBox({ value, onChange, options }) {
     )
 }
 
-// --- CUSTOM SEARCHABLE DROPDOWN FOR ACCOUNT CODES ---
 function AccountComboBox({ value, onChange, options }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -313,7 +310,8 @@ export default function Loan() {
 
     // --- GL STATE (Hybrid) ---
     const [glMapping, setGlMapping] = useState({
-        principal: "", 
+        principal: "",
+        netProceeds: "", 
         serviceFee: "",
         insurance: "",
         advanceInterest: "",
@@ -328,7 +326,7 @@ export default function Loan() {
         const entries = [];
         
         if (toNumber(loanAmount) > 0) entries.push({ id: 'principal', title: 'Principal Amount', type: 'debit', amount: toNumber(loanAmount), accountCode: glMapping.principal });
-        
+        if (toNumber(netProceeds) > 0) entries.push({ id: 'netProceeds', title: 'Net Proceeds', type: 'credit', amount: toNumber(netProceeds), accountCode: glMapping.netProceeds });
         if (toNumber(serviceFee) > 0) entries.push({ id: 'serviceFee', title: 'Service Fee', type: 'credit', amount: toNumber(serviceFee), accountCode: glMapping.serviceFee });
         if (toNumber(insurance) > 0) entries.push({ id: 'insurance', title: 'Insurance', type: 'credit', amount: toNumber(insurance), accountCode: glMapping.insurance });
         if (toNumber(advanceInterest) > 0) entries.push({ id: 'advanceInterest', title: 'Advance Interest', type: 'credit', amount: toNumber(advanceInterest), accountCode: glMapping.advanceInterest });
@@ -336,7 +334,7 @@ export default function Loan() {
         if (toNumber(membershipFee) > 0) entries.push({ id: 'membershipFee', title: 'Membership Fee', type: 'credit', amount: toNumber(membershipFee), accountCode: glMapping.membershipFee });
         
         return entries;
-    }, [loanAmount, serviceFee, insurance, advanceInterest, capCon, membershipFee, glMapping]);
+    }, [loanAmount, netProceeds, serviceFee, insurance, advanceInterest, capCon, membershipFee, glMapping]);
 
     const updateGlMapping = (id, code) => setGlMapping(prev => ({ ...prev, [id]: code }));
 
@@ -361,17 +359,15 @@ export default function Loan() {
         }));
     };
 
-    // 3. Combined Balancing Logic (Includes Net Proceeds in the validation)
-    const expectedNetProceeds = toNumber(netProceeds);
-    
+    // 3. Combined Balancing Logic (Strict Debit = Credit)
     const totalDebit = activeEntries.filter(e => e.type === 'debit').reduce((sum, e) => sum + e.amount, 0)
                     + manualEntries.reduce((sum, e) => sum + toNumber(e.debit), 0);
 
     const totalCredit = activeEntries.filter(e => e.type === 'credit').reduce((sum, e) => sum + e.amount, 0)
                     + manualEntries.reduce((sum, e) => sum + toNumber(e.credit), 0);
 
-    // True Accounting Balance: Debits = Deductions (Credits) + Expected Net Proceeds
-    const isBalanced = totalDebit === (totalCredit + expectedNetProceeds) && totalDebit > 0;
+    // True Accounting Balance: Debits must perfectly equal Credits
+    const isBalanced = totalDebit === totalCredit && totalDebit > 0;
 
     const loadData = async (page = 1) => {
         if (loading) return;
@@ -416,7 +412,7 @@ export default function Loan() {
             return toast.error("Missing Accounts! Please assign a Chart of Account to every ledger row.");
         }
         if (!isBalanced) {
-            return toast.error(`Unbalanced Entry! Debits (₱${asMoney(totalDebit)}) must equal Credits + Net Proceeds (₱${asMoney(totalCredit + expectedNetProceeds)}).`);
+            return toast.error(`Unbalanced Entry! Debits (₱${asMoney(totalDebit)}) must equal Credits (₱${asMoney(totalCredit)}).`);
         }
 
         const combinedJournalEntries = [
@@ -475,7 +471,7 @@ export default function Loan() {
         setServiceFee("");
         setInsurance("");
         setAdvanceInterest("");
-        setGlMapping({ principal: "", serviceFee: "", insurance: "", advanceInterest: "", capCon: "", membershipFee: "" });
+        setGlMapping({ principal: "", netProceeds: "", serviceFee: "", insurance: "", advanceInterest: "", capCon: "", membershipFee: "" });
         setManualEntries([]);
     };
 

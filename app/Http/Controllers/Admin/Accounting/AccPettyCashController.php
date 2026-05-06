@@ -25,6 +25,12 @@ class AccPettyCashController extends Controller
         $recordsQuery = AccPettyCashFund::where('branch', $currentBranch)->whereDate('transactionDate', $date);
         $records = (clone $recordsQuery)->orderBy('created_at', 'asc')->get();
 
+        $recordIds = $records->pluck('id');
+        $ledgers = AccGeneralLedger::whereIn('petty_cash_id', $recordIds)->get()->groupBy('petty_cash_id');
+        foreach ($records as $record) {
+            $record->ledger_entries = $ledgers->get($record->id, collect());
+        }
+
         // Compute Ending Balance for the day
         $dayCredit = (clone $recordsQuery)->sum('credit');
         $dayDebit = (clone $recordsQuery)->sum('debit');
@@ -100,6 +106,41 @@ class AccPettyCashController extends Controller
             }
             $record->update(['is_posted' => true]);
             return redirect()->back()->with('success', 'Journal Entry created.');
+        });
+    }
+
+    public function updateJournal(Request $request, $id) {
+        $request->validate([
+            'entries' => 'required|array|min:1',
+            'entries.*.accountCode' => 'required|string',
+            'entries.*.debit' => 'numeric',
+            'entries.*.credit' => 'numeric',
+        ]);
+
+        return DB::transaction(function () use ($request, $id) {
+            $record = AccPettyCashFund::findOrFail($id);
+            $userBranch = $request->user()->branch ?? 'Main Office';
+
+            // 1. Delete the old incorrect entries from the general ledger
+            AccGeneralLedger::where('petty_cash_id', $record->id)->delete();
+
+            // 2. Re-create them with the new edited mapping
+            foreach ($request->entries as $entry) {
+                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+
+                AccGeneralLedger::create([
+                    'petty_cash_id'   => $record->id,
+                    'transactionDate' => $record->transactionDate,
+                    'accountCode'     => $entry['accountCode'],
+                    'accountName'     => $account->accountName ?? 'Manual Entry',
+                    'particulars'     => $record->particulars,
+                    'referenceNo'     => $record->orNumber ?? '-',
+                    'debit'           => floatval($entry['debit'] ?? 0),
+                    'credit'          => floatval($entry['credit'] ?? 0),
+                    'branch'          => $userBranch,
+                ]);
+            }
+            return redirect()->back()->with('success', 'Journal Entry updated successfully.');
         });
     }
 

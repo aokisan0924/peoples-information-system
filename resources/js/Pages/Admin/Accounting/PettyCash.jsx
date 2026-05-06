@@ -41,7 +41,6 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
         router.get(route('admin.accounting.petty.index'), { date: newDate }, { preserveState: true });
     };
 
-    // Phase 1: Submit Multiple Logs
     const submitLogs = (e) => {
         e.preventDefault();
         const payload = logs.map(log => ({
@@ -64,7 +63,22 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
         });
     };
 
-    // Phase 2: Save Journal Entry
+    // [NEW] Handle Editing an existing Journal Entry
+    const handleEditJournal = (record) => {
+        setRecordToJournalize(record);
+        if (record.ledger_entries && record.ledger_entries.length > 0) {
+            setJournalEntries(record.ledger_entries.map(le => ({
+                accountCode: le.accountCode,
+                accountName: le.accountName,
+                debit: le.debit,
+                credit: le.credit
+            })));
+        } else {
+            setJournalEntries([{...emptySplit}, {...emptySplit}]);
+        }
+    };
+
+    // [UPDATED] Supports both Creating AND Updating
     const submitJournal = () => {
         const d = journalEntries.reduce((sum, e) => sum + parseFloat(e.debit || 0), 0);
         const c = journalEntries.reduce((sum, e) => sum + parseFloat(e.credit || 0), 0);
@@ -75,11 +89,16 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
         }
 
         setIsSaving(true);
-        router.post(route('admin.accounting.petty.journalize', recordToJournalize.id), { entries: journalEntries }, {
+        const routeName = recordToJournalize.is_posted 
+            ? 'admin.accounting.petty.update-journal' 
+            : 'admin.accounting.petty.journalize';
+
+        router.post(route(routeName, recordToJournalize.id), { entries: journalEntries }, {
             onSuccess: () => {
+                const wasPosted = recordToJournalize.is_posted;
                 setRecordToJournalize(null);
                 setJournalEntries([{...emptySplit}, {...emptySplit}]);
-                toast.success("Journal Entry created! Voucher ready.");
+                toast.success(wasPosted ? "Journal Entry updated successfully!" : "Journal Entry created! Voucher ready.");
                 setIsSaving(false);
             },
             onError: () => setIsSaving(false)
@@ -200,15 +219,20 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
                                             ) : (
                                                 <>
                                                     {!record.is_posted ? (
-                                                        <button onClick={() => setRecordToJournalize(record)} className="text-amber-500 hover:text-amber-400" title="Create Journal Entry">
+                                                        <button onClick={() => { setRecordToJournalize(record); setJournalEntries([{...emptySplit}, {...emptySplit}]); }} className="text-amber-500 hover:text-amber-400" title="Create Journal Entry">
                                                             <BookOpen size={18}/>
                                                         </button>
                                                     ) : (
-                                                        <button onClick={() => window.open(route('admin.accounting.petty.print', { ids: record.id, perPage: 1 }))} className="text-emerald-500 hover:text-emerald-400" title="Print Voucher">
-                                                            <Printer size={18} />
-                                                        </button>
+                                                        <>
+                                                            <button onClick={() => handleEditJournal(record)} className="text-amber-500 hover:text-amber-400" title="Edit Journal Entry">
+                                                                <BookOpen size={18}/>
+                                                            </button>
+                                                            <button onClick={() => window.open(route('admin.accounting.petty.print', { ids: record.id, perPage: 1 }))} className="text-emerald-500 hover:text-emerald-400" title="Print Voucher">
+                                                                <Printer size={18} />
+                                                            </button>
+                                                        </>
                                                     )}
-                                                    <button onClick={() => { setEditingId(record.id); setEditForm({...record}); }} className="text-slate-400 hover:text-indigo-400" title="Edit">
+                                                    <button onClick={() => { setEditingId(record.id); setEditForm({...record}); }} className="text-slate-400 hover:text-indigo-400" title="Edit Log Details">
                                                         <Edit2 size={18}/>
                                                     </button>
                                                 </>
@@ -280,7 +304,12 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
             {recordToJournalize && (
                 <div className="fixed inset-0 z-[100] bg-slate-950/95 flex flex-col p-6 overflow-hidden">
                     <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-3 text-white"><BookOpen size={24} className="text-amber-400"/> <h2 className="font-black text-2xl tracking-tight uppercase">Create Journal Entry</h2></div>
+                        <div className="flex items-center gap-3 text-white">
+                            <BookOpen size={24} className="text-amber-400"/> 
+                            <h2 className="font-black text-2xl tracking-tight uppercase">
+                                {recordToJournalize.is_posted ? 'Edit Journal Entry' : 'Create Journal Entry'}
+                            </h2>
+                        </div>
                         <button onClick={() => setRecordToJournalize(null)} className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors"><X size={28}/></button>
                     </div>
 
@@ -324,7 +353,7 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
 
                         <div className="flex justify-end pt-4">
                             <button onClick={submitJournal} disabled={isSaving} className="px-16 py-5 bg-amber-500 text-amber-950 font-black rounded-2xl uppercase tracking-widest shadow-2xl active:scale-95 transition-all">
-                                {isSaving ? 'Processing...' : 'Post to General Ledger'}
+                                {isSaving ? 'Processing...' : (recordToJournalize.is_posted ? 'Update General Ledger' : 'Post to General Ledger')}
                             </button>
                         </div>
                     </div>

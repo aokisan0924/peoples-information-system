@@ -51,14 +51,16 @@
 </head>
 <body>
 
+    {{-- Temporarily disabled to bypass GD Extension error
     @php
         $logoPath = public_path('images/logo/pis_logo.png');
         $logoData = file_exists($logoPath) ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath)) : '';
     @endphp
+    --}}
 
     <table class="header-table">
         <tr>
-            <td class="logo-cell">@if($logoData) <img src="{{ $logoData }}" class="logo-img"/> @endif</td>
+            <td class="logo-cell"></td>
             <td class="text-cell">
                 <div class="coop-name">PEOPLE'S MULTI-PURPOSE COOPERATIVE</div>
                 

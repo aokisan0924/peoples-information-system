@@ -380,7 +380,6 @@ class LoanController extends Controller
         ]);
 
         $months = (int)$data['termYears'] * 12;
-        // Calculate income (Gross - Net) based on manual inputs
         $income  = $data['grossAmount'] - $data['netProceeds'];
         $percentIncome = $data['grossAmount'] > 0 ? ($income / $data['grossAmount']) * 100 : 0;
 
@@ -442,6 +441,7 @@ class LoanController extends Controller
         }
 
         if (!empty($data['journalEntries'])) {
+            $currentBranch = Auth::guard('admin')->user()->branch ?? 'Main Office';
             foreach ($data['journalEntries'] as $entry) {
 
                 if ($entry['debit'] == 0 && $entry['credit'] == 0) {
@@ -452,6 +452,7 @@ class LoanController extends Controller
                 $accountName = $chartAccount ? $chartAccount->accountName : 'Unknown Account';
 
                 AccGeneralLedger::create([
+                    'branch'          => $currentBranch,
                     'referenceNo'     => $loan->loanReference,
                     'memberId'        => $loan->memberId,
                     'accountCode'     => $entry['accountCode'],

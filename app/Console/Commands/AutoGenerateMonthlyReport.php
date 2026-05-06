@@ -13,16 +13,18 @@ use App\Services\GeminiService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 
 class AutoGenerateMonthlyReport extends Command
 {
-    protected $signature = 'report:generate-monthly {--current : Generate for the current month instead of previous}';
+    protected $signature = 'report:generate-monthly {--month=} {--year=} {--current : Generate for the current month instead of previous}';
     protected $description = 'Generates the AI Monthly Executive Report by Branch (Pure Eloquent)';
 
-    public function handle(GeminiService $gemini)
-    {
-        // 1. DETERMINE TARGET MONTH
-        if ($this->option('current')) {
+    public function handle(GeminiService $gemini){
+        if ($this->option('month') && $this->option('year')) {
+            $targetDate = Carbon::createFromDate($this->option('year'), $this->option('month'), 1);
+            $this->info('Generating report for specific month: ' . $targetDate->format('F Y'));
+        } elseif ($this->option('current')) {
             $targetDate = Carbon::now();
             $this->info('Generating report for the CURRENT month...');
         } else {
@@ -33,26 +35,18 @@ class AutoGenerateMonthlyReport extends Command
         $start = $targetDate->copy()->startOfMonth();
         $end = $targetDate->copy()->endOfMonth();
         $monthName = $targetDate->format('F Y');
-        // UPDATED: Title to match your request
         $reportTitle = "President's Report - " . $monthName;
 
-        // 2. DEFINE BRANCHES & INIT STATS
         $branches = ['Cubao', 'Fort Magsaysay', 'Isabela'];
         $stats = [];
         $logs = []; 
 
         foreach ($branches as $branch) {
             $stats[$branch] = [
-                'loans_released_count' => 0,
-                'loans_released_amount' => 0,
-                'total_income' => 0,
-                'share_cap_deposit' => 0,
-                'share_cap_withdrawal' => 0,
-                'savings_deposit' => 0,
-                'savings_withdrawal' => 0,
-                'time_deposit_amount' => 0,
-                'new_members' => 0,
-                'dismembers' => 0,
+                'loans_released_count' => 0, 'loans_released_amount' => 0,
+                'total_income' => 0, 'share_cap_deposit' => 0, 'share_cap_withdrawal' => 0,
+                'savings_deposit' => 0, 'savings_withdrawal' => 0,
+                'time_deposit_amount' => 0, 'new_members' => 0, 'dismembers' => 0,
             ];
             $logs[$branch] = [
                 'loans' => [], 'share_capital' => [], 'savings' => [],
@@ -60,7 +54,7 @@ class AutoGenerateMonthlyReport extends Command
             ];
         }
 
-        // 3. GATHER DATA (Same as before...)
+        // 3. GATHER DATA
         $loans = Loan::where('status', 'released')->whereBetween('updated_at', [$start, $end])->with(['member.branchService'])->get();
         foreach ($loans as $loan) {
             $b = $this->getBranch($loan->member);
@@ -133,8 +127,6 @@ class AutoGenerateMonthlyReport extends Command
             }
         }
 
-        // 4. AI ANALYSIS
-        // --- CHANGED: Explicit instructions to REMOVE the header from AI output ---
         $prompt = "You are Col. Alexander L. Feria (RET), CPA, MNSA. Analyze the PMPC Branch Data for {$monthName}.\n";
         
         foreach ($stats as $branch => $data) {
@@ -149,7 +141,7 @@ class AutoGenerateMonthlyReport extends Command
 
         $prompt .= "INSTRUCTIONS:\n";
         $prompt .= "1. Output valid HTML (<h3>, <p>, <ul>). Do NOT use Markdown.\n";
-        $prompt .= "2. DO NOT include a Header (To/From/Date/Subject). Start directly with the Executive Summary.\n"; // <--- CRITICAL
+        $prompt .= "2. DO NOT include a Header (To/From/Date/Subject). Start directly with the Executive Summary.\n"; 
         $prompt .= "3. DO NOT sign the document at the bottom. The signature block is already pre-printed.\n";
         $prompt .= "4. Write an 'Executive Summary' comparing the branches.\n";
         $prompt .= "5. Write a 'Branch Analysis' highlighting the top performing branch.\n";
@@ -157,18 +149,27 @@ class AutoGenerateMonthlyReport extends Command
         $prompt .= "7. Write a 'Conclusion'.\n";
 
         $this->info("Contacting Gemini AI...");
-        $aiContent = $gemini->generateContent($prompt);
-        
-        // --- CLEANUP ---
-        $aiContent = str_replace('₱', '&#8369;', $aiContent);
-        // Safety: Remove accidental headers if the AI ignores the instruction
-        $aiContent = str_ireplace(
-            ['From: Chief Financial Analyst', 'To: PMPC Board', 'Subject:', 'Date:'], 
-            '', 
-            $aiContent
-        );
 
-        // 5. GENERATE PDF
+        try {
+            $aiContent = $gemini->generateContent($prompt);
+            
+            $aiContent = str_replace('₱', '&#8369;', $aiContent);
+            
+            $aiContent = preg_replace('/```(html)?/i', '', $aiContent);
+            $aiContent = trim($aiContent);
+
+            $aiContent = str_ireplace(
+                ['From: Chief Financial Analyst', 'To: PMPC Board', 'Subject:', 'Date:', 'Executive Report:'], 
+                '', 
+                $aiContent
+            );
+        } catch (\Exception $e) {
+            Log::error('Gemini AI Report Failed: ' . $e->getMessage());
+            $this->error("AI Generation failed. Using fallback text.");
+            
+            $aiContent = "<h3>Executive Summary</h3><p>The automated AI analysis could not be generated at this time due to an API timeout. Please review the attached numerical data logs for the performance of the branches this month.</p>";
+        }
+
         $pdf = Pdf::loadView('pdf.monthly-report', [
             'stats' => $stats,
             'logs' => $logs,

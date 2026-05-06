@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\Accounting\AccChartofAccountController;
 use App\Http\Controllers\Admin\Accounting\AccEWalletController;
 use App\Http\Controllers\Admin\Accounting\AccGeneralLedgerController;
 use App\Http\Controllers\Admin\Accounting\AccPettyCashController;
+use App\Http\Controllers\Admin\Accounting\AccPpeDepreciationController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -219,6 +220,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             
             // 1. ACCOUNTING CLERK EXCLUSIVE (Full Ledger & Chart Access)
             Route::middleware('can_access:manage_accounting')->group(function () {
+
                 // Chart of Accounts Management
                 Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');
                 Route::get('/chart', [AccChartofAccountController::class, 'index'])->name('chart.index');
@@ -233,6 +235,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 // NEW: Report Generation Routes
                 Route::get('/ledger/statement-of-operation', [AccGeneralLedgerController::class, 'statementOfOperation'])->name('ledger.statement-of-operation');
                 Route::get('/ledger/financial-statement', [AccGeneralLedgerController::class, 'financialStatement'])->name('ledger.financial-statement');
+
+                // PPE Depreciation Management
+                Route::get('/ppe-depreciation', [AccPpeDepreciationController::class, 'index'])->name('ppe.index');
+                Route::post('/ppe-depreciation', [AccPpeDepreciationController::class, 'store'])->name('ppe.store');
+                Route::put('/ppe-depreciation/{id}', [AccPpeDepreciationController::class, 'update'])->name('ppe.update');
+                Route::delete('/ppe-depreciation/{id}', [AccPpeDepreciationController::class, 'destroy'])->name('ppe.destroy');
             });
 
             // 2. BOOKKEEPER & ACCOUNTING CLERK
@@ -250,6 +258,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 Route::post('/petty-cash/log', [AccPettyCashController::class, 'storeLog'])->name('petty.store-log');
                 Route::put('/petty-cash/{id}', [AccPettyCashController::class, 'update'])->name('petty.update');
                 Route::post('/petty-cash/{id}/journalize', [AccPettyCashController::class, 'journalize'])->name('petty.journalize');
+                Route::post('/petty-cash/{id}/update-journal', [AccPettyCashController::class, 'updateJournal'])->name('petty.update-journal');
                 Route::get('/petty-cash/print/{ids}', [AccPettyCashController::class, 'printVoucher'])->name('petty.print');
 
                 // E-Wallet
@@ -303,6 +312,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::middleware('can_access:view_reports')->group(function () {
             Route::get('/reports', [ReportController::class, 'index'])->name('reports');
             Route::get('/reports/{report}/download', [ReportController::class, 'download'])->name('reports.download');
+            Route::post('/reports/generate', [ReportController::class, 'generateReportNow'])->name('reports.generate');
         });
 
         // GROUP C: LOAN MANAGEMENT

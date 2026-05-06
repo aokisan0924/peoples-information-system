@@ -25,7 +25,8 @@ import {
     Layers,
     Landmark,
     Wallet2,
-    Smartphone
+    Smartphone,
+    Briefcase
 } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react"; 
 import { AnimatePresence, motion } from "framer-motion";
@@ -219,9 +220,8 @@ export default function AdminSidebarLayout({ children }) {
                                         </>
                                     )}
                                     
-                                    {canAccess('accounting') && (
-                                        <NavLink name="admin.accounting.chart.index" label="Chart of Accounts" icon={Layers} />
-                                    )}
+                                    {canAccess('accounting') && <NavLink name="admin.accounting.ppe.index" label="PPE Depreciation" icon={Briefcase} />}
+                                    {canAccess('accounting') && <NavLink name="admin.accounting.chart.index" label="Chart of Accounts" icon={Layers} />}
                                 </>
                             )}
                             
