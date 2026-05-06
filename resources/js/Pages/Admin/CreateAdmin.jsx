@@ -14,15 +14,17 @@ const PERMISSIONS_LIST = [
     { id: 'manage_members', label: 'Manage Members', desc: 'Add, edit, and view member profiles.' },
     { id: 'manage_deposits', label: 'Manage Deposits', desc: 'Access Share Capital, Savings, and Time Deposits.' },
     { id: 'view_reports', label: 'View Reports', desc: 'Access analytics and generated PDF reports.' },
-    { id: 'manage_accounting', label: 'Manage Accounting', desc: 'Access General Ledger and Chart of Accounts.' }, // <-- ADDED
+    { id: 'manage_accounting', label: 'Manage Accounting', desc: 'Full access to General Ledger & Chart of Accounts.' },
+    { id: 'access_bank', label: 'Access Bank Records', desc: 'Manage bank deposits and transfers.' }, 
+    { id: 'access_cash_tools', label: 'Access Cash Tools', desc: 'Manage Petty Cash and E-Wallet logs.' }, 
 ];
 
 // DEFAULT PRESETS
 const ROLE_PRESETS = {
-    'super-admin': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits', 'view_reports', 'manage_accounting'],
-    'loan-processor': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits'],
-    'accounting-clerk': ['manage_accounting'], // <-- ADDED
-    'cashier': ['view_loans', 'manage_members', 'manage_deposits'],
+    'super-admin': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits', 'view_reports', 'manage_accounting', 'access_bank', 'access_cash_tools'],
+    'accounting-clerk': ['manage_accounting', 'access_bank', 'access_cash_tools'], 
+    'bookkeeper': ['access_bank', 'access_cash_tools'],
+    'loan-processor-cashier': ['access_cash_tools', 'view_loans', 'manage_members'], // MERGED ROLE
     'admin-officer': ['view_loans', 'manage_members', 'manage_deposits', 'view_reports'],
 };
 
@@ -71,7 +73,7 @@ export default function ManageAdmins({ admins }) {
                         </div>
                         <button 
                             onClick={openCreateModal} 
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-50 font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
                         >
                             <UserPlus size={18} /> 
                             <span>Add New Admin</span>
@@ -129,7 +131,7 @@ export default function ManageAdmins({ admins }) {
                                                         ? 'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-500/20' 
                                                         : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-white/10 dark:text-slate-300 dark:border-white/10'
                                                     }`}>
-                                                        {admin.role.replace('-', ' ')}
+                                                        {admin.role.replace(/-/g, ' ')}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
@@ -178,7 +180,7 @@ export default function ManageAdmins({ admins }) {
                                         
                                         <div className="flex flex-wrap gap-2 text-xs pt-2 border-t border-slate-50 dark:border-white/5">
                                             <div className="px-2 py-1 rounded bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 font-medium">
-                                                {admin.role.replace('-', ' ')}
+                                                {admin.role.replace(/-/g, ' ')}
                                             </div>
                                             <div className="px-2 py-1 rounded bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
                                                 {admin.branch}
@@ -205,14 +207,15 @@ function AdminFormModal({ adminToEdit, onClose }) {
     // Determine initial permissions
     const initialPermissions = isEditing 
         ? (Array.isArray(adminToEdit.permissions) ? adminToEdit.permissions : []) 
-        : ROLE_PRESETS['loan-processor'];
+        : ROLE_PRESETS['loan-processor-cashier'];
 
     const { data, setData, post, patch, processing, errors } = useForm({
         name: adminToEdit?.name || "",
         email: adminToEdit?.email || "",
         password: "",
         password_confirmation: "",
-        role: adminToEdit?.role || "loan-processor",
+        // If editing an old 'loan-processor' or 'cashier', force them into the new merged state in the form
+        role: (adminToEdit?.role === 'loan-processor' || adminToEdit?.role === 'cashier') ? 'loan-processor-cashier' : (adminToEdit?.role || "loan-processor-cashier"),
         branch: adminToEdit?.branch || "Main Office",
         permissions: initialPermissions, 
     });
@@ -280,9 +283,9 @@ function AdminFormModal({ adminToEdit, onClose }) {
                         <InputGroup label="Role Preset" error={errors.role}>
                             <select className="input-field" value={data.role} onChange={handleRoleChange}>
                                 <option value="super-admin">Super Admin (Full Access)</option>
-                                <option value="accounting-clerk">Accounting Clerk</option> {/* <-- ADDED */}
-                                <option value="loan-processor">Loan Processor</option>
-                                <option value="cashier">Cashier</option>
+                                <option value="accounting-clerk">Accounting Clerk</option>
+                                <option value="bookkeeper">Bookkeeper</option>
+                                <option value="loan-processor-cashier">Loan Processor / Cashier</option> {/* MERGED */}
                                 <option value="admin-officer">Admin Officer</option>
                             </select>
                         </InputGroup>

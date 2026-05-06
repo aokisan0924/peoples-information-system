@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AccChartOfAccount;
 use App\Models\AccGeneralLedger;
 use App\Models\AccPettyCashFund;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,112 +15,116 @@ class AccPettyCashController extends Controller
 {
     public function index(Request $request) {
         $currentBranch = $request->user()->branch ?? 'Main Office';
-        $month = $request->input('month', date('m'));
-        $year = $request->input('year', date('Y'));
-        
-        $months = collect(range(1, 12))->map(fn($m) => [
-            'value' => str_pad($m, 2, '0', STR_PAD_LEFT),
-            'label' => Carbon::createFromDate(null, $m, 1)->format('F'),
-        ]);
+        $date = $request->input('date', date('Y-m-d')); // Default to today[cite: 25]
 
-        $start = Carbon::createFromDate($year, $month, 1)->startOfMonth();
-        $end = Carbon::createFromDate($year, $month, 1)->endOfMonth();
-
-        $history = AccPettyCashFund::where('branch', $currentBranch)->where('transactionDate', '<', $start);
+        // Compute Beginning Balance prior to the selected day
+        $history = AccPettyCashFund::where('branch', $currentBranch)->whereDate('transactionDate', '<', $date);
         $beginningBalance = (clone $history)->sum('credit') - (clone $history)->sum('debit');
 
-        $records = AccPettyCashFund::where('branch', $currentBranch)
-                ->whereBetween('transactionDate', [$start, $end])
-                ->orderBy('transactionDate', 'asc')->get();
+        // Fetch only records for the specific day
+        $recordsQuery = AccPettyCashFund::where('branch', $currentBranch)->whereDate('transactionDate', $date);
+        $records = (clone $recordsQuery)->orderBy('created_at', 'asc')->get();
 
-        $chartOfAccounts = AccChartOfAccount::orderBy('accountCode', 'asc')->get();
+        // Compute Ending Balance for the day
+        $dayCredit = (clone $recordsQuery)->sum('credit');
+        $dayDebit = (clone $recordsQuery)->sum('debit');
+        $endingBalance = $beginningBalance + $dayCredit - $dayDebit;
 
         return Inertia::render('Admin/Accounting/PettyCash', [
             'records' => $records,
-            'months' => $months,
-            'chartOfAccounts' => $chartOfAccounts,
+            'chartOfAccounts' => AccChartOfAccount::orderBy('accountCode', 'asc')->get(),
             'beginningBalance' => (float) $beginningBalance,
+            'endingBalance' => (float) $endingBalance,
             'filters' => [
-                'month' => $month, 
-                'year' => $year,
-                'branch' => $currentBranch, 
-                'monthName' => $start->format('F')]
+                'date' => $date, 
+                'branch' => $currentBranch,
+            ]
         ]);
     }
 
-    public function bulkStore(Request $request) {
-        $userBranch = $request->user()->branch ?? 'Main Office';
-        $request->validate(['entries' => 'required|array']);
-    
-        foreach ($request->entries as $entry) {
-            // Force NULL values to 0
-            $debit = floatval($entry['debit'] ?? 0);
-            $credit = floatval($entry['credit'] ?? 0);
+    public function storeLog (Request $request) {
+        $request->validate([
+            'transactions' => 'required|array|min:1',
+            'transactions.*.transactionDate' => 'required|date',
+            'transactions.*.orNumber'        => 'nullable|string',
+            'transactions.*.particulars'     => 'required|string',
+            'transactions.*.debit'           => 'numeric',
+            'transactions.*.credit'          => 'numeric',
+        ]);
 
-            if ($debit == 0 && $credit == 0) continue;
+        DB::transaction(function () use ($request) {
+            $branch = $request->user()->branch ?? 'Main Office';
+            
+            foreach ($request->transactions as $trans) {
+                AccPettyCashFund::create([
+                    'branch'          => $branch,
+                    'transactionDate' => $trans['transactionDate'],
+                    'orNumber'        => $trans['orNumber'] ?? null,
+                    'particulars'     => $trans['particulars'],
+                    'debit'           => floatval($trans['debit'] ?? 0),
+                    'credit'          => floatval($trans['credit'] ?? 0),
+                    'is_posted'       => false, // Flag for Journalizing
+                ]);
+            }
+        });
 
-            AccPettyCashFund::create([
-                'branch' => $userBranch,
-                'transactionDate' => $entry['transactionDate'],
-                'orNumber' => $entry['orNumber'] ?? null,
-                'particulars' => $entry['particulars'],
-                'debit' => $debit,
-                'credit' => $credit,
-            ]);
-        }
-        return redirect()->back()->with('success', 'Petty cash synchronized.');
+        return redirect()->back()->with('success', 'Transactions logged successfully.');
+    }
+
+    public function journalize(Request $request, $id) {
+        $request->validate([
+            'entries' => 'required|array|min:1',
+            'entries.*.accountCode' => 'required|string',
+            'entries.*.debit' => 'numeric',
+            'entries.*.credit' => 'numeric',
+        ]);
+
+        return DB::transaction(function () use ($request, $id) {
+            $record = AccPettyCashFund::findOrFail($id);
+            $userBranch = $request->user()->branch ?? 'Main Office';
+
+            foreach ($request->entries as $entry) {
+                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+
+                AccGeneralLedger::create([
+                    'petty_cash_id'   => $record->id,
+                    'transactionDate' => $record->transactionDate,
+                    'accountCode'     => $entry['accountCode'],
+                    'accountName'     => $account->accountName ?? 'Manual Entry',
+                    'particulars'     => $record->particulars,
+                    'referenceNo'     => $record->orNumber ?? '-',
+                    'debit'           => floatval($entry['debit'] ?? 0),
+                    'credit'          => floatval($entry['credit'] ?? 0),
+                    'branch'          => $userBranch,
+                ]);
+            }
+            $record->update(['is_posted' => true]);
+            return redirect()->back()->with('success', 'Journal Entry created.');
+        });
     }
 
     public function update(Request $request, $id) {
         $validated = $request->validate([
-            'transactionDate' => 'required|date',
-            'orNumber' => 'nullable|string',
-            'particulars' => 'required|string',
-            'debit' => 'numeric',
-            'credit' => 'numeric',
+            'transactionDate' => ['required', 'date'],
+            'orNumber'        => ['nullable', 'string'],
+            'particulars'     => ['required', 'string'],
+            'debit'           => ['numeric'],
+            'credit'          => ['numeric'],
         ]);
-        AccPettyCashFund::findOrFail($id)->update($validated);
-        return redirect()->back();
-    }
 
-    public function journalize(Request $request) {
-        $request->validate([
-            'petty_cash_id' => 'required|exists:acc_petty_cash_funds,id',
-            'debitAccount'  => 'required|exists:acc_chart_of_accounts,accountCode',
-            'creditAccount' => 'required|exists:acc_chart_of_accounts,accountCode',
-        ]);
-    
-        $petty = AccPettyCashFund::findOrFail($request->petty_cash_id);
-        $debitAcc = AccChartOfAccount::where('accountCode', $request->debitAccount)->first();
-        $creditAcc = AccChartOfAccount::where('accountCode', $request->creditAccount)->first();
-        
-        $amount = $petty->debit > 0 ? $petty->debit : $petty->credit;
-    
-        $commonData = [
-            'petty_cash_id'   => $petty->id,
-            'branch'          => $petty->branch,
-            'transactionDate' => $petty->transactionDate,
-            'particulars'     => $petty->particulars,
-            'referenceNo'     => $petty->orNumber ?? '-',
-        ];
-    
-        AccGeneralLedger::create(array_merge($commonData, [
-            'accountCode' => $debitAcc->accountCode,
-            'accountName' => $debitAcc->accountName,
-            'debit'       => $amount,
-            'credit'      => 0,
-        ]));
-    
-        AccGeneralLedger::create(array_merge($commonData, [
-            'accountCode' => $creditAcc->accountCode,
-            'accountName' => $creditAcc->accountName,
-            'debit'       => 0,
-            'credit'      => $amount,
-        ]));
-    
-        $petty->update(['is_posted' => true]);
-    
-        return redirect()->back()->with('success', 'Journal entry posted successfully.');
+        return DB::transaction(function () use ($validated, $id) {
+            $record = AccPettyCashFund::findOrFail($id);
+            $record->update($validated);
+
+            if ($record->is_posted) {
+                AccGeneralLedger::where('petty_cash_id', $record->id)->update([
+                    'transactionDate' => $validated['transactionDate'],
+                    'particulars'     => $validated['particulars'],
+                    'referenceNo'     => $validated['orNumber'] ?? '-',
+                ]);
+            }
+            return redirect()->back()->with('success', 'Record updated.');
+        });
     }
 
     public function printVoucher(Request $request, $ids) {
@@ -128,15 +133,8 @@ class AccPettyCashController extends Controller
 
         foreach ($idArray as $id) {
             $record = AccPettyCashFund::findOrFail($id);
-            
-            $ledgerEntries = AccGeneralLedger::where('petty_cash_id', $record->id)
-                ->orderBy('debit', 'desc')
-                ->get();
-            
-            $vouchers[] = [
-                'record' => $record,
-                'ledgerEntries' => $ledgerEntries 
-            ];
+            $ledgerEntries = AccGeneralLedger::where('petty_cash_id', $record->id)->orderBy('debit', 'desc')->get();
+            $vouchers[] = ['record' => $record, 'ledgerEntries' => $ledgerEntries];
         }
 
         return Inertia::render('Admin/Accounting/PrintVoucher', [

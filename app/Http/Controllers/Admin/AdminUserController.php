@@ -12,9 +12,7 @@ use Inertia\Inertia;
 
 class AdminUserController extends Controller
 {
-    public function create()
-    {
-        // Fetch all admins
+    public function create() {
         $admins = Admin::select('id', 'name', 'email', 'role', 'branch', 'permissions', 'created_at')
             ->orderByDesc('created_at')
             ->get();
@@ -24,16 +22,15 @@ class AdminUserController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
+    public function store(Request $request) {
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:admins',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => ['required', 'string', 'in:super-admin,loan-processor,accounting-clerk,cashier,admin-officer'],
+            'role' => ['required', 'string', 'in:super-admin,loan-processor-cashier,accounting-clerk,admin-officer,bookkeeper'],
             'branch' => 'required|string',
             'permissions' => 'nullable|array',
-            'permissions.*' => ['string', 'in:view_loans,process_loans,manage_members,manage_deposits,view_reports,manage_accounting']
+            'permissions.*' => ['string', 'in:view_loans,process_loans,manage_members,manage_deposits,view_reports,manage_accounting,access_bank,access_cash_tools']
         ]);
 
         Admin::create([
@@ -48,18 +45,17 @@ class AdminUserController extends Controller
         return redirect()->back()->with('success', 'Admin user created successfully.');
     }
 
-    public function update(Request $request, $id)
-    {
+    public function update(Request $request, $id) {
         $admin = Admin::findOrFail($id);
 
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('admins')->ignore($admin->id)],
-            'role' => ['required', 'string', 'in:super-admin,loan-processor,accounting-clerk,cashier,admin-officer'],
+            'role' => ['required', 'string', 'in:super-admin,loan-processor-cashier,accounting-clerk,admin-officer,bookkeeper'],
             'branch' => 'required|string',
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
             'permissions' => 'nullable|array',
-            'permissions.*' => ['string', 'in:view_loans,process_loans,manage_members,manage_deposits,view_reports,manage_accounting']
+            'permissions.*' => ['string', 'in:view_loans,process_loans,manage_members,manage_deposits,view_reports,manage_accounting,access_bank,access_cash_tools']
         ]);
 
         $data = [

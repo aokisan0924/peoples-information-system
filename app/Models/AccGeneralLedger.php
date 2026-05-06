@@ -10,7 +10,8 @@ class AccGeneralLedger extends Model
     protected $table = 'acc_general_ledgers';
     protected $fillable = [
         'branch', 'referenceNo', 'memberId', 'accountCode', 'accountName', 
-        'debit', 'credit', 'particulars', 'transactionDate', 'petty_cash_id'
+        'debit', 'credit', 'particulars', 'transactionDate', 'petty_cash_id',
+        'e_wallet_id'
     ];
     
 }

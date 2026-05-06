@@ -34,7 +34,7 @@ export default function SidebarLayout({ children }) {
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
     const { url, props } = usePage();
-    const pisVersion = props.pisVersion || "1.0.0";
+    const pisVersion = props.pisVersion || "2.0.0";
 
     const auth = props.auth || {};
     const memberSource = auth.member || auth.user || {};

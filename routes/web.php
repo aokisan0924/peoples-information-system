@@ -213,38 +213,52 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('auth:admin')->group(function () {
 
         // ==========================================
-        // ACCOUNTING CLERK EXCLUSIVE ZONE
+        // ACCOUNTING MODULE (GRANULAR ACCESS)
         // ==========================================
-        Route::middleware('can_access:manage_accounting')->prefix('accounting')->name('accounting.')->group(function () {
+        Route::prefix('accounting')->name('accounting.')->group(function () {
             
-            // 1. Chart of Accounts Management
-            Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');
-            Route::get('/chart', [AccChartofAccountController::class, 'index'])->name('chart.index');
-            Route::post('/chart/import', [AccChartofAccountController::class, 'import'])->name('chart.import');
-            Route::post('/chart', [AccChartofAccountController::class, 'store'])->name('chart.store');
-            Route::put('/chart/{id}', [AccChartofAccountController::class, 'update'])->name('chart.update');
-            Route::delete('/chart/{id}', [AccChartofAccountController::class, 'destroy'])->name('chart.destroy');
+            // 1. ACCOUNTING CLERK EXCLUSIVE (Full Ledger & Chart Access)
+            Route::middleware('can_access:manage_accounting')->group(function () {
+                // Chart of Accounts Management
+                Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');
+                Route::get('/chart', [AccChartofAccountController::class, 'index'])->name('chart.index');
+                Route::post('/chart/import', [AccChartofAccountController::class, 'import'])->name('chart.import');
+                Route::post('/chart', [AccChartofAccountController::class, 'store'])->name('chart.store');
+                Route::put('/chart/{id}', [AccChartofAccountController::class, 'update'])->name('chart.update');
+                Route::delete('/chart/{id}', [AccChartofAccountController::class, 'destroy'])->name('chart.destroy');
 
-            // General Ledger
-            Route::get('/ledger', [AccGeneralLedgerController::class, 'index'])->name('ledger.index');
+                // General Ledger & Reports
+                Route::get('/ledger', [AccGeneralLedgerController::class, 'index'])->name('ledger.index');
+                
+                // NEW: Report Generation Routes
+                Route::get('/ledger/statement-of-operation', [AccGeneralLedgerController::class, 'statementOfOperation'])->name('ledger.statement-of-operation');
+                Route::get('/ledger/financial-statement', [AccGeneralLedgerController::class, 'financialStatement'])->name('ledger.financial-statement');
+            });
 
-            // Bank Records
-            Route::get('/bank-records', [AccBankRecordController::class, 'index'])->name('bank.index');
-            Route::post('/bank-records/bulk', [AccBankRecordController::class, 'bulkStore'])->name('bank.bulk-store');
-            Route::put('/bank-records/{id}', [AccBankRecordController::class, 'update'])->name('bank.update');
+            // 2. BOOKKEEPER & ACCOUNTING CLERK
+            Route::middleware('can_access:access_bank')->group(function () {
+                // Bank Records
+                Route::get('/bank-records', [AccBankRecordController::class, 'index'])->name('bank.index');
+                Route::post('/bank-records/bulk', [AccBankRecordController::class, 'bulkStore'])->name('bank.bulk-store');
+                Route::put('/bank-records/{id}', [AccBankRecordController::class, 'update'])->name('bank.update');
+            });
 
-            // Petty Cash Fund
-            Route::get('/petty-cash', [AccPettyCashController::class, 'index'])->name('petty.index');
-            Route::post('/petty-cash/bulk', [AccPettyCashController::class, 'bulkStore'])->name('petty.bulk-store');
-            Route::put('/petty-cash/{id}', [AccPettyCashController::class, 'update'])->name('petty.update');
+            // 3. CASH TOOLS (Loan Processor, Cashier, Bookkeeper, Clerk)
+            Route::middleware('can_access:access_cash_tools')->group(function () {
+                // Petty Cash Fund
+                Route::get('/petty-cash', [AccPettyCashController::class, 'index'])->name('petty.index');
+                Route::post('/petty-cash/log', [AccPettyCashController::class, 'storeLog'])->name('petty.store-log');
+                Route::put('/petty-cash/{id}', [AccPettyCashController::class, 'update'])->name('petty.update');
+                Route::post('/petty-cash/{id}/journalize', [AccPettyCashController::class, 'journalize'])->name('petty.journalize');
+                Route::get('/petty-cash/print/{ids}', [AccPettyCashController::class, 'printVoucher'])->name('petty.print');
 
-            Route::post('/petty-cash/journalize', [AccPettyCashController::class, 'journalize'])->name('petty.journalize');
-            Route::get('/petty-cash/print/{ids}', [AccPettyCashController::class, 'printVoucher'])->name('petty.print');
-
-            // E-Wallet
-            Route::get('/e-wallet', [AccEWalletController::class, 'index'])->name('ewallet.index');
-            Route::post('/e-wallet/bulk', [AccEWalletController::class, 'bulkStore'])->name('ewallet.bulk-store');
-            Route::put('/e-wallet/{id}', [AccEWalletController::class, 'update'])->name('ewallet.update');
+                // E-Wallet
+                Route::get('/e-wallet', [AccEWalletController::class, 'index'])->name('ewallet.index');
+                Route::post('/e-wallet/log', [AccEWalletController::class, 'storeLog'])->name('ewallet.store-log');
+                Route::put('/e-wallet/{id}', [AccEWalletController::class, 'update'])->name('ewallet.update');
+                Route::post('/e-wallet/{id}/journalize', [AccEWalletController::class, 'journalize'])->name('ewallet.journalize');
+                Route::get('/e-wallet/print/{ids}', [AccEWalletController::class, 'printVoucher'])->name('ewallet.print');
+            });
         });
 
         // 1. Dashboard & Security

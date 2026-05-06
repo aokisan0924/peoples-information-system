@@ -39,6 +39,7 @@ export default function AdminSidebarLayout({ children }) {
     const userRole = (auth?.user?.role || "").toLowerCase();
     const isSuperAdmin = userRole === 'super-admin';
     const isAccountingClerk = userRole === 'accounting-clerk';
+    const isBookkeeper = userRole === 'bookkeeper';
     
     const permissions = auth?.user?.permissions || [];
 
@@ -56,6 +57,11 @@ export default function AdminSidebarLayout({ children }) {
                 return permissions.includes('view_reports');
             case 'accounting':
                 return permissions.includes('manage_accounting');
+            // --- NEW: GRANULAR ACCOUNTING PERMISSIONS ---
+            case 'bank':
+                return permissions.includes('access_bank');
+            case 'cash_tools':
+                return permissions.includes('access_cash_tools');
             case 'create-user':
                 return false; 
             default:
@@ -188,25 +194,39 @@ export default function AdminSidebarLayout({ children }) {
                         <nav className="space-y-1.5">
                             <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2">Main</p>
                             
-                            {/* DASHBOARD (Hidden from Accounting Clerk) */}
-                            {!isAccountingClerk && (
+                            {/* DASHBOARD (Hidden from strict backend roles) */}
+                            {(!isAccountingClerk && !isBookkeeper) && (
                                 <NavLink name="admin.dashboard" label="Dashboard" icon={LayoutDashboard} />
                             )}
 
-                            {/* ACCOUNTING SECTION (Only visible if they have permission) */}
-                            {canAccess('accounting') && (
+                            {/* ACCOUNTING SECTION (Granularly displayed based on available features) */}
+                            {(canAccess('accounting') || canAccess('bank') || canAccess('cash_tools')) && (
                                 <>
                                     <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Accounting</p>
-                                    <NavLink name="admin.accounting.ledger.index" label="General Ledger" icon={BookOpen} />
-                                    <NavLink name="admin.accounting.bank.index" label="Bank Records" icon={Landmark} />
-                                    <NavLink name="admin.accounting.petty.index" label="Petty Cash Fund" icon={Wallet2} />
-                                    <NavLink name="admin.accounting.ewallet.index" label="E-Wallet Logs" icon={Smartphone} />
-                                    <NavLink name="admin.accounting.chart.index" label="Chart of Accounts" icon={Layers} />
+                                    
+                                    {canAccess('accounting') && (
+                                        <NavLink name="admin.accounting.ledger.index" label="General Ledger" icon={BookOpen} />
+                                    )}
+                                    
+                                    {canAccess('bank') && (
+                                        <NavLink name="admin.accounting.bank.index" label="Bank Records" icon={Landmark} />
+                                    )}
+                                    
+                                    {canAccess('cash_tools') && (
+                                        <>
+                                            <NavLink name="admin.accounting.petty.index" label="Petty Cash Fund" icon={Wallet2} />
+                                            <NavLink name="admin.accounting.ewallet.index" label="E-Wallet Logs" icon={Smartphone} />
+                                        </>
+                                    )}
+                                    
+                                    {canAccess('accounting') && (
+                                        <NavLink name="admin.accounting.chart.index" label="Chart of Accounts" icon={Layers} />
+                                    )}
                                 </>
                             )}
                             
-                            {/* TRANSACTIONS SECTION (Hide header if Clerk) */}
-                            {!isAccountingClerk && (
+                            {/* TRANSACTIONS SECTION (Hidden from strict backend roles) */}
+                            {(!isAccountingClerk && !isBookkeeper) && (
                                 <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Transactions</p>
                             )}
 
@@ -268,8 +288,8 @@ export default function AdminSidebarLayout({ children }) {
                                 </>
                             )}
 
-                            {/* CONTENT SECTION (Hidden from Accounting Clerk) */}
-                            {!isAccountingClerk && (
+                            {/* CONTENT SECTION */}
+                            {(!isAccountingClerk && !isBookkeeper) && (
                                 <>
                                     <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Content</p>
                                     <NavLink name="admin.news.index" label="News & Updates" icon={Megaphone} />
@@ -295,7 +315,7 @@ export default function AdminSidebarLayout({ children }) {
                         </nav>
                         
                         <div className="mt-auto pt-6 text-[10px] text-slate-400 dark:text-white/20 text-center">
-                            Admin Console v1.0
+                            Admin Console v2.0
                         </div>
                     </div>
                 </aside>
@@ -335,7 +355,7 @@ export default function AdminSidebarLayout({ children }) {
                                 >
                                     <div className="hidden md:block text-right leading-tight">
                                         <p className="text-xs font-bold text-slate-900 dark:text-white">{auth?.user?.name || 'Administrator'}</p>
-                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace('-', ' ') || 'Staff'}</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace(/-/g, ' ') || 'Staff'}</p>
                                     </div>
                                     <div className="h-9 w-9 rounded-full bg-emerald-600 border-2 border-white dark:border-emerald-500/30 flex items-center justify-center text-white font-bold shadow-md">
                                         {auth?.user?.name ? auth.user.name.charAt(0) : 'A'}
@@ -354,7 +374,7 @@ export default function AdminSidebarLayout({ children }) {
                                         >
                                             <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5 md:hidden">
                                                 <p className="text-xs font-bold text-slate-900 dark:text-white">{auth?.user?.name || 'Administrator'}</p>
-                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace('-', ' ') || 'Staff'}</p>
+                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace(/-/g, ' ') || 'Staff'}</p>
                                             </div>
                                             
                                             <div className="p-1">
