@@ -360,14 +360,22 @@ export default function Loan() {
     };
 
     // 3. Combined Balancing Logic (Strict Debit = Credit)
-    const totalDebit = activeEntries.filter(e => e.type === 'debit').reduce((sum, e) => sum + e.amount, 0)
+    const totalDebit = useMemo(() => {
+        const rawSum = activeEntries.filter(e => e.type === 'debit').reduce((sum, e) => sum + e.amount, 0)
                     + manualEntries.reduce((sum, e) => sum + toNumber(e.debit), 0);
+        return Math.round(rawSum * 100) / 100;
+    }, [activeEntries, manualEntries]);
 
-    const totalCredit = activeEntries.filter(e => e.type === 'credit').reduce((sum, e) => sum + e.amount, 0)
+    const totalCredit = useMemo(() => {
+        const rawSum = activeEntries.filter(e => e.type === 'credit').reduce((sum, e) => sum + e.amount, 0)
                     + manualEntries.reduce((sum, e) => sum + toNumber(e.credit), 0);
+        return Math.round(rawSum * 100) / 100;
+    }, [activeEntries, manualEntries]);
 
     // True Accounting Balance: Debits must perfectly equal Credits
-    const isBalanced = totalDebit === totalCredit && totalDebit > 0;
+    const isBalanced = useMemo(() => {
+        return Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0;
+    }, [totalDebit, totalCredit]);
 
     const loadData = async (page = 1) => {
         if (loading) return;

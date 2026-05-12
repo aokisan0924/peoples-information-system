@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Admin\Accounting;
 
 use App\Http\Controllers\Controller;
 use App\Models\AccPpeDepreciation;
+use App\Models\AccGeneralLedger;
+use App\Models\AccChartOfAccount;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
 
 class AccPpeDepreciationController extends Controller
 {
@@ -22,13 +25,7 @@ class AccPpeDepreciationController extends Controller
                 ->orderBy('date_acquired', 'asc')
                 ->get();
 
-        $categories = [
-            'Transport Equipment', 
-            'Furniture & Fixtures', 
-            'Office Equipment', 
-            'Leasehold Improvt', 
-            'ICT Equipment'
-        ];
+        $categories = ['Transport Equipment', 'Furniture & Fixtures', 'Office Equipment', 'Leasehold Improvt', 'ICT Equipment'];
 
         $processedData = [];
         foreach ($categories as $cat) {
@@ -37,28 +34,20 @@ class AccPpeDepreciationController extends Controller
 
         foreach ($ppes as $ppe) {
             $acquiredDate = Carbon::parse($ppe->date_acquired);
-            
             $acquiredMonth = $acquiredDate->copy()->startOfMonth();
             $targetMonth = Carbon::createFromDate($year, $month, 1)->startOfMonth();
 
-            $monthsElapsed = $acquiredMonth->lessThanOrEqualTo($targetMonth)
-                ? $acquiredMonth->diffInMonths($targetMonth)
-                : 0;
-                
+            $monthsElapsed = $acquiredMonth->lessThanOrEqualTo($targetMonth) ? $acquiredMonth->diffInMonths($targetMonth) : 0;
             $maxMonths = $ppe->life_years * 12;
             
-            if ($monthsElapsed > $maxMonths) {
-                $monthsElapsed = $maxMonths;
-            }
+            $monthlyDeprn = ($monthsElapsed > 0 && $monthsElapsed <= $maxMonths) ? ($ppe->amount / $maxMonths) : 0;
+            
+            if ($monthsElapsed > $maxMonths) $monthsElapsed = $maxMonths;
 
-            $monthlyDeprn = $ppe->amount / $maxMonths;
-            $totalDeprn = $monthlyDeprn * $monthsElapsed;
+            $totalDeprn = ($ppe->amount / $maxMonths) * $monthsElapsed;
             $netAmount = $ppe->amount - $totalDeprn;
 
-            // Ensure category exists
-            if (!isset($processedData[$ppe->category])) {
-                $processedData[$ppe->category] = [];
-            }
+            if (!isset($processedData[$ppe->category])) $processedData[$ppe->category] = [];
 
             $processedData[$ppe->category][] = [
                 'id' => $ppe->id,
@@ -73,50 +62,96 @@ class AccPpeDepreciationController extends Controller
             ];
         }
 
+        $transportRef = "DEPR-TRANS-{$year}-{$month}";
+        $othersRef = "DEPR-OTHERS-{$year}-{$month}";
+
+        $journalStatus = [
+            'transport' => AccGeneralLedger::where('referenceNo', $transportRef)->where('branch', $currentBranch)->exists(),
+            'others' => AccGeneralLedger::where('referenceNo', $othersRef)->where('branch', $currentBranch)->exists(),
+        ];
+
         return Inertia::render('Admin/Accounting/PPEDepreciation', [
             'data' => $processedData,
             'categories' => $categories,
+            'chartOfAccounts' => AccChartOfAccount::orderBy('accountCode', 'asc')->get(),
+            'journalStatus' => $journalStatus,
             'filters' => [
                 'branch' => $currentBranch,
-                'month' => $month,
+                'month' => str_pad($month, 2, '0', STR_PAD_LEFT),
                 'year' => $year,
                 'monthName' => $selectedDate->format('F'),
             ]
         ]);
     }
 
-    public function store(Request $request) {
+    public function journalize(Request $request) {
         $request->validate([
-            'category' => 'required|string',
-            'date_acquired' => 'required|date',
-            'particular' => 'required|string',
-            'amount' => 'required|numeric|min:0',
-            'life_years' => 'required|numeric|min:1',
+            'month' => 'required',
+            'year' => 'required',
+            'type' => 'required|in:transport,others',
+            'entries' => 'required|array|min:1'
         ]);
 
-        AccPpeDepreciation::create([
-            'branch' => $request->user()->branch ?? 'Main Office',
-            'category' => $request->category,
-            'date_acquired' => $request->date_acquired,
-            'particular' => $request->particular,
-            'amount' => $request->amount,
-            'life_years' => $request->life_years,
-        ]);
+        return DB::transaction(function () use ($request) {
+            $branch = $request->user()->branch ?? 'Main Office';
+            $ref = $request->type === 'transport' ? "DEPR-TRANS-{$request->year}-{$request->month}" : "DEPR-OTHERS-{$request->year}-{$request->month}";
+            $date = Carbon::createFromDate($request->year, $request->month, 1)->endOfMonth()->format('Y-m-d');
+            
+            $particulars = $request->type === 'transport' 
+                ? "Monthly Depreciation - Transport Equipment ({$request->month}/{$request->year})" 
+                : "Monthly Depreciation - Other PPE ({$request->month}/{$request->year})";
 
-        return redirect()->back()->with('success', 'PPE added successfully.');
+            // Delete old entries if this is an update
+            AccGeneralLedger::where('referenceNo', $ref)->where('branch', $branch)->delete();
+
+            foreach ($request->entries as $entry) {
+                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+                AccGeneralLedger::create([
+                    'transactionDate' => $date,
+                    'accountCode'     => $entry['accountCode'],
+                    'accountName'     => $account->accountName ?? 'Manual Entry',
+                    'particulars'     => $particulars,
+                    'referenceNo'     => $ref,
+                    'debit'           => floatval($entry['debit'] ?? 0),
+                    'credit'          => floatval($entry['credit'] ?? 0),
+                    'branch'          => $branch,
+                ]);
+            }
+            return redirect()->back()->with('success', 'Depreciation journalized successfully.');
+        });
+    }
+
+    public function storeBulk(Request $request) {
+        $request->validate([
+        'assets' => ['required', 'array', 'min:1'],
+        'assets.*.category' => ['required', 'string'], 
+        'assets.*.date_acquired' => ['required', 'date'],
+        'assets.*.particular' => ['required', 'string'], 
+        'assets.*.amount' => ['required', 'numeric', 'min:0'],
+        'assets.*.life_years' => ['required', 'numeric', 'min:1'],
+    ]);
+
+        DB::transaction(function () use ($request) {
+            $branch = $request->user()->branch ?? 'Main Office';
+
+            foreach ($request->assets as $asset) {
+                AccPpeDepreciation::create([
+                    'branch' => $branch,
+                    'category' => $asset['category'],
+                    'date_acquired' => $asset['date_acquired'],
+                    'particular' => $asset['particular'],
+                    'amount' => $asset['amount'],
+                    'life_years' => $asset['life_years'],
+                ]);
+            }
+        });
+
+        return redirect()->back()->with('success', 'PPE Assets added successfully.');
     }
 
     public function update(Request $request, $id) {
         $record = AccPpeDepreciation::findOrFail($id);
-        
-        $request->validate([
-            'category' => 'required|string',
-            'date_acquired' => 'required|date',
-            'particular' => 'required|string',
-            'amount' => 'required|numeric|min:0',
-            'life_years' => 'required|numeric|min:1',
-        ]);
-
+        $request->validate(['category' => 'required|string', 'date_acquired' => 'required|date', 'particular' => 'required|string', 'amount' => 'required|numeric|min:0', 'life_years' => 'required|numeric|min:1']);
         $record->update($request->only('category', 'date_acquired', 'particular', 'amount', 'life_years'));
         return redirect()->back()->with('success', 'PPE updated successfully.');
     }

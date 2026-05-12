@@ -154,8 +154,8 @@ export default function EWallet({ records, chartOfAccounts, beginningBalance, en
                                 <th className="px-6 py-5">Reference</th>
                                 <th className="px-6 py-5">Particulars</th>
                                 <th className="px-6 py-5">Wallet</th>
-                                <th className="px-6 py-5 text-right">Out (DR)</th>
-                                <th className="px-6 py-5 text-right">In (CR)</th>
+                                <th className="px-6 py-5 text-right">DR</th>
+                                <th className="px-6 py-5 text-right">CR</th>
                                 <th className="px-6 py-5 text-right bg-emerald-400/5 text-emerald-500">Balance</th>
                                 <th className="px-6 py-5 text-center">Actions</th>
                             </tr>
@@ -255,8 +255,8 @@ export default function EWallet({ records, chartOfAccounts, beginningBalance, en
                                         <div>
                                             <label className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">Type</label>
                                             <select value={log.amountType} onChange={e => handleLogChange(log.id, 'amountType', e.target.value)} className="w-full bg-slate-800 border-0 rounded-xl mt-1 text-sm font-bold focus:ring-emerald-500">
-                                                <option value="credit">Cash IN (Credit)</option>
-                                                <option value="debit">Cash OUT (Debit)</option>
+                                                <option value="credit">CR</option>
+                                                <option value="debit">DR</option>
                                             </select>
                                         </div>
                                     </div>

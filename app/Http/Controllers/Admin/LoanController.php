@@ -124,6 +124,14 @@ class LoanController extends Controller
         $capCon = CapitalContribution::where('reference_number', $loanReference)->value('amount') ?? 0;
         $membershipFee = MembershipPayment::where('reference_number', $loanReference)->value('amount') ?? 0; 
 
+        if (strtolower($loan->status) === 'released') {
+            $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
+                ->orderBy('debit','desc')
+                ->get();
+        } else {
+            $journalEntries = $loan->journal_entries ?? [];
+        }
+
         $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
             ->orderBy('debit','desc')
             ->get();
@@ -214,27 +222,33 @@ class LoanController extends Controller
 
     public function downloadAccountingEntry(Request $request, string $loanReference) {
         $loan = Loan::with(['member', 'processor'])->where('loanReference', $loanReference)->firstOrFail();
+        $memberName = $loan->member->firstName . ', ' . $loan->member->lastName;
         
-        // Fetch the exact journal entries saved to the database
-        $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
-            ->orderBy('debit', 'desc')
-            ->orderBy('id', 'asc')
-            ->get();
-            
+        if (strtolower($loan->status) === 'released') {
+            $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
+                ->orderBy('debit', 'desc')
+                ->orderBy('id', 'asc')
+                ->get();
+        } else {
+            $journalEntries = collect($loan->journal_entries ?? [])->map(function ($item) {
+                return (object) $item;
+            })->sortByDesc('debit')->values();
+        }
+        
         $totalDebits = $journalEntries->sum('debit');
         $totalCredits = $journalEntries->sum('credit');
 
         $data = [
-            'coopName'         => "PEOPLE'S MULTI-PURPOSE COOPERATIVE",
-            'loanRef'          => $loan->loanReference,
-            'lvNo'             => $loan->lrvNumber ?? '—',
-            'date'             => ($loan->created_at ? Carbon::parse($loan->created_at) : now())->format('d-M-Y'),
-            'borrowerName'     => strtoupper(($loan->member->firstName ?? '').' '.($loan->member->middleName ?? '').' '.($loan->member->lastName ?? '')),
-            'particulars'      => 'To record Loan Application - ' . $loan->loanClassification,
-            'entries'          => $journalEntries,
-            'totalDebits'      => $totalDebits,
-            'totalCredits'     => $totalCredits,
-            'processedBy'      => $loan->processor ? strtoupper($loan->processor->name) : 'SYSTEM PROCESSOR',
+            'coopName' => "PEOPLE'S MULTI-PURPOSE COOPERATIVE",
+            'loanRef'  => $loan->loanReference,
+            'lvNo' => $loan->lrvNumber ?? '—',
+            'date' => ($loan->created_at ? Carbon::parse($loan->created_at) : now())->format('d-M-Y'),
+            'borrowerName' => strtoupper(($loan->member->firstName ?? '').' '.($loan->member->middleName ?? '').' '.($loan->member->lastName ?? '')),
+            'particulars' => "Loan Release of {$memberName} - {$loan->loanType}",
+            'entries' => $journalEntries,
+            'totalDebits' => $totalDebits,
+            'totalCredits' => $totalCredits,
+            'processedBy' => $loan->processor ? strtoupper($loan->processor->name) : 'SYSTEM PROCESSOR',
         ];
 
         $pdf = Pdf::loadView('pdf.loan-accounting-entry', $data)->setPaper('A4', 'portrait');
@@ -243,7 +257,7 @@ class LoanController extends Controller
 
     public function compute(Request $request) {
         $data = $request->validate([
-            'category' => ['nullable','string','max:100'], // default ACTIVE_PENSIONER
+            'category' => ['nullable','string','max:100'],
             'netProceeds' =>  ['required','numeric','min:1'],
             'capCon' => ['nullable', 'numeric','min:0'],
             'membershipFee' => ['nullable','numeric','min:0'],
@@ -360,7 +374,7 @@ class LoanController extends Controller
             'capCon' => ['nullable','numeric','min:0'],
             'membershipFee' => ['nullable','numeric','min:0'],
             'grossAmount' => ['required','numeric','min:0'],
-            'loanAmount' => ['required','numeric','min:0'], // Principal
+            'loanAmount' => ['required','numeric','min:0'],
             'monthlyAmortization' => ['required','numeric','min:0'],
             
             // Rates for Ledger PDF
@@ -382,8 +396,24 @@ class LoanController extends Controller
         $months = (int)$data['termYears'] * 12;
         $income  = $data['grossAmount'] - $data['netProceeds'];
         $percentIncome = $data['grossAmount'] > 0 ? ($income / $data['grossAmount']) * 100 : 0;
-
         $appDate = Carbon::parse($data['applicationDate'])->toDateTimeString();
+
+
+        $pendingEntries = [];
+        if (!empty($data['journalEntries'])) {
+            foreach ($data['journalEntries'] as $entry) {
+                if ($entry['debit'] == 0 && $entry['credit'] == 0)
+                    continue;
+                $chartAccount = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+                $pendingEntries[] = [
+                    'accountCode' => $entry['accountCode'],
+                    'accountName' => $chartAccount ? $chartAccount->accountName : 'Unknown Account',
+                    'debit' => round($entry['debit'], 2),
+                    'credit' => round($entry['credit'], 2),
+                ];
+            }
+        }
+
         // Save loan
         $loan = Loan::create([
             'memberId' => $data['memberId'],
@@ -410,6 +440,7 @@ class LoanController extends Controller
             'processed_by' => Auth::guard('admin')->id(),
 
             'advanceInterestMonths' => 2,
+            'journal_entries' => $pendingEntries,
             'created_at' => $appDate,
             'updated_at' => $appDate,
         ]);
@@ -438,33 +469,6 @@ class LoanController extends Controller
                 'created_at' => $appDate,
                 'updated_at' => $appDate,
             ]);
-        }
-
-        if (!empty($data['journalEntries'])) {
-            $currentBranch = Auth::guard('admin')->user()->branch ?? 'Main Office';
-            foreach ($data['journalEntries'] as $entry) {
-
-                if ($entry['debit'] == 0 && $entry['credit'] == 0) {
-                    continue;
-                }
-
-                $chartAccount = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-                $accountName = $chartAccount ? $chartAccount->accountName : 'Unknown Account';
-
-                AccGeneralLedger::create([
-                    'branch'          => $currentBranch,
-                    'referenceNo'     => $loan->loanReference,
-                    'memberId'        => $loan->memberId,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $accountName,
-                    'debit'           => round($entry['debit'], 2),
-                    'credit'          => round($entry['credit'], 2),
-                    'particulars'     => 'Loan Application - ' . $data['loanType'],
-                    'transactionDate' => $appDate,
-                    'created_at'      => $appDate,
-                    'updated_at'      => $appDate,
-                ]);
-            }
         }
 
         return redirect()->route('admin.loans.showLoan', ['loanReference' => $loan->loanReference]);
@@ -640,25 +644,22 @@ class LoanController extends Controller
         ->firstOrFail();
 
         if (strtolower((string) $loan->status) !== 'pending') {
-            return response()->json([
-                'message' => 'Only pending loans can be approved',
-            ], 422);
+            return response()->json(['message' => 'Only pending loans can be approved'], 422);
         }
 
         $member = $loan->member;
         $branchService = $this->getBranchServiceName($member);
 
-        // 1) Get the human-readable labels (e.g. "2 latest payslips")
+        // 1) Get requirements
         $requiredPreLabels = $this->mapPreRequirementsByBranchService((string) $branchService);
 
-        // 2) Convert labels to the same docsType keys used when uploading
-        //    e.g. "2 latest payslips" → "2-latest-payslips"
+        // 2) Map to keys (e.g. "2-latest-payslips")
         $requiredPre = array_map(
             fn (string $label) => $this->makeRequirementKey($label),
             $requiredPreLabels
         );
 
-        // 3) Get what we actually have in the DB for this loan
+        // 3) Get uploaded document types
         $havePre = LoanDocuments::where('loanId', $loan->id)
             ->pluck('docsType')
             ->filter()
@@ -666,28 +667,40 @@ class LoanController extends Controller
             ->values()
             ->all();
 
-        // 4) Compare required keys vs. existing keys
-        if (!$this->hasAllRequired($requiredPre, $havePre)) {
+        // 4) Check for missing documents
+        $missingDocs = array_diff($requiredPre, $havePre);
+
+        if (!empty($missingDocs)) {
+            // Find the original human-readable labels for the missing keys to show in the error
+            $missingLabels = array_filter($requiredPreLabels, function($label) use ($missingDocs) {
+                return in_array($this->makeRequirementKey($label), $missingDocs);
+            });
+
             return response()->json([
-                'message' => 'Please complete all pre-approval documents first.',
+                'message' => 'Missing documents: ' . implode(', ', $missingLabels),
+                'missing_keys' => array_values($missingDocs)
             ], 422);
         }
-        // 1. GENERATE LRV (moved from release)
-        $maxLrv = Loan::max('lrvNumber');
+
+        // 5) Generate LRV Number
+        // Use raw query to ensure we get the mathematical max even if it's a string column
+        $maxLrv = Loan::whereNotNull('lrvNumber')->orderByRaw('CAST(lrvNumber AS UNSIGNED) DESC')->value('lrvNumber');
         $nextLrv = $maxLrv ? ((int)$maxLrv + 1) : 1;
         $formattedLrv = str_pad($nextLrv, 6, '0', STR_PAD_LEFT);
 
+        // 6) Update Loan
         $loan->status = 'approved';
         $loan->downloadsAcknowledged = false;
         $loan->processed_by = Auth::guard('admin')->id();
         $loan->lrvNumber = $formattedLrv;
         $loan->save();
 
-        MemberNotification::created([
+        // 7) Notify Member
+        MemberNotification::create([
             'memberId' => $loan->memberId,
             'title' => 'Loan Approved',
             'message' => sprintf(
-                'Your loan application (Ref: %s) has been approved. Please review the details in your portal.',
+                'Your loan application (Ref: %s) has been approved. Please review and sign the documents in your portal.',
                 $loan->loanReference
             ),
             'type' => 'loan',
@@ -695,7 +708,7 @@ class LoanController extends Controller
             'linkUrl' => route('member.loans.index')
         ]);
 
-        return response()->json(['message' => 'Loan approved']);
+        return response()->json(['message' => 'Loan approved successfully', 'lrv' => $formattedLrv]);
     }
 
     public function decline(Request $request, string $loanReference) {
@@ -732,8 +745,8 @@ class LoanController extends Controller
 
     public function release(Request $request, string $loanReference) {
         $loan = Loan::with('postApprovalDocuments')
-        ->where('loanReference', $loanReference)
-        ->firstOrFail();
+            ->where('loanReference', $loanReference)
+            ->firstOrFail();
 
         if (strtolower((string)$loan->status) !== 'approved') {
             return response()->json(['message' => 'Only approved loans can be released'], 422);
@@ -745,7 +758,6 @@ class LoanController extends Controller
 
         $requiredPost = $this->postTypes();
 
-        // read from post_approval_documents (NO phase filter)
         $havePost = PostApprovalDocuments::where('loanId', $loan->id)
             ->pluck('docsType')
             ->unique()
@@ -759,8 +771,9 @@ class LoanController extends Controller
         }
 
         $now = now();
+        $memberName = $loan->member->firstName . ', ' . $loan->member->lastName;
 
-        $postDate = $now->day <= 3
+        $capConDate = $now->day <= 3
             ? $now->copy()
             : $now->copy()->startOfMonth()->addMonth();
 
@@ -770,8 +783,8 @@ class LoanController extends Controller
             ->where('status', 'Pending')
             ->update([
                 'is_paid' => true,
-                'status'  => 'Posted',
-                'paid_at' => $postDate,
+                'status' => 'Posted',
+                'paid_at' => $capConDate,
                 'processed_by' => Auth::guard('admin')->id()
             ]);
 
@@ -783,8 +796,26 @@ class LoanController extends Controller
                 'is_paid' => true,
                 'status'  => 'Posted',
                 'paid_at' => $now,
-                
             ]);
+
+        if (!empty($loan->journal_entries)) {
+            $currentBranch = Auth::guard('admin')->user()->branch ?? 'Main Office';
+            $applicationDate = $loan->created_at;
+
+            foreach ($loan->journal_entries as $entry) {
+                AccGeneralLedger::create([
+                    'branch' => $currentBranch,
+                    'referenceNo' => $loan->loanReference,
+                    'memberId' => $loan->memberId,
+                    'accountCode' => $entry['accountCode'],
+                    'accountName' => $entry['accountName'] ?? 'Unknown Account',
+                    'debit' => round($entry['debit'], 2),
+                    'credit' => round($entry['credit'], 2),
+                    'particulars'     => "Loan Release of {$memberName} - {$loan->loanType}",
+                    'transactionDate' => $applicationDate,
+                ]);
+            }
+        }
 
         $loan->status = 'released';
         $loan->processed_by = Auth::guard('admin')->id();
@@ -797,9 +828,9 @@ class LoanController extends Controller
                 'Your loan (Ref: %s) has been released. Please check your crediting details.',
                 $loan->loanReference
             ),
-        'type'     => 'loan',
-            'isRead'   => false,
-            'linkUrl'  => route('member.loans.index'),
+            'type' => 'loan',
+            'isRead' => false,
+            'linkUrl' => route('member.loans.index'),
         ]);
 
         return response()->json(['message' => 'Loan released']);

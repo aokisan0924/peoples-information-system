@@ -24,7 +24,7 @@ const ROLE_PRESETS = {
     'super-admin': ['view_loans', 'process_loans', 'manage_members', 'manage_deposits', 'view_reports', 'manage_accounting', 'access_bank', 'access_cash_tools'],
     'accounting-clerk': ['manage_accounting', 'access_bank', 'access_cash_tools'], 
     'bookkeeper': ['access_bank', 'access_cash_tools'],
-    'loan-processor-cashier': ['access_cash_tools', 'view_loans', 'manage_members'], // MERGED ROLE
+    'loan-processor-cashier': ['access_cash_tools', 'view_loans', 'manage_members'],
     'admin-officer': ['view_loans', 'manage_members', 'manage_deposits', 'view_reports'],
 };
 
@@ -268,7 +268,6 @@ function AdminFormModal({ adminToEdit, onClose }) {
 
                 {/* Modal Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Identity - Responsive Grid (Stack on mobile, 2 cols on SM) */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <InputGroup label="Full Name" error={errors.name}>
                             <input className="input-field" value={data.name} onChange={e => setData('name', e.target.value)} placeholder="e.g. Juan Dela Cruz" />

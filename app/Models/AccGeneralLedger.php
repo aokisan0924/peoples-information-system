@@ -11,7 +11,11 @@ class AccGeneralLedger extends Model
     protected $fillable = [
         'branch', 'referenceNo', 'memberId', 'accountCode', 'accountName', 
         'debit', 'credit', 'particulars', 'transactionDate', 'petty_cash_id',
-        'e_wallet_id'
+        'e_wallet_id', 'bank_record_id', 'is_adjustment'
     ];
+
+    public function bankRecord(){
+        return $this->belongsTo(AccBankRecord::class, 'bank_record_id');
+    }
     
 }

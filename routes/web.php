@@ -3,9 +3,11 @@
 use App\Http\Controllers\Admin\Accounting\AccBankRecordController;
 use App\Http\Controllers\Admin\Accounting\AccChartofAccountController;
 use App\Http\Controllers\Admin\Accounting\AccEWalletController;
+use App\Http\Controllers\Admin\Accounting\AccGeneralJournalController;
 use App\Http\Controllers\Admin\Accounting\AccGeneralLedgerController;
 use App\Http\Controllers\Admin\Accounting\AccPettyCashController;
 use App\Http\Controllers\Admin\Accounting\AccPpeDepreciationController;
+use App\Http\Controllers\Admin\Accounting\AccTrialBalanceController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -231,24 +233,36 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
                 // General Ledger & Reports
                 Route::get('/ledger', [AccGeneralLedgerController::class, 'index'])->name('ledger.index');
-                
-                // NEW: Report Generation Routes
+                // Report Generation Routes
                 Route::get('/ledger/statement-of-operation', [AccGeneralLedgerController::class, 'statementOfOperation'])->name('ledger.statement-of-operation');
                 Route::get('/ledger/financial-statement', [AccGeneralLedgerController::class, 'financialStatement'])->name('ledger.financial-statement');
+                
+                Route::prefix('general-journal')->name('journal.')->group(function () {
+                    Route::get('/', [AccGeneralJournalController::class, 'index'])->name('index');
+                    Route::post('/store', [AccGeneralJournalController::class, 'store'])->name('store');
+                });
+
+                Route::prefix('reports')->name('reports.')->group(function () {
+                    Route::get('/trial-balance', [AccTrialBalanceController::class, 'index'])->name('trial-balance');
+                });
 
                 // PPE Depreciation Management
                 Route::get('/ppe-depreciation', [AccPpeDepreciationController::class, 'index'])->name('ppe.index');
-                Route::post('/ppe-depreciation', [AccPpeDepreciationController::class, 'store'])->name('ppe.store');
+                Route::post('/ppe-depreciation/store', [AccPpeDepreciationController::class, 'storeBulk'])->name('ppe.store');
+                Route::post('/ppe-depreciation/journalize', [AccPpeDepreciationController::class, 'journalize'])->name('ppe.journalize');
                 Route::put('/ppe-depreciation/{id}', [AccPpeDepreciationController::class, 'update'])->name('ppe.update');
                 Route::delete('/ppe-depreciation/{id}', [AccPpeDepreciationController::class, 'destroy'])->name('ppe.destroy');
             });
 
             // 2. BOOKKEEPER & ACCOUNTING CLERK
             Route::middleware('can_access:access_bank')->group(function () {
-                // Bank Records
-                Route::get('/bank-records', [AccBankRecordController::class, 'index'])->name('bank.index');
-                Route::post('/bank-records/bulk', [AccBankRecordController::class, 'bulkStore'])->name('bank.bulk-store');
-                Route::put('/bank-records/{id}', [AccBankRecordController::class, 'update'])->name('bank.update');
+                Route::prefix('bank-records')->group(function () {
+                    Route::get('/', [AccBankRecordController::class, 'index'])->name('bank.index');
+                    Route::post('/bulk', [AccBankRecordController::class, 'storeBulk'])->name('bank.storeBulk');
+                    Route::put('/{id}', [AccBankRecordController::class, 'update'])->name('bank.update');
+                    Route::post('/{id}/journalize', [AccBankRecordController::class, 'journalize'])->name('admin.accounting.bank.journalize');
+                    Route::post('/{id}/update-journal', [AccBankRecordController::class, 'updateJournal'])->name('admin.accounting.bank.update-journal');
+                });
             });
 
             // 3. CASH TOOLS (Loan Processor, Cashier, Bookkeeper, Clerk)

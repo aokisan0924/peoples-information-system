@@ -13,7 +13,11 @@ class Loan extends Model
         'monthlyAmortization','gross','income','percentIncome',
         'effectiveInterestRate','monthlyInterestRate','numberOfPayments',
         'status', 'downloadsAcknowledged', 'loanType', 'loanClassification', 
-        'processed_by', 'lrvNumber',
+        'processed_by', 'lrvNumber', 'journal_entries',
+    ];
+
+    protected $casts = [
+        'journal_entries' => 'array',
     ];
 
     public function member(){

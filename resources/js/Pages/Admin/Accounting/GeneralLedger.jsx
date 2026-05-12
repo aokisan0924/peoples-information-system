@@ -7,6 +7,7 @@ export default function GeneralLedger({ summaries, filters }) {
     const [branch, setBranch] = useState(filters.branch || 'Consolidated');
     const [month, setMonth] = useState(filters.month);
     const [year, setYear] = useState(filters.year);
+    const [periodType, setPeriodType] = useState('ytd');
 
     const months = [
         { val: '01', label: 'January' }, { val: '02', label: 'February' },
@@ -56,15 +57,14 @@ export default function GeneralLedger({ summaries, filters }) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        {/* Report Generate Buttons open in new tab */}
                         <button 
-                            onClick={() => window.open(route('admin.accounting.ledger.statement-of-operation', { branch, month, year }), '_blank')}
+                            onClick={() => window.open(route('admin.accounting.ledger.statement-of-operation', { branch, month, year, period_type: periodType }), '_blank')}
                             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
                         >
                             <FileText size={16} className="text-blue-500" /> Statement of Operation
                         </button>
                         <button 
-                            onClick={() => window.open(route('admin.accounting.ledger.financial-statement', { branch, month, year }), '_blank')}
+                            onClick={() => window.open(route('admin.accounting.ledger.financial-statement', { branch, month, year, period_type: periodType }), '_blank')}
                             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
                         >
                             <Calculator size={16} className="text-emerald-500" /> Financial Statement
@@ -87,8 +87,16 @@ export default function GeneralLedger({ summaries, filters }) {
                             {months.map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
                         </select>
                         
-                        <select value={year} onChange={e => setYear(e.target.value)} className="rounded-xl border-slate-200 text-sm font-bold dark:bg-slate-800 dark:text-white focus:ring-indigo-500 focus:border-indigo-500">
-                            {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                        <select value={year} onChange={(e) => setYear(e.target.value)} className="bg-transparent border-0 text-white font-bold text-sm focus:ring-0 cursor-pointer px-2">
+                            {[2022, 2023, 2024, 2025, 2026, 2027].map(y => <option key={y} value={y} className="bg-slate-900">{y}</option>)}
+                        </select>
+
+                        <div className="w-px bg-white/10 my-1 mx-1"></div>
+                        <select value={periodType} onChange={(e) => setPeriodType(e.target.value)} className="bg-transparent border-0 text-emerald-400 font-bold text-sm focus:ring-0 cursor-pointer px-2">
+                            <option value="monthly" className="bg-slate-900">Monthly</option>
+                            <option value="quarterly" className="bg-slate-900">Quarterly</option>
+                            <option value="ytd" className="bg-slate-900">Year-To-Date</option>
+                            <option value="yearly" className="bg-slate-900">Yearly</option>
                         </select>
                         
                         <button type="submit" className="px-8 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-500 transition-all active:scale-95 whitespace-nowrap">
