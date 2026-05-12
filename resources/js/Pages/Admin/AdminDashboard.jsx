@@ -26,10 +26,6 @@ export default function AdminDashboard({ dashboardSummary, chartData, branchData
         });
     };
 
-    const handleExport = () => { 
-        window.location.href = '/admin/export/dashboard'; 
-    };
-
     // --- FORMATTERS & COLORS ---
     const formatCurrency = (val) => {
         if (val >= 1000000) return `₱${(val / 1000000).toFixed(1)}M`;
@@ -77,9 +73,6 @@ export default function AdminDashboard({ dashboardSummary, chartData, branchData
                         </motion.div>
 
                         <div className="flex items-center gap-3">
-                            <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 transition-all shadow-sm active:scale-95">
-                                <Download size={16} /> Export Reports
-                            </button>
                             <button onClick={handleSync} disabled={isSyncing} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-xs font-bold text-white transition-all shadow-lg shadow-blue-500/25 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">
                                 <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} /> {isSyncing ? 'Syncing...' : 'Sync Data'}
                             </button>

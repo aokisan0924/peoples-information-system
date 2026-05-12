@@ -21,19 +21,16 @@ class AdminDashboardController extends Controller
         $startOfCurrentMonth = $now->copy()->startOfMonth();
         $endOfLastMonth = $now->copy()->subMonth()->endOfMonth();
 
-        // --- 1. CURRENT TOTALS ---
         $totalMembers = Member::count();
         $totalShareCapital = (float) CapitalContribution::whereIn('status', ['Paid', 'Posted'])->sum('amount');
         $totalSavings = (float) SavingsDeposit::whereIn('status', ['Paid', 'Posted'])->sum('amount');
         $totalTimeDeposits = (float) TimeDeposit::sum('principal') - (float) TimeDepositWithdrawal::sum('amount');
         $totalLoanIncome = (float) Loan::where('status', 'released')->sum('income');
         
-        // Income strictly for the current month (Velocity)
         $currentMonthIncome = (float) Loan::where('status', 'released')
             ->whereBetween('updated_at', [$startOfCurrentMonth, $now])
             ->sum('income');
 
-        // --- 2. PREVIOUS PERIOD TOTALS (For Trends) ---
         $prevMembers = Member::where('created_at', '<', $startOfCurrentMonth)->count();
         $prevShareCapital = (float) CapitalContribution::whereIn('status', ['Paid', 'Posted'])
             ->where('created_at', '<=', $endOfLastMonth)->sum('amount');
@@ -45,14 +42,12 @@ class AdminDashboardController extends Controller
             ->whereBetween('updated_at', [$now->copy()->subMonth()->startOfMonth(), $endOfLastMonth])
             ->sum('income');
 
-        // Helper to calculate % change
         $calcTrend = function($current, $prev) {
             if ($prev <= 0) return $current > 0 ? '+100%' : '0%';
             $diff = (($current - $prev) / $prev) * 100;
             return ($diff >= 0 ? '+' : '') . number_format($diff, 1) . '%';
         };
 
-        // --- 3. DEMOGRAPHICS & DISTRIBUTIONS ---
         $genderData = Member::select(DB::raw("
             CASE 
                 WHEN UPPER(gender) IN ('M', 'MALE') THEN 'Male'

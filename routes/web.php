@@ -286,6 +286,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // 1. Dashboard & Security
         Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
+        Route::get('/dashboard/export', [AdminDashboardController::class, 'exportDashboard'])->name('dashboard.export');
         
         Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->name('2fa.setup');
         Route::post('/2fa/setup', [AdminAuthController::class, 'store2faSetup'])->name('2fa.setup.store');
