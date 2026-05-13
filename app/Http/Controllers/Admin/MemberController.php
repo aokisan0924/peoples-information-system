@@ -19,6 +19,7 @@ use App\Models\TimeDepositInterest;
 use App\Models\TimeDepositWithdrawal;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
@@ -99,10 +100,10 @@ class MemberController extends Controller
             'city' => $member->city,
             'barangay' => $member->barangay,
             'profileImage' => $member->profileImage,
-            'encrypted' => $id // Note: Passing ID in 'encrypted' key so MemberView forms work without changes
+            'encrypted' => $id,
+            'membershipDate' => $member->created_at ? $member->created_at->format('Y-m-d') : null,
         ];
 
-        // Safe query using find() instead of findOrFail() for relations to prevent crash on incomplete profiles
         $branchService = BranchService::where('memberId', $id)->first();
         $branServiceData = [
             'branchService' => $branchService?->branchService,
@@ -418,29 +419,28 @@ class MemberController extends Controller
         ]);
     }
 
-    // UPDATED: All methods now accept $id directly
-
     public function updateBasicInfo(Request $request, $id) {
         $member = Member::findOrFail($id);
         
         $v = Validator::make($request->all(), [
-            'firstName'   => 'required|string|max:100',
-            'lastName'    => 'required|string|max:100',
-            'middleName'  => 'nullable|string|max:100',
-            'suffix'      => 'nullable|string|max:10',
-            'nickname'    => 'nullable|string|max:100',
-            'gender'      => 'required|string',
-            'dob'         => 'required|date',
-            'religion'    => 'nullable|string|max:100',
-            'civilStatus' => 'nullable|string|max:100',
-            'nationality' => 'nullable|string|max:100',
-            'email'       => 'required|email',
-            'contact'     => 'nullable|string|max:20',
-            'fullAddress' => 'nullable|string|max:255',
-            'region'      => 'nullable|string|max:100',
-            'province'    => 'nullable|string|max:100',
-            'city'        => 'nullable|string|max:100',
-            'barangay'    => 'nullable|string|max:100',
+            'firstName' => ['required','string','max:100'],
+            'lastName' => ['required','string','max:100'],
+            'middleName' => ['nullable','string','max:100'],
+            'suffix' => ['nullable','string','max:10'],
+            'nickname' => ['nullable','string','max:100'],
+            'gender' => ['required','string'],
+            'dob' => ['required','date'],
+            'religion' => ['nullable','string','max:100'],
+            'civilStatus' => ['nullable','string','max:100'],
+            'nationality' => ['nullable','string','max:100'],
+            'email' => ['required','email'],
+            'contact' => ['nullable','string','max:20'],
+            'fullAddress' => ['nullable','string','max:255'],
+            'region' => ['nullable','string','max:100'],
+            'province' => ['nullable','string','max:100'],
+            'city' => ['nullable','string','max:100'],
+            'barangay' => ['nullable','string','max:100'],
+            'membershipDate' => ['nullable','date'],
         ]);
 
         if ($v->fails()) {
@@ -449,8 +449,22 @@ class MemberController extends Controller
 
         $validated = $v->validated();
         $validated['age'] = Carbon::parse($validated['dob'])->age;
-    
-        $member->update($validated);
+        
+        $membershipDate = null;
+        if (array_key_exists('membershipDate', $validated)) {
+            $membershipDate = $validated['membershipDate'];
+            unset($validated['membershipDate']);
+        }
+
+        // Update standard fields
+        $member->fill($validated);
+        
+        if ($membershipDate) {
+            $member->created_at = $membershipDate;
+        }
+
+        $member->save();
+        
         return response()->json(['success' => true, 'message' => 'Updated successfully']);
     }
 
@@ -600,5 +614,29 @@ class MemberController extends Controller
 
         $member->dependents()->whereNotIn('id', $submittedIds)->delete();
         return response()->json(['success' => true, 'message' => 'Dependents updated successfully.']);
+    }
+
+    public function updatePhoto(Request $request, $id) {
+        $request->validate([
+            'profile_image' => ['required', 'image', 'mimes:jpeg,png,jpg,gif', 'max:5120']
+        ]);
+
+        $member = Member::findOrFail($id);
+
+        if ($request->hasFile('profile_image')) {
+            // Delete old image if exists
+            if ($member->profileImage && Storage::disk('public')->exists($member->profileImage)) {
+                Storage::disk('public')->delete($member->profileImage);
+            }
+
+            $path = $request->file('profile_image')->store('profile_images', 'public');
+            $member->update(['profileImage' => $path]);
+        }
+
+        return response()->json([
+            'success' => true, 
+            'message' => 'Profile image updated successfully.',
+            'profileImage' => $path ?? null
+        ]);
     }
 }

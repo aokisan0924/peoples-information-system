@@ -31,97 +31,87 @@ class ClientController extends Controller
             abort(404);
         }
     
-        $member = $loginMember->member;
+        // 1. EAGER LOAD EVERYTHING IN ONE DATABASE QUERY
+        $member = $loginMember->member->load([
+            'branchService', 'afpInfo', 'spouseInfo', 'parentsInfo', 
+            'identificationInfo', 'emergencyContact', 'dependents'
+        ]);
+        
         $memberId = $member->id;
     
         // BASIC INFO
         $basicInfoData = [
-            'id'          => $member->id,
-            'username'    => $member->username,
-            'firstName'   => $member->firstName,
-            'middleName'  => $member->middleName,
-            'lastName'    => $member->lastName,
-            'suffix'      => $member->suffix,
-            'nickname'    => $member->nickname,
-            'gender'      => $member->gender,
-            'dob'         => $member->dob,
-            'age'         => $member->age,
-            'religion'    => $member->religion,
-            'civilStatus' => $member->civilStatus,
-            'nationality' => $member->nationality,
-            'email'       => $member->email,
-            'contact'     => $member->contact,
-            'fullAddress' => $member->fullAddress,
-            'region'      => $member->region,
-            'province'    => $member->province,
-            'city'        => $member->city,
-            'barangay'    => $member->barangay,
+            'id' => $member->id,
+            'username'   => $member->username,
+            'firstName'  => $member->firstName,
+            'middleName' => $member->middleName,
+            'lastName'   => $member->lastName,
+            'suffix'     => $member->suffix,
+            'nickname'   => $member->nickname,
+            'gender'     => $member->gender,
+            'dob'        => $member->dob,
+            'age'        => $member->age,
+            'religion'   => $member->religion,
+            'civilStatus'=> $member->civilStatus,
+            'nationality'=> $member->nationality,
+            'email'      => $member->email,
+            'contact'    => $member->contact,
+            'fullAddress'=> $member->fullAddress,
+            'region'     => $member->region,
+            'province'   => $member->province,
+            'city'       => $member->city,
+            'barangay'   => $member->barangay,
             'profileImage'=> $member->profileImage,
         ];
     
-        // BRANCH SERVICE
-        $branchService = BranchService::where('memberId', $memberId)->first();
-        $branchServiceData = $branchService ? [
-            'branchService' => $branchService->branchService,
-            'subBranch'     => $branchService->subBranch,
+        // RELATED INFO (Using PHP 8 Null-Safe Operator to safely map data)
+        $branchServiceData = $member->branchService ? [
+            'branchService' => $member->branchService->branchService,
+            'subBranch'     => $member->branchService->subBranch,
         ] : null;
     
-        // AFP INFO
-        $afpInfo = AFPInfo::where('memberId', $memberId)->first();
-        $afpData = $afpInfo ? [
-            'afpsn'            => $afpInfo->afpsn,
-            'rank'             => $afpInfo->rank,
-            'designation'      => $afpInfo->designation,
-            'afpId'            => $afpInfo->afpId,
-            'presentAssignment'=> $afpInfo->presentAssignment,
-            'controlNo'        => $afpInfo->controlNo,
-            'yearsInService'   => $afpInfo->yearsInService,
-            'cadEnlistment'    => $afpInfo->cadEnlistment,
-            'retirementDate'   => $afpInfo->retirementDate,
-            'pensionDate'      => $afpInfo->pensionDate,
+        $afpData = $member->afpInfo ? [
+            'afpsn' => $member->afpInfo->afpsn,
+            'rank' => $member->afpInfo->rank,
+            'designation' => $member->afpInfo->designation,
+            'afpId' => $member->afpInfo->afpId,
+            'presentAssignment' => $member->afpInfo->presentAssignment,
+            'controlNo' => $member->afpInfo->controlNo,
+            'yearsInService' => $member->afpInfo->yearsInService,
+            'cadEnlistment' => $member->afpInfo->cadEnlistment,
+            'retirementDate' => $member->afpInfo->retirementDate,
+            'pensionDate' => $member->afpInfo->pensionDate,
         ] : null;
     
-        // SPOUSE INFO
-        $spouseInfo = SpouseInfo::where('memberId', $memberId)->first();
-        $spouseData = $spouseInfo ? [
-            'spouseName'   => $spouseInfo->spouseName,
-            'spouseDob'    => $spouseInfo->spouseDob,
-            'spouseAge'    => $spouseInfo->spouseAge,
-            'dateMarriage' => $spouseInfo->dateMarriage
+        $spouseData = $member->spouseInfo ? [
+            'spouseName'   => $member->spouseInfo->spouseName,
+            'spouseDob'    => $member->spouseInfo->spouseDob,
+            'spouseAge'    => $member->spouseInfo->spouseAge,
+            'dateMarriage' => $member->spouseInfo->dateMarriage
         ] : null;
     
-        // PARENTS INFO
-        $parentsInfo = ParentsInfo::where('memberId', $memberId)->first();
-        $parentsData = $parentsInfo ? [
-            'motherName' => $parentsInfo->motherName,
-            'motherAge'  => $parentsInfo->motherAge,
-            'fatherName' => $parentsInfo->fatherName,
-            'fatherAge'  => $parentsInfo->fatherAge,
+        $parentsData = $member->parentsInfo ? [
+            'motherName' => $member->parentsInfo->motherName,
+            'motherAge'  => $member->parentsInfo->motherAge,
+            'fatherName' => $member->parentsInfo->fatherName,
+            'fatherAge'  => $member->parentsInfo->fatherAge,
         ] : null;
     
-        // IDENTIFICATION INFO
-        $identificationInfo = IdentificationInfo::where('memberId', $memberId)->first();
-        $identificationData = $identificationInfo ? [
-            'tinNo'     => $identificationInfo->tinNo,
-            'gsisNo'    => $identificationInfo->gsisNo,
-            'crnUmidNo' => $identificationInfo->crnUmidNo,
+        $identificationData = $member->identificationInfo ? [
+            'tinNo'     => $member->identificationInfo->tinNo,
+            'gsisNo'    => $member->identificationInfo->gsisNo,
+            'crnUmidNo' => $member->identificationInfo->crnUmidNo,
         ] : null;
     
-        // EMERGENCY CONTACT
-        $emergencyInfo = EmergencyContact::where('memberId', $memberId)->first();
-        $emergencyData = $emergencyInfo ? [
-            'contactPersonName'     => $emergencyInfo->contactPersonName,
-            'contactPersonAddress'  => $emergencyInfo->contactPersonAddress,
-            'contactPersonPhone'    => $emergencyInfo->contactPersonPhone,
-            'contactPersonRelation' => $emergencyInfo->contactPersonRelation,
+        $emergencyData = $member->emergencyContact ? [
+            'contactPersonName'     => $member->emergencyContact->contactPersonName,
+            'contactPersonAddress'  => $member->emergencyContact->contactPersonAddress,
+            'contactPersonPhone'    => $member->emergencyContact->contactPersonPhone,
+            'contactPersonRelation' => $member->emergencyContact->contactPersonRelation,
         ] : null;
     
         // DEPENDENTS
-        $dependentsInfo = Dependent::where('memberId', $memberId)
-            ->orderBy('dob')
-            ->get(['id', 'name', 'dob', 'gender']);
-    
-        $dependentsData = $dependentsInfo->map(function ($dep) {
+        $dependentsData = $member->dependents->sortBy('dob')->map(function ($dep) {
             return [
                 'id'     => $dep->id,
                 'name'   => $dep->name,
@@ -131,54 +121,35 @@ class ClientController extends Controller
         })->values();
     
         // RELEASED LOANS
-        $releasedLoans = Loan::where('memberId', $memberId)
+        $releasedLoansData = Loan::where('memberId', $memberId)
             ->whereIn('status', ['released', 'Released', 'RELEASED'])
             ->orderByDesc('created_at')
-            ->get([
-                'id',
-                'loanReference',
-                'loanType',
-                'loanClassification',
-                'status',
-                'gross',
-                'netProceeds',
-                'monthlyAmortization',
-                'loanAmount',
-                'termYears',
-                'created_at',
-            ]);
+            ->get()
+            ->map(function (Loan $loan) {
+                return [
+                    'id'                 => $loan->id,
+                    'loanReference'      => $loan->loanReference,
+                    'loanType'           => $loan->loanType,
+                    'loanClassification' => $loan->loanClassification,
+                    'status'             => $loan->status,
+                    'gross'              => number_format((float) $loan->gross, 2, '.', ','),
+                    'netProceeds'        => number_format((float) $loan->netProceeds, 2, '.', ','),
+                    'monthlyAmortization'=> number_format((float) $loan->monthlyAmortization, 2, '.', ','),
+                    'loanAmount'         => number_format((float) $loan->loanAmount, 2, '.', ','),
+                    'termYears'          => (int) $loan->termYears,
+                    'releasedDate'       => $loan->created_at ? $loan->created_at->format('d M y') : null,
+                ];
+            });
     
-        $releasedLoansData = $releasedLoans->map(function (Loan $loan) {
-            return [
-                'id'                 => $loan->id,
-                'loanReference'      => $loan->loanReference,
-                'loanType'           => $loan->loanType,
-                'loanClassification' => $loan->loanClassification,
-                'status'             => $loan->status,
-                'gross'              => number_format((float) $loan->gross, 2, '.', ','),
-                'netProceeds'        => number_format((float) $loan->netProceeds, 2, '.', ','),
-                'monthlyAmortization'=> number_format((float) $loan->monthlyAmortization, 2, '.', ','),
-                'loanAmount'         => number_format((float) $loan->loanAmount, 2, '.', ','),
-                'termYears'          => (int) $loan->termYears,
-                'releasedDate'       => $loan->created_at
-                    ? Carbon::parse($loan->created_at)->format('d M y')
-                    : null,
-            ];
-        })->values();
-    
-        // SHARE CAPITAL (ledger + summary)
+        // ---------------------------------------------------------
+        // FINANCIAL LEDGERS 
+        // ---------------------------------------------------------
+        
+        // SHARE CAPITAL
         $shareCapital = CapitalContribution::where('memberId', $memberId)
             ->whereIn('status', ['posted', 'Posted', 'POSTED'])
             ->orderBy('created_at', 'asc')
-            ->get([
-                'id',
-                'transactionType',
-                'amount',
-                'status',
-                'reference_number',
-                'created_at',
-                'paid_at',
-            ]);
+            ->get();
     
         $runningBalance   = 0.0;
         $totalDeposits    = 0.0;
@@ -186,12 +157,11 @@ class ClientController extends Controller
         $shareRows        = [];
     
         foreach ($shareCapital as $capCon) {
-            $isDeposit    = $capCon->transactionType === 'deposit';
-            $isWithdrawal = $capCon->transactionType === 'withdrawal';
-    
-            $amountAbs = (float) abs($capCon->amount);
-            $credit    = $isDeposit ? $amountAbs : 0.0;
-            $debit     = $isWithdrawal ? $amountAbs : 0.0;
+            $isDeposit    = strtolower($capCon->transactionType) === 'deposit';
+            $amountAbs    = (float) abs($capCon->amount);
+            
+            $credit       = $isDeposit ? $amountAbs : 0.0;
+            $debit        = !$isDeposit ? $amountAbs : 0.0;
     
             $runningBalance   += ($credit - $debit);
             $totalDeposits    += $credit;
@@ -202,53 +172,29 @@ class ClientController extends Controller
                 'transactionType' => $capCon->transactionType,
                 'status'          => $capCon->status,
                 'referenceNumber' => $capCon->reference_number,
-                'transactionDate' => $capCon->created_at
-                    ? $capCon->created_at->format('d M y')
-                    : null,
-                'postedDate'      => $capCon->paid_at
-                    ? Carbon::parse($capCon->paid_at)->format('d M y')
-                    : null,
-                'debit'           => $debit > 0
-                    ? number_format($debit, 2, '.', ',')
-                    : null,
-                'credit'          => $credit > 0
-                    ? number_format($credit, 2, '.', ',')
-                    : null,
+                'transactionDate' => $capCon->created_at ? $capCon->created_at->format('d M y') : null,
+                'postedDate'      => $capCon->paid_at ? \Carbon\Carbon::parse($capCon->paid_at)->format('d M y') : null,
+                'debit'           => $debit > 0 ? number_format($debit, 2, '.', ',') : null,
+                'credit'          => $credit > 0 ? number_format($credit, 2, '.', ',') : null,
                 'balance'         => number_format($runningBalance, 2, '.', ','),
             ];
         }
     
-        $shareRows = array_reverse($shareRows);
-    
-        $shareSummary = [
-            'totalBalance'     => number_format($runningBalance, 2, '.', ','),
-            'totalDeposits'    => number_format($totalDeposits, 2, '.', ','),
-            'totalWithdrawals' => number_format($totalWithdrawals, 2, '.', ','),
-            'paidCapital'      => number_format(
-                $runningBalance > 0 ? ($runningBalance / 500) : 0,
-                2,
-                '.',
-                ','
-            ),
-        ];
-    
         $shareCapitalData = [
-            'rows'    => $shareRows,
-            'summary' => $shareSummary,
+            'rows'    => array_reverse($shareRows),
+            'summary' => [
+                'totalBalance'     => number_format($runningBalance, 2, '.', ','),
+                'totalDeposits'    => number_format($totalDeposits, 2, '.', ','),
+                'totalWithdrawals' => number_format($totalWithdrawals, 2, '.', ','),
+                'paidCapital'      => number_format($runningBalance > 0 ? ($runningBalance / 500) : 0, 2, '.', ','),
+            ],
         ];
     
+        // SAVINGS DEPOSIT
         $savingsDeposit = SavingsDeposit::where('memberId', $memberId)
             ->whereIn('status', ['posted', 'Posted', 'POSTED'])
             ->orderBy('created_at', 'asc')
-            ->get([
-                'id',
-                'transactionType',
-                'amount',
-                'status',
-                'referenceNumber',
-                'created_at',
-                'paidAt',
-            ]);
+            ->get();
     
         $savingsRunningBalance   = 0.0;
         $savingsTotalDeposits    = 0.0;
@@ -256,12 +202,11 @@ class ClientController extends Controller
         $savingsRow              = [];
     
         foreach ($savingsDeposit as $savings) {
-            $isDeposit    = $savings->transactionType === 'deposit';
-            $isWithdrawal = $savings->transactionType === 'withdrawal';
-    
-            $amountAbs = (float) abs($savings->amount);
-            $credit    = $isDeposit ? $amountAbs : 0.0;
-            $debit     = $isWithdrawal ? $amountAbs : 0.0;
+            $isDeposit    = strtolower($savings->transactionType) === 'deposit';
+            $amountAbs    = (float) abs($savings->amount);
+            
+            $credit       = $isDeposit ? $amountAbs : 0.0;
+            $debit        = !$isDeposit ? $amountAbs : 0.0;
     
             $savingsRunningBalance   += ($credit - $debit);
             $savingsTotalDeposits    += $credit;
@@ -272,73 +217,43 @@ class ClientController extends Controller
                 'transactionType' => $savings->transactionType,
                 'status'          => $savings->status,
                 'referenceNumber' => $savings->referenceNumber,
-                'transactionDate' => $savings->created_at
-                    ? $savings->created_at->format('d M y')
-                    : null,
-                'postedDate'      => $savings->paidAt
-                    ? Carbon::parse($savings->paidAt)->format('d M y')
-                    : ($savings->created_at
-                        ? $savings->created_at->format('d M y')
-                        : null),
-                'debit'           => $debit > 0
-                    ? number_format($debit, 2, '.', ',')
-                    : null,
-                'credit'          => $credit > 0
-                    ? number_format($credit, 2, '.', ',')
-                    : null,
+                'transactionDate' => $savings->created_at ? $savings->created_at->format('d M y') : null,
+                'postedDate'      => $savings->paidAt ? \Carbon\Carbon::parse($savings->paidAt)->format('d M y') : ($savings->created_at ? $savings->created_at->format('d M y') : null),
+                'debit'           => $debit > 0 ? number_format($debit, 2, '.', ',') : null,
+                'credit'          => $credit > 0 ? number_format($credit, 2, '.', ',') : null,
                 'balance'         => number_format($savingsRunningBalance, 2, '.', ','),
             ];
         }
     
-        $savingsRow = array_reverse($savingsRow);
-    
-        $savingsSummary = [
-            'totalBalance'     => number_format($savingsRunningBalance, 2, '.', ','),
-            'totalDeposits'    => number_format($savingsTotalDeposits, 2, '.', ','),
-            'totalWithdrawals' => number_format($savingsTotalWithdrawals, 2, '.', ','),
-        ];
-    
         $savingsData = [
-            'rows'    => $savingsRow,
-            'summary' => $savingsSummary,
+            'rows'    => array_reverse($savingsRow),
+            'summary' => [
+                'totalBalance'     => number_format($savingsRunningBalance, 2, '.', ','),
+                'totalDeposits'    => number_format($savingsTotalDeposits, 2, '.', ','),
+                'totalWithdrawals' => number_format($savingsTotalWithdrawals, 2, '.', ','),
+            ],
         ];
     
-        // TIME DEPOSITS (ledger + summary per TD, plus overall)
+        // TIME DEPOSITS
         $timeDeposits = TimeDeposit::with([
-            'member',
-            'interests' => function ($q) {
-                $q->orderBy('yearNumber')->orderBy('creditedDate')->orderBy('id');
-            },
-            'withdrawals' => function ($q) {
-                $q->orderBy('withdrawnDate')->orderBy('id');
-            },
-        ])
-            ->where('memberId', $memberId)
-            ->orderBy('startDate')
-            ->get();
+            'interests' => fn($q) => $q->orderBy('yearNumber')->orderBy('creditedDate')->orderBy('id'),
+            'withdrawals' => fn($q) => $q->orderBy('withdrawnDate')->orderBy('id')
+        ])->where('memberId', $memberId)->orderBy('startDate')->get();
     
         $allTimeDeposits     = [];
         $totalPrincipal      = 0.0;
         $totalCurrBalance    = 0.0;
         $totalAvailInterest  = 0.0;
     
+        $memberName = trim("{$member->lastName}, {$member->firstName} {$member->middleName}");
+    
         foreach ($timeDeposits as $td) {
             $principal = (float) $td->principal;
-            $member    = $td->member;
-    
-            $memberName = $member
-                ? trim("{$member->lastName}, {$member->firstName} {$member->middleName}")
-                : 'Unknown Member';
-    
-            $username = $member->username ?? null;
-    
             $transactions   = [];
             $runningBalance = 0.0;
     
-            // Opening principal
             if ($principal > 0) {
                 $runningBalance += $principal;
-    
                 $transactions[] = [
                     'date'         => optional($td->startDate)->toDateString(),
                     'description'  => 'Opening Time Deposit (Principal)',
@@ -349,21 +264,16 @@ class ClientController extends Controller
                 ];
             }
     
-            // Interest credits
             foreach ($td->interests as $interest) {
                 $amount = (float) $interest->interestAmount;
-                if ($amount <= 0) {
-                    continue;
-                }
+                if ($amount <= 0) continue;
     
                 $runningBalance += $amount;
                 $yearNumber      = $interest->yearNumber ?? null;
     
                 $transactions[] = [
                     'date'         => optional($interest->creditedDate)->toDateString(),
-                    'description'  => $yearNumber
-                        ? "Interest Credit (Year {$yearNumber})"
-                        : 'Interest Credit',
+                    'description'  => $yearNumber ? "Interest Credit (Year {$yearNumber})" : 'Interest Credit',
                     'type'         => 'credit',
                     'credit'       => $amount,
                     'debit'        => 0.0,
@@ -371,20 +281,13 @@ class ClientController extends Controller
                 ];
             }
     
-            // Interest withdrawals
             foreach ($td->withdrawals as $withdrawal) {
                 $amount = (float) $withdrawal->amount;
-                if ($amount <= 0) {
-                    continue;
-                }
+                if ($amount <= 0) continue;
     
                 $runningBalance -= $amount;
-    
                 $remarks = trim((string) ($withdrawal->remarks ?? ''));
-                $desc    = 'Interest Withdrawal';
-                if ($remarks !== '') {
-                    $desc .= " - {$remarks}";
-                }
+                $desc    = 'Interest Withdrawal' . ($remarks !== '' ? " - {$remarks}" : '');
     
                 $transactions[] = [
                     'date'         => optional($withdrawal->withdrawnDate)->toDateString(),
@@ -396,77 +299,46 @@ class ClientController extends Controller
                 ];
             }
     
-            // Sort transactions by date (safety)
-            usort($transactions, function ($a, $b) {
-                return strcmp($a['date'] ?? '', $b['date'] ?? '');
-            });
+            usort($transactions, fn($a, $b) => strcmp($a['date'] ?? '', $b['date'] ?? ''));
     
             $sumInterest  = (float) $td->interests->sum('interestAmount');
             $sumWithdrawn = (float) $td->withdrawals->sum('amount');
             $currBalance  = $runningBalance;
             $availInterest= max(0.0, $sumInterest - $sumWithdrawn);
-            $totalInterest= max(0.0, $currBalance - $principal);
-    
+            
             $totalPrincipal      += $principal;
             $totalCurrBalance    += $currBalance;
             $totalAvailInterest  += $availInterest;
     
-            $summaryDisplay = [
-                'timeDepositId'     => $td->id,
-                'timeDepositCode'   => 'TD-' . str_pad((string) $td->id, 4, '0', STR_PAD_LEFT),
-                'memberName'        => $memberName,
-                'username'          => $username,
-                'principal'         => number_format($principal, 2, '.', ','),
-                'currentBalance'    => number_format($currBalance, 2, '.', ','),
-                'totalInterest'     => number_format($totalInterest, 2, '.', ','),
-                'availableInterest' => number_format($availInterest, 2, '.', ','),
-                'termYears'         => (int) $td->termYears,
-                'interestRate'      => number_format((float) $td->interestRate, 2, '.', ',') . ' %',
-                'startDate'         => $td->startDate
-                    ? $td->startDate->format('d M y')
-                    : null,
-                'maturityDate'      => $td->maturityDate
-                    ? $td->maturityDate->format('d M y')
-                    : null,
-                'creditedYears'     => (int) $td->creditedYears,
-            ];
-    
-            $transactionRows = array_map(function (array $t) {
-                $date = $t['date'] ?? null;
-    
-                return [
-                    'date'        => $date
-                        ? Carbon::parse($date)->format('d M y')
-                        : null,
-                    'description' => $t['description'] ?? '',
-                    'type'        => $t['type'] ?? null,
-                    'debit'       => ($t['debit'] ?? 0.0) > 0
-                        ? number_format((float) $t['debit'], 2, '.', ',')
-                        : null,
-                    'credit'      => ($t['credit'] ?? 0.0) > 0
-                        ? number_format((float) $t['credit'], 2, '.', ',')
-                        : null,
-                    'balance'     => number_format((float) ($t['balanceAfter'] ?? 0.0), 2, '.', ','),
-                ];
-            }, $transactions);
-    
             $allTimeDeposits[] = [
-                'summary'      => $summaryDisplay,
-                'transactions' => $transactionRows,
+                'summary' => [
+                    'timeDepositId'     => $td->id,
+                    'timeDepositCode'   => 'TD-' . str_pad((string) $td->id, 4, '0', STR_PAD_LEFT),
+                    'memberName'        => $memberName,
+                    'username'          => $member->username,
+                    'principal'         => number_format($principal, 2, '.', ','),
+                    'currentBalance'    => number_format($currBalance, 2, '.', ','),
+                    'totalInterest'     => number_format(max(0.0, $currBalance - $principal), 2, '.', ','),
+                    'availableInterest' => number_format($availInterest, 2, '.', ','),
+                    'termYears'         => (int) $td->termYears,
+                    'interestRate'      => number_format((float) $td->interestRate, 2, '.', ',') . ' %',
+                    'startDate'         => $td->startDate ? $td->startDate->format('d M y') : null,
+                    'maturityDate'      => $td->maturityDate ? $td->maturityDate->format('d M y') : null,
+                    'creditedYears'     => (int) $td->creditedYears,
+                ],
+                'transactions' => array_map(function (array $t) {
+                    $date = $t['date'] ?? null;
+                    return [
+                        'date'        => $date ? \Carbon\Carbon::parse($date)->format('d M y') : null,
+                        'description' => $t['description'] ?? '',
+                        'type'        => $t['type'] ?? null,
+                        'debit'       => ($t['debit'] ?? 0.0) > 0 ? number_format((float) $t['debit'], 2, '.', ',') : null,
+                        'credit'      => ($t['credit'] ?? 0.0) > 0 ? number_format((float) $t['credit'], 2, '.', ',') : null,
+                        'balance'     => number_format((float) ($t['balanceAfter'] ?? 0.0), 2, '.', ','),
+                    ];
+                }, $transactions),
             ];
         }
-    
-        $timeDepositSummaryAll = [
-            'totalPrincipal'         => number_format($totalPrincipal, 2, '.', ','),
-            'totalCurrentBalance'    => number_format($totalCurrBalance, 2, '.', ','),
-            'totalAvailableInterest' => number_format($totalAvailInterest, 2, '.', ','),
-            'totalCount'             => count($allTimeDeposits),
-        ];
-    
-        $timeDepositData = [
-            'summaryAll' => $timeDepositSummaryAll,
-            'deposits'   => $allTimeDeposits,
-        ];
     
         return Inertia::render('Client/ClientProfile', [
             'MemberData' => [
@@ -481,7 +353,15 @@ class ClientController extends Controller
                 'releasedLoansData'  => $releasedLoansData,
                 'shareCapitalData'   => $shareCapitalData,
                 'savingsData'        => $savingsData,
-                'timeDepositData'    => $timeDepositData,
+                'timeDepositData'    => [
+                    'summaryAll' => [
+                        'totalPrincipal'         => number_format($totalPrincipal, 2, '.', ','),
+                        'totalCurrentBalance'    => number_format($totalCurrBalance, 2, '.', ','),
+                        'totalAvailableInterest' => number_format($totalAvailInterest, 2, '.', ','),
+                        'totalCount'             => count($allTimeDeposits),
+                    ],
+                    'deposits' => $allTimeDeposits,
+                ],
             ],
         ]);
     }
@@ -499,23 +379,23 @@ class ClientController extends Controller
         $member = $loginMember->member;
 
         $v = Validator::make($request->all(), [
-            'firstName'   => 'required|string|max:100',
-            'lastName'    => 'required|string|max:100',
-            'middleName'  => 'nullable|string|max:100',
-            'suffix'      => 'nullable|string|max:10',
-            'nickname'    => 'nullable|string|max:100',
-            'gender'      => 'required|string',
-            'dob'         => 'required|date',
-            'religion'    => 'nullable|string|max:100',
-            'civilStatus' => 'nullable|string|max:100',
-            'nationality' => 'nullable|string|max:100',
-            'email'       => 'required|email',
-            'contact'     => 'nullable|string|max:20',
-            'fullAddress' => 'nullable|string|max:255',
-            'region'      => 'nullable|string|max:100',
-            'province'    => 'nullable|string|max:100',
-            'city'        => 'nullable|string|max:100',
-            'barangay'    => 'nullable|string|max:100',
+            'firstName'   => ['required', 'string', 'max:100'],
+            'lastName'    => ['required', 'string', 'max:100'],
+            'middleName'  => ['nullable', 'string', 'max:100'],
+            'suffix'      => ['nullable', 'string', 'max:10'],
+            'nickname'    => ['nullable', 'string', 'max:100'],
+            'gender'      => ['required', 'string'],
+            'dob'         => ['required', 'date'],
+            'religion'    => ['nullable', 'string', 'max:100'],
+            'civilStatus' => ['nullable', 'string', 'max:100'],
+            'nationality' => ['nullable', 'string', 'max:100'],
+            'email'       => ['required', 'email'],
+            'contact'     => ['nullable', 'string', 'max:20'],
+            'fullAddress' => ['nullable', 'string', 'max:255'],
+            'region'      => ['nullable', 'string', 'max:100'],
+            'province'    => ['nullable', 'string', 'max:100'],
+            'city'        => ['nullable', 'string', 'max:100'],
+            'barangay'    => ['nullable', 'string', 'max:100'],
         ]);
 
         if ($v->fails()) {
@@ -526,11 +406,14 @@ class ClientController extends Controller
             ], 422);
         }
 
-        $validated = $v->validated();
-        $validated['age'] = Carbon::parse($validated['dob'])->age;
+        $payload = $request->all();
 
-        $member->update($validated);
+        if (!empty($payload['dob'])) {
+            $payload['age'] = Carbon::parse($payload['dob'])->age;
+        }
 
+        $member->forceFill($payload)->save();
+        
         return response()->json([
             'success' => true,
             'message' => 'Updated successfully',
@@ -844,7 +727,6 @@ class ClientController extends Controller
             ], 404);
         }
 
-        /** @var \App\Models\Member $member */
         $member = $loginMember->member;
 
         $validated = $request->validate([

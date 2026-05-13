@@ -19,8 +19,6 @@ use App\Models\CapitalContribution;
 class Member extends Authenticatable
 {
     use HasFactory, Notifiable;
-    
-    protected $guarded = [];
 
     protected $fillable = [
         'firstName', 'lastName', 'middleName', 'suffix', 'nickname',
@@ -29,39 +27,38 @@ class Member extends Authenticatable
         'city', 'cityName', 'barangay', 'barangayName', 'fullAddress',
         'profileImage', 'signaturePath', 'username', 'password',
     ];
+
+    protected function casts(): array {
+        return [
+            'password' => 'hashed',
+        ];
+    }
     
-    public function afpInfo()
-    {
+    public function afpInfo() {
         return $this->hasOne(AFPInfo::class, 'memberId', 'id');
     }
 
-    public function branchService()
-    {
+    public function branchService() {
         return $this->hasOne(BranchService::class, 'memberId', 'id');
     }
 
-    public function parentsInfo()
-    {
+    public function parentsInfo() {
         return $this->hasOne(ParentsInfo::class, 'memberId', 'id');
     }
 
-    public function identificationInfo()
-    {
+    public function identificationInfo() {
         return $this->hasOne(IdentificationInfo::class, 'memberId', 'id');
     }
 
-    public function spouseInfo()
-    {
+    public function spouseInfo() {
         return $this->hasOne(SpouseInfo::class, 'memberId', 'id');
     }
 
-    public function emergencyContact()
-    {
+    public function emergencyContact() {
         return $this->hasOne(EmergencyContact::class, 'memberId', 'id');
     }
 
-    public function dependents()
-    {
+    public function dependents() {
         return $this->hasMany(Dependent::class, 'memberId', 'id');
     }
 

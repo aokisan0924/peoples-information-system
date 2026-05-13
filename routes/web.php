@@ -287,6 +287,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // 1. Dashboard & Security
         Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
         Route::get('/dashboard/export', [AdminDashboardController::class, 'exportDashboard'])->name('dashboard.export');
+
         
         Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->name('2fa.setup');
         Route::post('/2fa/setup', [AdminAuthController::class, 'store2faSetup'])->name('2fa.setup.store');
@@ -379,11 +380,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/{id}/update-identification-info', [MemberController::class, 'updateIdentificationInfo'])->name('update-identification-info');
             Route::post('/{id}/update-emergency-info', [MemberController::class, 'updateEmergencyInfo'])->name('update-emergency-info');
             Route::post('/{id}/update-dependents-info', [MemberController::class, 'updateDependents'])->name('update-dependents-info');
+            Route::post('/{id}/update-photo', [MemberController::class, 'updatePhoto'])->name('update-photo');
 
             Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
             Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');
-            // Inside your Admin -> Members group
+
             Route::post('/bulk-send-credentials', [MemberDataController::class, 'bulkSendCredentials'])->name('bulk-send-credentials');
+            Route::post('/{id}/send-credentials', [MemberDataController::class, 'sendSingleCredential'])->name('send-credential');
             Route::get('/download-template', [MemberDataController::class, 'downloadTemplate'])->name('download-template');
         });
 

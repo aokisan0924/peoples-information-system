@@ -1,15 +1,14 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Head, usePage } from "@inertiajs/react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Head, usePage, router } from "@inertiajs/react";
 import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 import { Toaster, toast } from "react-hot-toast";
 import { 
     CheckCircle2, ChevronLeft, ChevronRight, CreditCard, 
     FileText, IdCard, Landmark, Loader2, Phone, Save, Shield, 
-    User, Users, X, MapPin, Mail, Banknote, PiggyBank, Hourglass
+    User, Users, X, Mail, Banknote, PiggyBank, Hourglass, Camera 
 } from "lucide-react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
-import CountUp from "react-countup";
 import phAddresses from "@/data/ph-addresses.json";
 
 // --- ADDRESS LOGIC HELPERS ---
@@ -49,7 +48,17 @@ export default function MemberView() {
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [editTab, setEditTab] = useState("basicInfo");
     const [isSaving, setIsSaving] = useState(false);
+    const [imgError, setImgError] = useState(false);
     
+    // --- NEW: PHOTO UPLOAD STATE ---
+    const [isPhotoUploading, setIsPhotoUploading] = useState(false);
+    const photoInputRef = useRef(null);
+    
+    // --- AUTH MODAL STATE (SINGLE CREDENTIAL SENDER) ---
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [adminPassword, setAdminPassword] = useState("");
+    const [isSending, setIsSending] = useState(false);
+
     // --- ADDRESS STATE ---
     const [selectedRegion, setSelectedRegion] = useState(() => basicInfo.region || '');
     const [selectedProvince, setSelectedProvince] = useState(() => basicInfo.province || '');
@@ -110,8 +119,10 @@ export default function MemberView() {
         religion: basicInfo.religion || "",
         nationality: basicInfo.nationality || "",
         email: basicInfo.email || "",
+        accountStatus: basicInfo.accountStatus || "",
         contact: basicInfo.contact || "",
         fullAddress: basicInfo.fullAddress || "",
+        membershipDate: basicInfo.membershipDate || "",
     });
 
     const [branchForm, setBranchForm] = useState({
@@ -248,6 +259,36 @@ export default function MemberView() {
         }
     };
 
+    // --- NEW: HANDLE PHOTO UPLOAD ---
+    const handlePhotoChange = async (e) => {
+        setImgError(false);
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsPhotoUploading(true);
+        const formData = new FormData();
+        formData.append("profile_image", file);
+
+        try {
+            const { data } = await axios.post(route("admin.members.update-photo", { id: memberId }), formData, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
+            if (data?.success) {
+                toast.success(data?.message || "Photo updated successfully");
+                window.location.reload();
+            } else {
+                toast.error(data?.message || "Failed to update photo");
+            }
+        } catch (error) {
+            console.error(error);
+            const msg = error?.response?.data?.message || "Failed to upload photo.";
+            toast.error(msg);
+        } finally {
+            setIsPhotoUploading(false);
+            if (photoInputRef.current) photoInputRef.current.value = "";
+        }
+    };
+
     // --- PAGINATION HOOK ---
     const useClientPagination = (rows, pageSize = 6) => {
         const [page, setPage] = useState(1);
@@ -272,18 +313,40 @@ export default function MemberView() {
                     <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
                     
                     {/* HEADER CARD */}
-                    <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 overflow-hidden shadow-sm transition-colors">
-                        <div className="p-5 sm:p-7">
+                    <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 overflow-hidden shadow-sm transition-colors relative">
+                        <div className="absolute top-0 right-0 p-32 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                        
+                        <div className="p-5 sm:p-7 relative z-10">
                             <div className="flex flex-col lg:flex-row lg:items-center gap-6">
                                 <div className="flex items-start gap-4 sm:gap-5 flex-1 min-w-0">
-                                    <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-3xl overflow-hidden border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/10 shrink-0">
-                                        {basicInfo.profileImage ? (
-                                            <img src={`/storage/${basicInfo.profileImage}`} alt={fullName} className="h-full w-full object-cover" />
-                                        ) : (
-                                            <div className="h-full w-full grid place-items-center bg-emerald-100 text-emerald-600 font-bold text-2xl dark:bg-emerald-500/20 dark:text-emerald-400">
-                                                {basicInfo.firstName?.[0]}{basicInfo.lastName?.[0]}
-                                            </div>
-                                        )}
+                                    
+                                    {/* UPDATED: AVATAR WITH PHOTO UPLOAD BUTTON */}
+                                    <div className="relative shrink-0">
+                                        <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-3xl overflow-hidden border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/10 shrink-0">
+                                            {basicInfo.profileImage && !imgError ? (
+                                                <img 
+                                                    src={basicInfo.profileImage.startsWith('http') || basicInfo.profileImage.startsWith('/') ? basicInfo.profileImage : `/storage/${basicInfo.profileImage}`} 
+                                                    alt={fullName} 
+                                                    className="h-full w-full object-cover"
+                                                    onError={() => setImgError(true)} 
+                                                />
+                                            ) : (
+                                                <div className="h-full w-full grid place-items-center bg-emerald-100 text-emerald-600 font-bold text-2xl dark:bg-emerald-500/20 dark:text-emerald-400 uppercase">
+                                                    {basicInfo.firstName?.[0]}{basicInfo.lastName?.[0]}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* CAMERA UPLOAD OVERLAY */}
+                                        <button
+                                            type="button"
+                                            onClick={() => photoInputRef.current?.click()}
+                                            className="absolute -bottom-2 -right-2 h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white grid place-items-center shadow-lg transition-transform hover:scale-105"
+                                            disabled={isPhotoUploading}
+                                            title="Update Member Photo"
+                                        >
+                                            {isPhotoUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                                        </button>
+                                        <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                                     </div>
 
                                     <div className="min-w-0 flex-1">
@@ -307,10 +370,19 @@ export default function MemberView() {
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+                                <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto relative z-20">
+                                    {/* SEND CREDENTIALS BUTTON */}
+                                    <button 
+                                        onClick={() => setIsAuthModalOpen(true)}
+                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl text-sm font-bold hover:bg-indigo-100 transition-colors shadow-sm border border-indigo-100 dark:border-indigo-500/20"
+                                    >
+                                        <Mail size={16} /> Send Login
+                                    </button>
+
+                                    {/* EDIT PROFILE BUTTON */}
                                     <button
                                         onClick={() => { setEditTab("basicInfo"); setIsEditOpen(true); }}
-                                        className="w-full lg:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200 px-5 py-3 text-slate-700 font-semibold hover:bg-slate-50 dark:bg-white/10 dark:border-white/10 dark:text-white dark:hover:bg-white/15 transition shadow-sm"
+                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200 px-5 py-3 text-slate-700 font-semibold hover:bg-slate-50 dark:bg-white/10 dark:border-white/10 dark:text-white dark:hover:bg-white/15 transition shadow-sm"
                                     >
                                         <Shield className="h-5 w-5" /> Edit Profile
                                     </button>
@@ -318,7 +390,7 @@ export default function MemberView() {
                             </div>
                         </div>
                         
-                        <div className="border-t border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 px-5 sm:px-7 py-4">
+                        <div className="border-t border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 px-5 sm:px-7 py-4 relative z-10">
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                 <MiniStat label="Share Capital" value={shareCapital.summary?.totalBalance} icon={Banknote} />
                                 <MiniStat label="Savings" value={savings.summary?.totalBalance} icon={PiggyBank} />
@@ -363,9 +435,9 @@ export default function MemberView() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <Card title="Basic Information" icon={User} onEdit={() => { setEditTab("basicInfo"); setIsEditOpen(true); }}>
                                         <InfoRow label="Full Name" value={fullName} />
+                                        <InfoRow label="Membership Date" value={basicInfo.membershipDate || "—"} />
                                         <InfoRow label="Birth Date" value={basicInfo.dob} />
                                         <InfoRow label="Civil Status" value={basicInfo.civilStatus} />
-                                        <InfoRow label="Address" value={basicInfo.fullAddress} />
                                     </Card>
                                     <Card title="Identification" icon={IdCard} onEdit={() => { setEditTab("identification"); setIsEditOpen(true); }}>
                                         <InfoRow label="TIN" value={identificationInfo.tinNo} />
@@ -381,6 +453,7 @@ export default function MemberView() {
                             {activeSection === "personal" && (
                                 <div className="space-y-6">
                                     <Card title="Basic Information" icon={User} onEdit={() => { setEditTab("basicInfo"); setIsEditOpen(true); }}>
+                                        <InfoRow label="Membership Date" value={basicInfo.membershipDate || "—"} />
                                         <InfoRow label="Nickname" value={basicInfo.nickname} />
                                         <InfoRow label="Gender" value={basicInfo.gender} />
                                         <InfoRow label="Nationality" value={basicInfo.nationality} />
@@ -448,7 +521,7 @@ export default function MemberView() {
                                         </TableShell>
                                     </div>
 
-                                    {/* Savings (UPDATED WITH CREDIT/DEBIT COLUMNS) */}
+                                    {/* Savings */}
                                     <div>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                                             <MiniStat label="SD Balance" value={`₱ ${savings.summary?.totalBalance || '0.00'}`} icon={PiggyBank} />
@@ -515,8 +588,6 @@ export default function MemberView() {
                                     </div>
                                 </div>
                             )}
-
-                            {/* --- END FINANCIALS --- */}
 
                             {activeSection === "contacts" && (
                                 <div className="space-y-6">
@@ -605,7 +676,7 @@ export default function MemberView() {
                                     {/* FORM CONTENT */}
                                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                                         <div className="flex-1 overflow-y-auto min-h-0 rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 p-4 sm:p-5">
-                                            {/* FORM FIELDS LOGIC (Identical to ClientProfile but mapped to state) */}
+                                            {/* FORM FIELDS LOGIC */}
                                             {editTab === "basicInfo" && (
                                                 <div className="space-y-4">
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -617,6 +688,10 @@ export default function MemberView() {
                                                         <SelectField label="Gender" value={basicInfoForm.gender} onChange={(v) => setBasicInfoForm(p=>({...p, gender:v}))} options={["Male", "Female"]} />
                                                         <Field label="Birth Date" type="date" value={basicInfoForm.dob} onChange={(v) => setBasicInfoForm(p=>({...p, dob:v}))} />
                                                         <SelectField label="Civil Status" value={basicInfoForm.civilStatus} onChange={(v) => setBasicInfoForm(p=>({...p, civilStatus:v}))} options={["Single", "Married", "Widowed", "Separated", "Divorced"]} />
+                                                        
+                                                        {/* NEW: MEMBERSHIP DATE FIELD */}
+                                                        <Field label="Membership Date" type="date" value={basicInfoForm.membershipDate} onChange={(v) => setBasicInfoForm(p=>({...p, membershipDate:v}))} />
+                                                        
                                                         <Field label="Religion" value={basicInfoForm.religion} onChange={(v) => setBasicInfoForm(p=>({...p, religion:v}))} />
                                                         <Field label="Nationality" value={basicInfoForm.nationality} onChange={(v) => setBasicInfoForm(p=>({...p, nationality:v}))} />
                                                         <Field label="Email" type="email" value={basicInfoForm.email} onChange={(v) => setBasicInfoForm(p=>({...p, email:v}))} />
@@ -644,8 +719,7 @@ export default function MemberView() {
                                                     </div>
                                                 </div>
                                             )}
-                                            {/* ... (Other tabs follow same pattern as ClientProfile) ... */}
-                                            {/* Just providing a few key ones for brevity, in production duplicate all fields from ClientProfile here */}
+                                            {/* ... (Other tabs logic) ... */}
                                             {editTab === "branchService" && (
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                     <SelectFieldV2 label="Branch of Service" value={branchForm.branchService} 
@@ -740,10 +814,82 @@ export default function MemberView() {
                             </ModalShell>
                         )}
                     </AnimatePresence>
+
+                    {/* SUPER ADMIN AUTHORIZATION MODAL */}
+                    <AnimatePresence>
+                        {isAuthModalOpen && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+                                >
+                                    <div className="p-6">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="p-2 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl">
+                                                <Shield size={24} />
+                                            </div>
+                                            <h3 className="text-xl font-black text-slate-900 dark:text-white">Admin Authorization</h3>
+                                        </div>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                                            Generating new credentials for <strong>{basicInfo.firstName} {basicInfo.lastName}</strong> will overwrite their existing password. Please enter your Super-Admin password to proceed.
+                                        </p>
+
+                                        <input 
+                                            type="password"
+                                            placeholder="Enter your admin password..."
+                                            value={adminPassword}
+                                            onChange={(e) => setAdminPassword(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition dark:bg-white/5 dark:border-white/10 dark:text-white mb-6"
+                                            autoFocus
+                                        />
+
+                                        <div className="flex gap-3 justify-end">
+                                            <button 
+                                                onClick={() => {
+                                                    setIsAuthModalOpen(false);
+                                                    setAdminPassword("");
+                                                }}
+                                                className="px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button 
+                                                disabled={!adminPassword || isSending}
+                                                onClick={() => {
+                                                    setIsSending(true);
+                                                    router.post(`/admin/members/${memberId}/send-credentials`, {
+                                                        admin_password: adminPassword
+                                                    }, {
+                                                        preserveScroll: true,
+                                                        onSuccess: (page) => {
+                                                            setIsSending(false);
+                                                            setIsAuthModalOpen(false);
+                                                            setAdminPassword("");
+                                                            if (page.props.flash?.success) toast.success(page.props.flash.success);
+                                                            if (page.props.flash?.error) toast.error(page.props.flash.error);
+                                                        },
+                                                        onError: () => {
+                                                            setIsSending(false);
+                                                            toast.error("Network error occurred.");
+                                                        }
+                                                    });
+                                                }}
+                                                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition disabled:opacity-50"
+                                            >
+                                                {isSending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                                Authorize & Send
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
                 </div>
             </AdminSidebarLayout>
         </>
-        
     );
 }
 

@@ -14,7 +14,7 @@ use Carbon\Carbon;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate; // <--- ADDED THIS
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 // Models
 use App\Models\Member;
@@ -25,6 +25,8 @@ use App\Models\Loan;
 use App\Models\SavingsDeposit;
 use App\Models\TimeDeposit;
 use App\Models\MembershipPayment;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class MemberDataController extends Controller
 {
@@ -296,11 +298,8 @@ class MemberDataController extends Controller
                 return ExcelDate::excelToDateTimeObject($value)->format('Y-m-d');
             }
 
-            // Case 2: String Date (e.g. "9/18/1967", "18-Sep-1967", "1967/09/18")
-            // Carbon is smart enough to handle slashes or dashes
             return Carbon::parse($value)->format('Y-m-d');
         } catch (\Exception $e) {
-            // If completely invalid, return null to avoid SQL crash (or set a default)
             return null;
         }
     }
@@ -309,27 +308,30 @@ class MemberDataController extends Controller
     // 3. BULK SEND CREDENTIALS
     // =========================================================================
     public function bulkSendCredentials(Request $request) {
-        set_time_limit(0);
-
-        $members = Member::whereDate('updated_at', now()->format('Y-m-d'))
-            ->where(function($q) {
+        $members = Member::whereNull('password')
+            ->where(function ($q) {
                 $q->whereNotNull('email')->orWhereNotNull('contact');
-            })
-            ->get();
-        
-        $count = 0;
+            })->get();
+
+        if ($members->isEmpty()) {
+            return back()->with('error', 'No new members require credentials. All existing members have already been sent.');
+        }
+
+        $sentCount = 0;
         foreach ($members as $member) {
             $password = Str::random(10);
             $member->update(['password' => bcrypt($password)]);
 
             $msg = "Welcome to PMPC!\nUser: {$member->username}\nPass: {$password}\nLogin: peoplesmpcoop.com\n\nREMINDERS:\n- Change pass ASAP\n- Update info\n- Keep secure.";
 
+            // 1. Email
             if ($member->email) {
                 try {
-                    Mail::raw($msg, fn($m) => $m->to($member->email)->subject('PMPC Credentials'));
-                } catch (\Exception $e) {}
+                    Mail::raw($msg, fn($m) => $m->to($member->email)->subject('PMPC Account Credentials'));
+                } catch (\Exception $e) { Log::error("Email failed for {$member->email}"); }
             }
 
+            // 2. SMS
             if ($member->contact) {
                 try {
                     Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
@@ -338,13 +340,72 @@ class MemberDataController extends Controller
                         'message'    => $msg,
                         'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
                     ]);
-                } catch (\Exception $e) {}
+                } catch (\Exception $e) { Log::error("SMS failed for {$member->contact}"); }
             }
-            $count++;
+            $sentCount++;
         }
 
-        return back()->with('success', "Credentials sent to {$count} members.");
+        return back()->with('success', "Credentials successfully generated and sent to {$sentCount} new members.");
     }
+
+    // =========================================================================
+    // SINGLE SEND CREDENTIALS (SUPER-ADMIN PROTECTED)
+    // =========================================================================
+    public function sendSingleCredential(Request $request, $id) {
+        // 1. Validate the incoming request
+        $request->validate([
+            'password' => ['required', 'string']
+        ]);
+
+        // 2. Verify the Super-Admin's password
+        if (!Hash::check($request->password, Auth::user()->password)) {
+            return back()->with('error', 'Unauthorized: Incorrect Admin Password.');
+        }
+
+        // 3. Process the Member
+        $member = Member::findOrFail($id);
+
+        if (!$member->email && !$member->contact) {
+            return back()->with('error', "Member has no email or contact number on file.");
+        }
+
+        $password = Str::random(10);
+        $member->password = Hash::make($password); 
+        $member->save();
+
+        $msg = "PMPC Account Recovery\nUser: {$member->username}\nNew Pass: {$password}\nLogin: peoplesmpcoop.com\n\nPlease change this immediately upon logging in.";
+
+        $sentVia = [];
+
+        // Email
+        if ($member->email) {
+            try {
+                Mail::raw($msg, fn($m) => $m->to($member->email)->subject('PMPC Password Reset'));
+                $sentVia[] = 'Email';
+            } catch (\Exception $e) { Log::error("Email fail: " . $e->getMessage()); }
+        }
+
+        // SMS
+        if ($member->contact) {
+            try {
+                Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
+                    'apikey'     => config('services.semaphore.api_key'),
+                    'number'     => preg_replace('/^0/', '63', trim($member->contact)),
+                    'message'    => $msg,
+                    'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
+                ]);
+                $sentVia[] = 'SMS';
+            } catch (\Exception $e) { Log::error("SMS fail: " . $e->getMessage()); }
+        }
+
+        if (empty($sentVia)) {
+            return back()->with('error', "Failed to send credentials. Check SMTP/Semaphore configurations.");
+        }
+
+        $channels = implode(' and ', $sentVia);
+        return back()->with('success', "New credentials authorized and sent via {$channels}.");
+    }
+
     // =========================================================================
     // 4. DOWNLOAD TEMPLATE FUNCTION
     // =========================================================================
