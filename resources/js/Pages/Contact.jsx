@@ -70,7 +70,7 @@ export default function Contact() {
 
             <PublicLayout>
                 {/* HERO — 2-column modern layout */}
-                <section className="relative w-full overflow-hidden bg-gradient-to-br from-green-900 via-green-800 to-emerald-700 text-white py-16 sm:py-20 px-6 sm:px-10">
+                <section className="relative w-full overflow-hidden bg-gradient-to-br from-green-900 via-emerald-800 to-green-700 text-white py-16 sm:py-20 px-6 sm:px-10">
                     <div className="container mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-[1.7fr,1.3fr] gap-10 items-center relative z-10">
                         {/* Left: Title & copy */}
                         <motion.div

@@ -581,7 +581,7 @@ export default function PublicLayout({ children }) {
                             People&apos;s Information System · Kaagapay mo sa Pag-Asenso
                         </div>
                         <div className="text-center md:text-right text-[11px] text-gray-400">
-                            PIS Version 1.0.0
+                            PIS Version 2.5.0
                         </div>
                     </div>
                 </div>

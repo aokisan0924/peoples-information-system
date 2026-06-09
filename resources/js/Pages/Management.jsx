@@ -42,25 +42,18 @@ export default function Management() {
 
         // Core Team
         {
-            name: "MARY ANN B. MONTECLARO",
+            name: "JEROME A. SANTOS",
             position: "Bookkeeper",
-            image: "/images/management/annie.png",
+            image: "/images/management/santos.png",
             background:
                 "Handles bookkeeping and financial record maintenance, helping ensure accurate reporting and compliance with accounting standards.",
         },
         {
-            name: "ZYRINE MAE T. DAMASO",
-            position: "Loan Processor",
-            image: "/images/management/zyrine.png",
+            name: "YVONNE N. CONDO",
+            position: "Loan Processor/Cashier",
+            image: "/images/management/condo.png",
             background:
                 "Processes loan applications and assists members with requirements, supporting timely and responsible credit services.",
-        },
-        {
-            name: "REYNOLD D. VALDEZ",
-            position: "Administrative Officer",
-            image: "/images/management/reynold.png",
-            background:
-                "Oversees daily office operations, prepares documents, and coordinates between departments to keep workflows efficient.",
         },
         {
             name: "MICHAELA P. MAUANAY",
@@ -71,31 +64,17 @@ export default function Management() {
         },
         {
             name: "DENISE JOY F. ANTOLIN",
-            position: "Loan Processor",
+            position: "Loan Processor/Cashier",
             image: "/images/management/denise.png",
             background:
                 "Facilitates loan documentation, verification, and coordination with members to ensure smooth loan release and compliance with policies.",
         },
         {
-            name: "CAMILLE ANN S. DALO",
-            position: "Loan Processor",
-            image: "/images/management/camille.png",
+            name: "Mariel S. Lucero",
+            position: "Loan Processor/Cashier",
+            image: "/images/management/lucero.png",
             background:
                 "Handles member loan applications, ensuring accuracy of information, proper documentation, and courteous member assistance.",
-        },
-        {
-            name: "NICK BRYNE A. FERIA",
-            position: "IT Verifier",
-            image: "/images/management/nick.png",
-            background:
-                "Supports system verification, user access validation, and data integrity checks to keep the People’s Information System secure and reliable.",
-        },
-        {
-            name: "RONNIELYN B. SANCHO",
-            position: "Bookkeeper",
-            image: "/images/management/ronnielyn.png",
-            background:
-                "Assists in managing books of accounts, reconciliation, and day-to-day financial recording for accurate cooperative financial tracking.",
         },
     ];
 
@@ -261,7 +240,7 @@ export default function Management() {
                             <button
                                 type="button"
                                 onClick={() => openMemberModal(managementTeam[0])}
-                                className="bg-white/90 backdrop-blur-sm shadow-lg hover:shadow-xl transition-shadow rounded-2xl p-6 sm:p-8 flex flex-col items-center max-w-md w-full border border-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="bg-white/90 backdrop-blur-sm shadow-lg hover:shadow-xl transition-shadow rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-start max-w-md w-full border border-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 text-center"
                             >
                                 <div className="relative mb-4">
                                     <div className="absolute inset-0 rounded-full bg-emerald-100 blur-md" />
@@ -274,10 +253,11 @@ export default function Management() {
                                 <p className="text-xs uppercase tracking-[0.2em] text-emerald-500 mb-1">
                                     President
                                 </p>
-                                <h2 className="text-xl sm:text-2xl font-semibold text-emerald-800 text-center">
+                                <h2 className="text-xl sm:text-2xl font-semibold text-emerald-800">
                                     {managementTeam[0].name}
                                 </h2>
-                                <p className="mt-2 text-gray-600 text-sm text-center max-w-sm">
+                                {/* mt-auto pushes this to the very bottom, ensuring cards align evenly */}
+                                <p className="mt-auto pt-3 text-gray-600 text-sm max-w-sm">
                                     Click to view profile and background.
                                 </p>
                             </button>
@@ -291,7 +271,7 @@ export default function Management() {
                             transition={{ duration: 0.4, delay: 0.2 }}
                             className="space-y-4"
                         >
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-stretch">
                                 {managementTeam.slice(1, 3).map((member) => (
                                     <motion.button
                                         key={member.name}
@@ -303,20 +283,20 @@ export default function Management() {
                                             stiffness: 200,
                                             damping: 18,
                                         }}
-                                        className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-lg border border-emerald-50 p-5 flex flex-col items-center text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                        className="h-full w-full bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-lg border border-emerald-50 p-5 flex flex-col items-center justify-start text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                     >
                                         <img
                                             src={member.image}
                                             alt={member.name}
-                                            className="w-28 h-28 object-cover rounded-full mb-3 border-2 border-emerald-500"
+                                            className="w-28 h-28 object-cover rounded-full mb-3 border-2 border-emerald-500 shrink-0"
                                         />
-                                        <p className="text-[0.7rem] uppercase tracking-[0.18em] text-emerald-500 mb-1 text-center">
+                                        <p className="text-[0.7rem] uppercase tracking-[0.18em] text-emerald-500 mb-1">
                                             {member.position}
                                         </p>
-                                        <h4 className="text-base sm:text-lg font-semibold text-emerald-800 text-center">
+                                        <h4 className="text-base sm:text-lg font-semibold text-emerald-800">
                                             {member.name}
                                         </h4>
-                                        <p className="mt-2 text-xs text-gray-600 text-center max-w-xs">
+                                        <p className="mt-auto pt-3 text-xs text-gray-600 max-w-xs">
                                             Click to view their profile and responsibilities.
                                         </p>
                                     </motion.button>
@@ -332,7 +312,7 @@ export default function Management() {
                             transition={{ duration: 0.4, delay: 0.3 }}
                             className="space-y-4"
                         >
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 items-stretch">
                                 {managementTeam.slice(3).map((member) => (
                                     <motion.button
                                         key={member.name}
@@ -344,20 +324,20 @@ export default function Management() {
                                             stiffness: 200,
                                             damping: 18,
                                         }}
-                                        className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-lg border border-emerald-50 p-5 flex flex-col items-center text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                        className="h-full w-full bg-white/90 backdrop-blur-sm rounded-2xl shadow-md hover:shadow-lg border border-emerald-50 p-5 flex flex-col items-center justify-start text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                     >
                                         <img
                                             src={member.image}
                                             alt={member.name}
-                                            className="w-24 h-24 object-cover rounded-full mb-3 border border-emerald-400"
+                                            className="w-24 h-24 object-cover rounded-full mb-3 border border-emerald-400 shrink-0"
                                         />
-                                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[0.7rem] font-medium px-3 py-1 mb-1">
+                                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 text-[0.7rem] font-medium px-3 py-1 mb-2">
                                             {member.position}
                                         </span>
-                                        <h4 className="text-sm sm:text-base font-semibold text-emerald-800 text-center">
+                                        <h4 className="text-sm sm:text-base font-semibold text-emerald-800">
                                             {member.name}
                                         </h4>
-                                        <p className="mt-1 text-[0.7rem] text-gray-500 text-center">
+                                        <p className="mt-auto pt-2 text-[0.7rem] text-gray-500">
                                             Click to view full profile.
                                         </p>
                                     </motion.button>
@@ -436,16 +416,16 @@ export default function Management() {
                                 </button>
 
                                 {/* Image */}
-                                <div className="flex items-center justify-center">
+                                <div className="flex items-center justify-center h-64 md:h-full">
                                     <img
                                         src={activeMember.image}
                                         alt={activeMember.name}
-                                        className="w-full h-64 md:h-full object-cover rounded-xl"
+                                        className="w-full h-full object-cover rounded-xl"
                                     />
                                 </div>
 
                                 {/* Info */}
-                                <div className="flex flex-col justify-center">
+                                <div className="flex flex-col justify-center text-center md:text-left">
                                     <p className="text-xs uppercase tracking-[0.18em] text-emerald-500 mb-1">
                                         {activeMember.position}
                                     </p>

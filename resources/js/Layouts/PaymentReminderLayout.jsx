@@ -65,7 +65,12 @@ export default function PaymentReminderLayout({ children }) {
 
     const handlePaymongoCheckout = async () => {
         try {
-            const res = await axios.post(route("member.paymongo.membershipCheckout"));
+            // CHANGE THIS TO THE NEW ROUTE
+            const res = await axios.post(route("member.paymongo.onboardingCheckout"), {
+                membershipFee: 300,
+                shareCapital: 1000
+            });
+            
             if (res.data.checkoutUrl) {
                 window.open(res.data.checkoutUrl, "_blank");
             } else {
@@ -94,7 +99,7 @@ export default function PaymentReminderLayout({ children }) {
                         <div className="flex items-center gap-2">
                             <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                             <span className="text-xs sm:text-sm font-medium">
-                                Reminder: Settle your ₱300 Membership Fee
+                                Reminder: Settle your ₱1,300 Onboarding Fee (Membership + Initial Capital)
                             </span>
                         </div>
 
@@ -152,7 +157,7 @@ export default function PaymentReminderLayout({ children }) {
                                     </h2>
                                     <p className="mt-2 text-sm text-slate-500 dark:text-white/60 leading-relaxed">
                                         To fully access your account features and services, please settle your one-time{" "}
-                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₱300 Membership Fee</span>.
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₱300 Membership Fee and ₱1,000 Initial Share Capital</span>.
                                     </p>
                                 </div>
 
@@ -171,7 +176,7 @@ export default function PaymentReminderLayout({ children }) {
                                             !userData ? "cursor-not-allowed opacity-50" : ""
                                         }`}
                                     >
-                                        Pay Membership Fee
+                                        Pay ₱1,300 Onboarding Fee
                                         <ArrowRight className="h-4 w-4" />
                                     </button>
 

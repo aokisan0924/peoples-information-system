@@ -21,6 +21,14 @@ export default function BankRecords({ records, currentBank, chartOfAccounts, beg
     const [openDropdown, setOpenDropdown] = useState(null); 
     const [accountSearch, setAccountSearch] = useState("");
 
+    const handleJournalEntryChange = (index, field, value) => {
+        setJournalEntries((prevEntries) => 
+            prevEntries.map((entry, i) => 
+                i === index ? { ...entry, [field]: value } : entry
+            )
+        );
+    };
+    
     const formatCurrency = (val) => {
         const num = parseFloat(val);
         if (isNaN(num)) return '₱0.00';
@@ -61,27 +69,49 @@ export default function BankRecords({ records, currentBank, chartOfAccounts, beg
     const handleOpenJournal = (record) => {
         setRecordToJournalize(record);
         if (record.ledger_entries && record.ledger_entries.length > 0) {
-            setJournalEntries(record.ledger_entries.map(le => ({ accountCode: le.accountCode, accountName: le.accountName, debit: le.debit, credit: le.credit })));
+            setJournalEntries(record.ledger_entries.map(le => ({ 
+                accountCode: le.accountCode, 
+                accountName: le.accountName, 
+                debit: le.debit, 
+                credit: le.credit 
+            })));
         } else {
             setJournalEntries([{...emptySplit}, {...emptySplit}]);
         }
     };
 
     const submitJournal = () => {
-        const baseAccountingDebit = parseFloat(recordToJournalize.credit || 0);
-        const baseAccountingCredit = parseFloat(recordToJournalize.debit || 0);
-        const offsetDebit = journalEntries.reduce((sum, e) => sum + parseFloat(e.debit || 0), 0);
-        const offsetCredit = journalEntries.reduce((sum, e) => sum + parseFloat(e.credit || 0), 0);
+        setIsSaving(true);
+        
+        const totalUserDebit = journalEntries.reduce((sum, entry) => sum + (parseFloat(entry.debit) || 0), 0);
+        const totalUserCredit = journalEntries.reduce((sum, entry) => sum + (parseFloat(entry.credit) || 0), 0);
 
-        if (Math.abs((baseAccountingDebit + offsetDebit) - (baseAccountingCredit + offsetCredit)) > 0.01) {
-            toast.error("Unbalanced! Debits must equal Credits."); return;
+        if (totalUserDebit.toFixed(2) !== totalUserCredit.toFixed(2)) {
+            toast.error(`Not Balanced! Total DR: ₱${totalUserDebit.toFixed(2)} | Total CR: ₱${totalUserCredit.toFixed(2)}`);
+            setIsSaving(false);
+            return;
         }
 
-        setIsSaving(true);
-        const routeName = recordToJournalize.is_posted ? 'admin.accounting.bank.update-journal' : 'admin.accounting.bank.journalize';
-        router.post(route(routeName, recordToJournalize.id), { entries: journalEntries }, {
-            onSuccess: () => { setRecordToJournalize(null); setJournalEntries([{...emptySplit}, {...emptySplit}]); toast.success("Journal Entry processed!"); setIsSaving(false); },
-            onError: () => setIsSaving(false)
+        const endpoint = recordToJournalize.is_posted
+            ? route('admin.accounting.bank.update-journal', recordToJournalize.id)
+            : route('admin.accounting.bank.journalize', recordToJournalize.id);
+
+        toast.promise(
+            axios.post(endpoint, { entries: journalEntries }),
+            {
+                loading: recordToJournalize.is_posted ? 'Updating General Ledger...' : 'Posting to General Ledger...',
+                success: () => {
+                    setShowModal(false);
+                    setRecordToJournalize(null);
+                    router.reload();
+                    return recordToJournalize.is_posted ? 'Journal updated successfully!' : 'Journalized successfully!';
+                },
+                error: (err) => {
+                    return err.response?.data?.error || 'Failed to post journal entries.';
+                }
+            }
+        ).finally(() => {
+            setIsSaving(false);
         });
     };
 
@@ -191,8 +221,8 @@ export default function BankRecords({ records, currentBank, chartOfAccounts, beg
                                         <div><label className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">Particulars</label><input type="text" value={row.particulars} onChange={e => handleCellChange(row.id, 'particulars', e.target.value)} className="w-full bg-slate-800 border-0 rounded-xl mt-1 text-xs text-white"/></div>
                                     </div>
                                     <div className="flex gap-4 w-full lg:w-auto items-center">
-                                        <div className="relative group flex-1"><ArrowUpRight size={14} className="absolute left-3 top-3 text-rose-500"/><input type="number" placeholder="Out (DR)" value={row.debit} onChange={(e) => handleCellChange(row.id, 'debit', e.target.value)} className="w-full lg:w-28 bg-rose-500/10 border-0 rounded-xl text-rose-400 font-black text-right text-xs py-2 pr-2 pl-8" /></div>
-                                        <div className="relative group flex-1"><ArrowDownLeft size={14} className="absolute left-3 top-3 text-emerald-500"/><input type="number" placeholder="In (CR)" value={row.credit} onChange={(e) => handleCellChange(row.id, 'credit', e.target.value)} className="w-full lg:w-28 bg-emerald-500/10 border-0 rounded-xl text-emerald-400 font-black text-right text-xs py-2 pr-2 pl-8" /></div>
+                                        <div className="relative group flex-1"><ArrowUpRight size={14} className="absolute left-3 top-3 text-rose-500"/><input type="number" placeholder="DR" value={row.debit} onChange={(e) => handleCellChange(row.id, 'debit', e.target.value)} className="w-full lg:w-28 bg-rose-500/10 border-0 rounded-xl text-rose-400 font-black text-right text-xs py-2 pr-2 pl-8" /></div>
+                                        <div className="relative group flex-1"><ArrowDownLeft size={14} className="absolute left-3 top-3 text-emerald-500"/><input type="number" placeholder="CR" value={row.credit} onChange={(e) => handleCellChange(row.id, 'credit', e.target.value)} className="w-full lg:w-28 bg-emerald-500/10 border-0 rounded-xl text-emerald-400 font-black text-right text-xs py-2 pr-2 pl-8" /></div>
                                         <button onClick={() => removeRow(row.id)} className="p-2 text-rose-500/40 hover:text-rose-500"><Trash2 size={16}/></button>
                                     </div>
                                 </div>

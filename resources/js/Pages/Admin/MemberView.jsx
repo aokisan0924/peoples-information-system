@@ -310,7 +310,6 @@ export default function MemberView() {
             </Head>
             <AdminSidebarLayout>
                 <div className="space-y-6">
-                    <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
                     
                     {/* HEADER CARD */}
                     <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 overflow-hidden shadow-sm transition-colors relative">
@@ -860,7 +859,7 @@ export default function MemberView() {
                                                 onClick={() => {
                                                     setIsSending(true);
                                                     router.post(`/admin/members/${memberId}/send-credentials`, {
-                                                        admin_password: adminPassword
+                                                        password: adminPassword
                                                     }, {
                                                         preserveScroll: true,
                                                         onSuccess: (page) => {

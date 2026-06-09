@@ -157,6 +157,7 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     // Transactions
     Route::get('/recent-transactions', [ClientTransactionHistoryController::class, 'getTransactionHistory'])->name('transactions.history');
     Route::get('/transactions', [ClientTransactionHistoryController::class, 'index'])->name('transactions.index');
+    Route::post('/transactions/cancel', [ClientTransactionHistoryController::class, 'cancelTransaction'])->name('transactions.cancel');
 
     // Products & Checkout
     Route::get('/capital-contribution', [ClientContributionController::class, 'shareCapitalData'])->name('share-capital-data');
@@ -180,8 +181,10 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::post('/loans/{loanReference}/requirements/submit', [ClientLoanController::class, 'submitForEvaluation'])->name('loans.requirements.submit');
 
     // Paymongo
+    Route::post('/paymongo/onboarding-checkout', [PayMongoController::class, 'createOnboardingCheckout'])->name('paymongo.onboardingCheckout');
     Route::post('/paymongo/membership-checkout', [PayMongoController::class, 'createMembershipCheckout'])->name('paymongo.membershipCheckout');
-    
+    Route::post('/paymongo/continue', [PayMongoController::class, 'continuePayment'])->name('paymongo.continue');
+
     // Payments
     Route::get('/payment-status', [MemberPaymentStatusController::class, 'showPaymentStatus'])->name('payment-status');
     Route::get('/payment/success', [PaymentController::class, 'success']);
@@ -260,8 +263,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
                     Route::get('/', [AccBankRecordController::class, 'index'])->name('bank.index');
                     Route::post('/bulk', [AccBankRecordController::class, 'storeBulk'])->name('bank.storeBulk');
                     Route::put('/{id}', [AccBankRecordController::class, 'update'])->name('bank.update');
-                    Route::post('/{id}/journalize', [AccBankRecordController::class, 'journalize'])->name('admin.accounting.bank.journalize');
-                    Route::post('/{id}/update-journal', [AccBankRecordController::class, 'updateJournal'])->name('admin.accounting.bank.update-journal');
+                    Route::post('/{id}/journalize', [AccBankRecordController::class, 'journalize'])->name('bank.journalize');
+                    Route::post('/{id}/update-journal', [AccBankRecordController::class, 'updateJournal'])->name('bank.update-journal');
                 });
             });
 
@@ -381,6 +384,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/{id}/update-emergency-info', [MemberController::class, 'updateEmergencyInfo'])->name('update-emergency-info');
             Route::post('/{id}/update-dependents-info', [MemberController::class, 'updateDependents'])->name('update-dependents-info');
             Route::post('/{id}/update-photo', [MemberController::class, 'updatePhoto'])->name('update-photo');
+
+            Route::post('/store', [MemberController::class, 'store'])->name('store');
+            Route::post('/initial-deposit', [MemberController::class, 'initialDeposit'])->name('initial-deposit');
 
             Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
             Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');

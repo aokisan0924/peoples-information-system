@@ -3,27 +3,12 @@ import { Head } from "@inertiajs/react";
 import { AnimatePresence, motion } from "framer-motion";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { 
-    ChevronLeft, 
-    ChevronRight, 
-    Filter, 
-    Search, 
-    X, 
-    FileText, 
-    Calendar, 
-    CheckCircle2, 
-    Clock, 
-    AlertCircle, 
-    ArrowUpRight,
-    Loader2,
-    SlidersHorizontal,
-    Banknote
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Search, X, FileText, Calendar, CheckCircle2,
+        Clock, AlertCircle, ArrowUpRight, Loader2, SlidersHorizontal, Banknote, Trash2, CreditCard } from "lucide-react";
 import SidebarLayout from "@/Layouts/SidebarLayout";
 import PaymentReminderLayout from "@/Layouts/PaymentReminderLayout";
 
 export default function ClientTransactions() {
-    // --- STATE & LOGIC ---
     const [rows, setRows] = useState([]);
     const [meta, setMeta] = useState({
         currentPage: 1,
@@ -41,6 +26,7 @@ export default function ClientTransactions() {
     });
 
     const [isLoading, setIsLoading] = useState(false);
+    const [isActionLoading, setIsActionLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedTx, setSelectedTx] = useState(null);
     const [showFilters, setShowFilters] = useState(false);
@@ -73,7 +59,86 @@ export default function ClientTransactions() {
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setTimeout(() => setSelectedTx(null), 300); // clear after animation
+        setTimeout(() => setSelectedTx(null), 300);
+    };
+
+    const handleContinuePayment = async (tx) => {
+        setIsActionLoading(true);
+        try {
+            toast.loading("Securing payment link...", { id: "paymentToast" });
+            
+            const response = await axios.post("/client/paymongo/continue", { 
+                referenceNumber: tx.referenceNumber,
+                category: tx.category 
+            });
+            
+            toast.success("Redirecting to PayMongo...", { id: "paymentToast" });
+            window.open(response.data.checkoutUrl, "_blank");
+            closeModal();
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to initiate payment.", { id: "paymentToast" });
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleCancelTransaction = (tx) => {
+        toast.custom((t) => (
+            <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-white dark:bg-[#152a23] shadow-2xl rounded-2xl border border-slate-200 dark:border-white/10 pointer-events-auto flex ring-1 ring-black/5`}>
+                <div className="p-5 w-full">
+                    <div className="flex flex-col gap-3">
+                        <div>
+                            <p className="text-base font-bold text-slate-900 dark:text-white">Cancel Transaction?</p>
+                            <p className="text-sm text-slate-500 dark:text-white/60 mt-1">
+                                Are you sure you want to cancel this pending transaction? This cannot be undone.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-3">
+                            <button 
+                                type="button"
+                                onClick={() => toast.dismiss(t.id)} 
+                                className="px-4 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-white/80 rounded-xl transition-colors"
+                            >
+                                Keep it
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => {
+                                    toast.dismiss(t.id);
+                                    executeCancel(tx);
+                                }} 
+                                className="px-4 py-2 text-sm font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-xl shadow-md transition-colors"
+                            >
+                                Yes, Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        ), { 
+            duration: Infinity, 
+            id: 'confirm-cancel'
+        });
+    };
+
+    const executeCancel = async (tx) => {
+        setIsActionLoading(true);
+        toast.loading("Cancelling...", { id: "cancelToast" });
+        
+        try {
+            await axios.post("/client/transactions/cancel", { 
+                referenceNumber: tx.referenceNumber,
+                category: tx.category
+            });
+            
+            toast.success("Transaction cancelled successfully.", { id: "cancelToast" });
+            closeModal();
+            fetchTransactions(meta.currentPage);
+        } catch (error) {
+            toast.error(error.response?.data?.error || "Failed to cancel transaction.", { id: "cancelToast" });
+        } finally {
+            setIsActionLoading(false);
+        }
     };
 
     const getStatusBadge = (statusRaw) => {
@@ -249,8 +314,43 @@ export default function ClientTransactions() {
                                         </div>
                                         {selectedTx.description && <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5 text-sm text-slate-600 dark:text-white/80">{selectedTx.description}</div>}
                                     </div>
-                                    <div className="p-4 border-t border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-black/20 flex justify-end">
-                                        <button onClick={closeModal} className="px-4 py-2 rounded-lg bg-white dark:bg-white/10 border border-slate-200 dark:border-white/10 text-sm font-medium hover:bg-slate-50 dark:hover:bg-white/15">Close</button>
+                                    {/* DYNAMIC FOOTER ACTIONS */}
+                                    <div className="p-4 border-t border-slate-100 dark:border-white/10 bg-slate-50 dark:bg-black/20 flex flex-wrap-reverse justify-end gap-3">
+                                        <button 
+                                            type="button"
+                                            onClick={closeModal} 
+                                            className="px-4 py-2 rounded-lg bg-white dark:bg-white/10 border border-slate-200 dark:border-white/10 text-sm font-medium hover:bg-slate-50 dark:hover:bg-white/15"
+                                        >
+                                            Close
+                                        </button>
+
+                                        {selectedTx.status.toLowerCase() === 'pending' && (
+                                            <>
+                                                {/* CANCEL BUTTON */}
+                                                {['shareCapital', 'savings', 'loan'].includes(selectedTx.category) && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleCancelTransaction(selectedTx)}
+                                                        disabled={isActionLoading}
+                                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white dark:bg-transparent text-rose-600 dark:text-rose-400 border border-slate-200 dark:border-rose-500/30 text-sm font-medium hover:bg-rose-50 dark:hover:bg-rose-500/10 transition disabled:opacity-50"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" /> Cancel
+                                                    </button>
+                                                )}
+
+                                                {/* CONTINUE BUTTON */}
+                                                {['membership', 'shareCapital', 'savings'].includes(selectedTx.category) && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleContinuePayment(selectedTx)}
+                                                        disabled={isActionLoading}
+                                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition shadow-sm disabled:opacity-50"
+                                                    >
+                                                        <CreditCard className="h-4 w-4" /> Pay Now
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
                                     </div>
                                 </motion.div>
                             </motion.div>

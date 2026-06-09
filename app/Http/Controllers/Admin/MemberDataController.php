@@ -178,7 +178,6 @@ class MemberDataController extends Controller
                         Dependent::create([
                             'memberId' => $importKeyMap[$key],
                             'name'     => $row['B'] ?? 'Unknown',
-                            // FIXED: Date parsing for dependents too
                             'dob'      => $this->parseDate($row['C'] ?? null),
                             'gender'   => $row['D'] ?? null,
                         ]);

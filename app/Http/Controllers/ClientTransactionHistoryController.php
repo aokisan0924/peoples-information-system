@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class ClientTransactionHistoryController extends Controller
@@ -339,5 +340,47 @@ class ClientTransactionHistoryController extends Controller
                 'perPage'  => $perPage,
             ],
         ]);
+    }
+
+    public function cancelTransaction(Request $request) {
+        try {
+            $member = Auth::guard('member')->user();
+
+            if (!$member) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            $reference = $request->input('referenceNumber');
+            $category  = $request->input('category');
+
+            if ($category === 'shareCapital') {
+                CapitalContribution::where('memberId', $member->id)
+                    ->where('reference_number', $reference) 
+                    ->whereIn('status', ['Pending', 'pending'])
+                    ->update(['status' => 'Cancelled']);
+                    
+            } elseif ($category === 'savings') {
+                SavingsDeposit::where('memberId', $member->id)
+                    ->where('reference_number', $reference) 
+                    ->whereIn('status', ['Pending', 'pending'])
+                    ->update(['status' => 'Cancelled']);
+            
+            } elseif ($category === 'loan') {
+                Loan::where('memberId', $member->id)
+                    ->where('loanReference', $reference)
+                    ->whereIn('status', ['Pending', 'pending'])
+                    ->update(['status' => 'Declined']);
+                    
+            } else {
+                return response()->json(['error' => 'This transaction type cannot be cancelled.'], 400);
+            }
+
+            return response()->json(['success' => true, 'message' => 'Transaction cancelled successfully.']);
+            
+        } catch (\Exception $e) {
+            Log::error("Cancel Transaction Error: " . $e->getMessage());
+            
+            return response()->json(['error' => $e->getMessage()], 500); 
+        }
     }
 }

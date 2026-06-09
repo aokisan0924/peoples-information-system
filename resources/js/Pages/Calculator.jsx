@@ -19,6 +19,8 @@ export default function Calculator() {
     const [termMonths, setTermMonths] = useState(12);
     const [isCalculating, setIsCalculating] = useState(false);
 
+    const [membershipFee, setMembershipFee] = useState(300);
+    const [capitalContribution, setCapitalContribution] = useState(5000);
     const [result, setResult] = useState(null);
 
     const fadeUp = {
@@ -66,9 +68,10 @@ export default function Calculator() {
             const response = await axios.post("/calculator/active-pensioner-v1", {
                 netProceeds: numericAmount,
                 term: Number(termMonths),
+                membershipFee: Number(membershipFee),
+                capitalContribution: Number(capitalContribution),
             });
 
-            // Expecting only: monthlyAmortization, membershipFee, capitalContribution, netProceeds
             setResult({
                 monthlyAmortization: response.data.monthlyAmortization,
                 membershipFee: response.data.membershipFee,
@@ -236,6 +239,46 @@ export default function Calculator() {
                                         placeholder="Enter desired net proceeds"
                                         className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm sm:text-base"
                                     />
+                                </div>
+                            </div>
+
+                            {/* NEW: Membership Fee and Share Capital Inputs */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Membership Fee
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 text-sm">
+                                            ₱
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={membershipFee}
+                                            onChange={(e) => setMembershipFee(e.target.value)}
+                                            placeholder="300"
+                                            className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm sm:text-base"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Share Capital (CapCon)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute inset-y-0 left-3 flex items-center text-gray-400 text-sm">
+                                            ₱
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={capitalContribution}
+                                            onChange={(e) => setCapitalContribution(e.target.value)}
+                                            placeholder="5000"
+                                            className="w-full pl-7 pr-3 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm sm:text-base"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 

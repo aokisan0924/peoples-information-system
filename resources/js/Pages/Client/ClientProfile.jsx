@@ -261,7 +261,7 @@ export default function ClientProfile() {
                                             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight truncate max-w-full">{fullName}</h1>
                                             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 shadow-sm">
                                                 <CheckCircle2 className="h-3.5 w-3.5" />
-                                                {basicInfo.civilStatus || "Member"}
+                                                {basicInfo.accountStatus || "Member"}
                                             </span>
                                         </div>
                                         <div className="flex flex-col w-full sm:flex-row gap-2 sm:gap-6 text-sm font-medium text-slate-500 dark:text-slate-400">

@@ -1,35 +1,8 @@
 import { useState, useEffect } from "react";
 import {
-    Menu as MenuIcon,
-    X,
-    Users,
-    Settings,
-    LogOut,
-    LayoutDashboard,
-    BarChart3,
-    ShieldCheck,
-    Bell,
-    PiggyBank,
-    Banknote,
-    Hourglass,
-    CreditCard,
-    ChevronDown,
-    ChevronRight,
-    Sun,
-    Moon,
-    User,
-    UserPlus,
-    Megaphone,
-    Image,
-    BookOpen,
-    Layers,
-    Landmark,
-    Wallet2,
-    Smartphone,
-    Briefcase,
-    Scale,       // <-- For Trial Balance
-    PieChart,    
-    PenTool      // <-- For General Journal
+    Menu as MenuIcon, X, Users, LogOut, LayoutDashboard, BarChart3, PiggyBank, Banknote, Hourglass,
+    CreditCard, ChevronDown, Sun, Moon, User, UserPlus, Megaphone, Image, BookOpen, Layers, Landmark,
+    Wallet2, Smartphone, Briefcase, Scale, PenTool
 } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react"; 
 import { AnimatePresence, motion } from "framer-motion";
@@ -274,7 +247,6 @@ export default function AdminSidebarLayout({ children }) {
                                 <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Maintenance</p>
                             )}
                             
-                            {isSuperAdmin && <NavLink name="admin.loan-settings.index" label="Loan Settings" icon={Bell} />}
                             {canAccess('reports') && <NavLink name="admin.reports" label="Reports" icon={BarChart3} />}
 
                         </nav>

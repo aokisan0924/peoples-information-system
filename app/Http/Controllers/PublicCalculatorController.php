@@ -15,22 +15,21 @@ class PublicCalculatorController extends Controller
     }
 
     public function activePensionerV1(Request $request) : JsonResponse {
-        // Validate public inputs
         $data = $request->validate([
-            'netProceeds' => ['required', 'numeric', 'min:1'],
-            'term'        => ['required', 'integer', 'in:12,24,36,48,60'],
+            'netProceeds'         => ['required', 'numeric', 'min:1'],
+            'term'                => ['required', 'integer', 'in:12,24,36,48,60'],
+            'membershipFee'       => ['nullable', 'numeric', 'min:0'],
+            'capitalContribution' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $netProceeds = (float) $data['netProceeds'];
         $termMonths  = (int) $data['term'];
 
-        // Fixed values for PUBLIC computation
-        $membershipFee       = 300;
-        $capitalContribution = 5000;
-        $advanceMonths       = 2;
-        $category            = 'ACTIVE_PENSIONER_V1';
+        $membershipFee       = isset($data['membershipFee']) && $data['membershipFee'] !== '' ? (float) $data['membershipFee'] : 300;
+        $capitalContribution = isset($data['capitalContribution']) && $data['capitalContribution'] !== '' ? (float) $data['capitalContribution'] : 5000;
+        $advanceMonths = 2;
+        $category = 'ACTIVE_PENSIONER_V1';
 
-        // Fetch active computation row
         $comp = Computations::where('category', $category)
             ->where('termMonths', $termMonths)
             ->where('isActive', true)
@@ -42,24 +41,22 @@ class PublicCalculatorController extends Controller
             ], 422);
         }
 
-        // Variables for formula engine
         $vars = [
-            'netProceeds'           => $netProceeds,
-            'capCon'                => $capitalContribution,
-            'membershipFee'         => $membershipFee,
-            'terms'                 => $termMonths,
+            'netProceeds' => $netProceeds,
+            'capCon' => $capitalContribution,
+            'membershipFee' => $membershipFee,
+            'terms' => $termMonths,
             'advanceInterestMonths' => $advanceMonths,
         ];
 
-        // Evaluate formulas using your real safe evaluation engine
-        $annualRate     = (float) $this->evaluateFormulaSafely($comp->annualRateFormula, $vars);
+        $annualRate = (float) $this->evaluateFormulaSafely($comp->annualRateFormula, $vars);
         $vars['annualInterestRate'] = $annualRate;
 
-        $monthlyRate    = (float) $this->evaluateFormulaSafely($comp->monthlyRateFormula, $vars);
+        $monthlyRate = (float) $this->evaluateFormulaSafely($comp->monthlyRateFormula, $vars);
         $vars['monthlyInterestRate'] = $monthlyRate;
 
-        $serviceFee      = (float) $this->evaluateFormulaSafely($comp->serviceFeeFormula, $vars);
-        $insurance       = (float) $this->evaluateFormulaSafely($comp->insuranceFormula, $vars);
+        $serviceFee = (float) $this->evaluateFormulaSafely($comp->serviceFeeFormula, $vars);
+        $insurance = (float) $this->evaluateFormulaSafely($comp->insuranceFormula, $vars);
         $advanceInterest = (float) $this->evaluateFormulaSafely($comp->advanceInterestFormula, $vars);
 
         // Compute loanAmount from netProceeds + all deductions

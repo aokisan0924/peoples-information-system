@@ -105,7 +105,7 @@ export default function ClientCapitalContribution() {
                                 </div>
                                 <button type="submit" disabled={isSubmitting} className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all">
                                     {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
-                                    {isSubmitting ? "Processing..." : "Contribute Now"}
+                                    {isSubmitting ? "Processing..." : "Deposit"}
                                 </button>
                             </form>
                         </div>

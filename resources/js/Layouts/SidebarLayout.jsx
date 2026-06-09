@@ -25,7 +25,7 @@ const NAV_SECTIONS = [
         label: "Finances",
         items: [
             { name: "Loan Application", icon: FileText, routeName: "member.loans.index" },
-            { name: "Capital Contribution", icon: Banknote, routeName: "member.share-capital-data" },
+            { name: "Share Capital", icon: Banknote, routeName: "member.share-capital-data" },
             { name: "Savings Deposit", icon: PiggyBank, routeName: "member.savings.index" },
             { name: "Time Deposit", icon: Hourglass, routeName: "member.time-deposit" },
         ],
@@ -40,7 +40,7 @@ const BOTTOM_NAV_PRIMARY = [
 ];
 
 const BOTTOM_NAV_SECONDARY = [
-    { name: "Capital Contribution", icon: Banknote, routeName: "member.share-capital-data" },
+    { name: "Share Capital", icon: Banknote, routeName: "member.share-capital-data" },
     { name: "Time Deposit", icon: Hourglass, routeName: "member.time-deposit" },
     { name: "Transaction History", icon: HistoryIcon, routeName: "member.transactions.index" },
 ];

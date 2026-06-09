@@ -67,7 +67,7 @@ export default function Membership() {
 
                         <div className="mt-6 flex flex-wrap gap-3">
                             <Link
-                                href="/member/register"
+                                href="/register"
                                 className="inline-flex items-center justify-center px-6 sm:px-7 py-2.5 sm:py-3 rounded-lg bg-white text-green-900 font-semibold text-sm sm:text-base shadow-md hover:bg-emerald-50 transition"
                             >
                                 Apply for Membership

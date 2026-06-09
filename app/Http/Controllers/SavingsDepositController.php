@@ -239,42 +239,39 @@ class SavingsDepositController extends Controller
         }
     
         $request->validate([
-            'amount'         => ['required', 'numeric', 'min:1'],
+            'amount' => ['required', 'numeric', 'min:1'],
             'payoutMethod' => ['required', 'in:bank,gcash,maya,cash'],
-            'accountName'     => ['nullable', 'string'],
-            'accountNumber'   => ['nullable', 'string'],
-            'remarks'         => ['nullable', 'string'],
-            'bankName'        => ['nullable', 'string'], // only for bank
+            'accountName' => ['nullable', 'string'],
+            'accountNumber' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string'],
+            'bankName' => ['nullable', 'string'],
         ]);
     
-        // If BANK → bankName & accountNumber are required
         if ($request->payoutMethod === 'bank') {
             if (!$request->bankName) {
                 return response()->json([
-                    'error'   => true,
+                    'error' => true,
                     'message' => 'Please select a bank.',
                 ], 422);
             }
 
             if (!$request->accountNumber) {
                 return response()->json([
-                    'error'   => true,
+                    'error' => true,
                     'message' => 'Bank account number is required.',
                 ], 422);
             }
         }
     
-        // If GCASH/MAYA → mobile number must be valid
         if (in_array($request->payoutMethod, ['gcash', 'maya'])) {
             if (!preg_match('/^09\d{9}$/', (string) $request->accountNumber)) {
                 return response()->json([
-                    'error'   => true,
+                    'error' => true,
                     'message' => 'Wallet mobile number must be valid (starts with 09...).',
                 ], 422);
             }
         }
     
-        // TRUE BALANCE
         $trueBalance = SavingsDeposit::where('memberId', $member->id)
             ->whereIn('status', ['Posted', 'posted', 'POSTED'])
             ->get()
@@ -292,10 +289,8 @@ class SavingsDepositController extends Controller
             ], 422);
         }
     
-        // Generate unique reference
         $reference = $this->makeWithdrawalReference();
 
-        // Normalize some fields for CASH vs non-CASH
         $payoutMethod = $request->payoutMethod;
         $bankName = $payoutMethod === 'bank' ? $request->bankName : null;
         $accountName = $payoutMethod === 'cash'
@@ -303,33 +298,31 @@ class SavingsDepositController extends Controller
             : $request->accountName;
         $accountNumber = $payoutMethod === 'cash' ? null : $request->accountNumber;
     
-        // Create the withdrawal request
         $withdrawal = SavingsDeposit::create([
-            'memberId'        => $member->id,
+            'memberId' => $member->id,
             'transactionType' => 'withdrawal',
-            'amount'          => -abs($request->amount),
+            'amount' => -abs($request->amount),
             'referenceNumber' => $reference,
-            'status'          => 'Pending',
-            'isPaid'          => false,
+            'status' => 'Pending',
+            'isPaid' => false,
     
             'isWithdrawalRequest' => true,
-            'requestReference'    => $reference,
-            'withdrawalRemarks'   => $request->remarks,
+            'requestReference' => $reference,
+            'withdrawalRemarks' => $request->remarks,
     
-            // NEW FIELDS
-            'payoutMethod'  => $payoutMethod,
+            'payoutMethod' => $payoutMethod,
             'payoutChannel' => $payoutMethod === 'bank'
                                 ? $bankName
                                 : strtoupper($payoutMethod),
     
-            'withdrawalBankName'      => $bankName,
-            'withdrawalAccountName'   => $accountName,
+            'withdrawalBankName' => $bankName,
+            'withdrawalAccountName' => $accountName,
             'withdrawalAccountNumber' => $accountNumber,
         ]);
     
         return response()->json([
-            'error'        => false,
-            'message'      => 'Withdrawal request submitted.',
+            'error' => false,
+            'message' => 'Withdrawal request submitted.',
             'withdrawalId' => $withdrawal->id,
         ], 200);
     }
