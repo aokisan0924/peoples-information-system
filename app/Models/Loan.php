@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Loan extends Model
 {
+
+    protected $guarded = [];
+
     protected $fillable = [
         'memberId','loanReference','deductionCode','netProceeds','capCon',
         'membershipFee','termYears','advanceInterestMonths',
@@ -19,6 +22,11 @@ class Loan extends Model
     protected $casts = [
         'journal_entries' => 'array',
     ];
+
+    public function amortizationSchedules() {
+        return $this->hasMany(LoanAmortizationSchedule::class, 'loanId', 'id')
+            ->orderBy('installmentNumber', 'asc');
+    }
 
     public function member(){
         return $this->belongsTo(Member::class, 'memberId', 'id');

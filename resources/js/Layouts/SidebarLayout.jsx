@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { 
     User, FileText, Bell, Key, LogOut, LayoutDashboard, 
     History as HistoryIcon, PiggyBank, Hourglass, 
-    Banknote, MoreHorizontal, Sun, Moon 
+    Banknote, MoreHorizontal, Sun, Moon, Calendar 
 } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react";
 import axios from "axios";
@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
         label: "Finances",
         items: [
             { name: "Loan Application", icon: FileText, routeName: "member.loans.index" },
+            { name: "Amortization Schedule", icon: Calendar, routeName: "member.loans.schedule" },
             { name: "Share Capital", icon: Banknote, routeName: "member.share-capital-data" },
             { name: "Savings Deposit", icon: PiggyBank, routeName: "member.savings.index" },
             { name: "Time Deposit", icon: Hourglass, routeName: "member.time-deposit" },
@@ -40,6 +41,7 @@ const BOTTOM_NAV_PRIMARY = [
 ];
 
 const BOTTOM_NAV_SECONDARY = [
+    { name: "Amortization", icon: Calendar, routeName: "member.loans.schedule" },
     { name: "Share Capital", icon: Banknote, routeName: "member.share-capital-data" },
     { name: "Time Deposit", icon: Hourglass, routeName: "member.time-deposit" },
     { name: "Transaction History", icon: HistoryIcon, routeName: "member.transactions.index" },

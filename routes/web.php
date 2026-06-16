@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\Accounting\AccGeneralLedgerController;
 use App\Http\Controllers\Admin\Accounting\AccPettyCashController;
 use App\Http\Controllers\Admin\Accounting\AccPpeDepreciationController;
 use App\Http\Controllers\Admin\Accounting\AccTrialBalanceController;
+use App\Http\Controllers\Admin\Accounting\LoanCollectionController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -174,6 +175,7 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::get('/api/loans', [ClientLoanController::class, 'list'])->name('loans.list');
     Route::post('/api/loans/compute', [ClientLoanController::class, 'compute'])->name('loans.compute');
     Route::post('/api/loans/submit', [ClientLoanController::class, 'submit'])->name('loans.submit');
+    Route::get('/my-schedule', [ClientLoanController::class, 'mySchedule'])->name('schedule');
 
     Route::get('/api/loans/{loanReference}', [ClientLoanController::class, 'showDetailJson'])->name('loans.show.json');
     Route::get('/loans/{loanReference}/requirements', [ClientLoanController::class, 'showRequirements'])->name('loans.requirements');
@@ -225,6 +227,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             
             // 1. ACCOUNTING CLERK EXCLUSIVE (Full Ledger & Chart Access)
             Route::middleware('can_access:manage_accounting')->group(function () {
+
+            Route::prefix('loans')->name('loans.')->group(function () {
+                Route::get('/workspace', [LoanCollectionController::class, 'index'])->name('workspace');
+                Route::get('/search', [LoanCollectionController::class, 'searchMembers'])->name('search');
+                Route::get('/member/{id}', [LoanCollectionController::class, 'getMemberLoanDetails'])->name('member-details');
+                Route::post('/post-amortization', [LoanCollectionController::class, 'postAmortization'])->name('post-amortization');
+            });
 
                 // Chart of Accounts Management
                 Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');

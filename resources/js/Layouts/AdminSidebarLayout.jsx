@@ -1,311 +1,387 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
-    Menu as MenuIcon, X, Users, LogOut, LayoutDashboard, BarChart3, PiggyBank, Banknote, Hourglass,
-    CreditCard, ChevronDown, Sun, Moon, User, UserPlus, Megaphone, Image, BookOpen, Layers, Landmark,
-    Wallet2, Smartphone, Briefcase, Scale, PenTool
+    Menu as MenuIcon, X, Users, LogOut, LayoutDashboard, BarChart3,
+    PiggyBank, Banknote, Hourglass, CreditCard, ChevronDown, Sun, Moon,
+    User, UserPlus, Megaphone, Image, BookOpen, Layers, Landmark,
+    Wallet2, Smartphone, Briefcase, Scale, PenTool, ChevronRight, Receipt
 } from "lucide-react";
-import { Link, usePage } from "@inertiajs/react"; 
+import { Link, usePage } from "@inertiajs/react";
 import { AnimatePresence, motion } from "framer-motion";
 
+// ─── DARK MODE TOKEN REFERENCE ────────────────────────────────────────────────
+// Page bg (dark):      #0b1120  (near-black navy)
+// Sidebar bg (dark):   #111827  (gray-900)
+// Sidebar border:      #1f2937  (gray-800)
+// Card/item hover:     #1f2937  (gray-800)
+// Muted text:          #6b7280  (gray-500)
+// Active item:         bg-emerald-600
+// Subitem active:      emerald-400 text, emerald-900/40 bg
+// Input/field bg:      #1f2937
+// Divider:             #1f2937
+// ─────────────────────────────────────────────────────────────────────────────
+
+const buildNavGroups = ({ isSuperAdmin, isAccountingClerk, isBookkeeper, canAccess }) => {
+    const groups = [];
+
+    // MAIN
+    const mainItems = [];
+    if (!isAccountingClerk && !isBookkeeper)
+        mainItems.push({ name: "admin.dashboard", label: "Dashboard", icon: LayoutDashboard });
+    if (mainItems.length) groups.push({ id: "main", label: "Main", items: mainItems });
+
+    // ACCOUNTING
+    if (canAccess("accounting") || canAccess("bank") || canAccess("cash_tools")) {
+        const accItems = [];
+        if (canAccess("accounting")) accItems.push({ name: "admin.accounting.ledger.index", label: "General Ledger",    icon: BookOpen  });
+        if (canAccess("bank"))       accItems.push({ name: "admin.accounting.bank.index",   label: "Bank Records",      icon: Landmark  });
+        if (canAccess("cash_tools")) {
+            accItems.push({ name: "admin.accounting.petty.index",   label: "Petty Cash Fund", icon: Wallet2    });
+            accItems.push({ name: "admin.accounting.ewallet.index", label: "E-Wallet Logs",   icon: Smartphone });
+        }
+        if (canAccess("accounting")) {
+            accItems.push({ name: "admin.accounting.loans.workspace", label: "Loan Collections", icon: Receipt });
+            accItems.push({ name: "admin.accounting.ppe.index",     label: "PPE Depreciation",  icon: Briefcase });
+            accItems.push({ name: "admin.accounting.chart.index",   label: "Chart of Accounts", icon: Layers    });
+            accItems.push({ name: "admin.accounting.journal.index", label: "General Journal",   icon: PenTool   });
+        }
+        const accGroup = { id: "accounting", label: "Accounting", items: accItems };
+        if (canAccess("accounting")) {
+            accGroup.subGroups = [{
+                id: "fin-reports", label: "Financial Reports",
+                items: [{ name: "admin.accounting.reports.trial-balance", label: "Trial Balance", icon: Scale }]
+            }];
+        }
+        groups.push(accGroup);
+    }
+
+    // TRANSACTIONS
+    const buildTxItems = () => {
+        const items = [];
+        if (canAccess("members")) items.push({ name: "admin.members.index", label: "Manage Members", icon: Users });
+        if (canAccess("loans")) items.push({ name: "admin.loans", label: "Loan Applications", icon: CreditCard });
+        if (canAccess("deposits")) {
+            items.push({ name: "admin.share-capital.index", label: "Capital Contribution", icon: Banknote });
+            items.push({ name: "admin.time.index", label: "Time Deposit", icon: Hourglass });
+            items.push({
+                id: "savings", label: "Savings Deposit", icon: PiggyBank,
+                children: [
+                    { name: "admin.savings.index", label: "Savings Deposit" },
+                    { name: "admin.savings.withdrawal.index", label: "Withdrawal Request" },
+                ],
+            });
+        }
+        return items;
+    };
+    const txItems = buildTxItems();
+    if (txItems.length) groups.push({ id: "transactions", label: "Transactions", items: txItems });
+
+    // CONTENT
+    if (!isAccountingClerk && !isBookkeeper) {
+        groups.push({
+            id: "content", label: "Content",
+            items: [
+                { name: "admin.news.index", label: "News & Updates", icon: Megaphone },
+                { name: "admin.gallery.index", label: "Gallery", icon: Image },
+            ],
+        });
+    }
+
+    // MAINTENANCE
+    if (isSuperAdmin || canAccess("reports")) {
+        const mItems = [];
+        if (canAccess("reports")) mItems.push({ name: "admin.reports", label: "Reports", icon: BarChart3 });
+        if (mItems.length) groups.push({ id: "maintenance", label: "Maintenance", items: mItems });
+    }
+
+    return groups;
+};
+
+// ─── BREADCRUMB BUILDER ───────────────────────────────────────────────────────
+function useBreadcrumbs(navGroups) {
+    const { url } = usePage();
+
+    return useMemo(() => {
+        // Always start with "Admin"
+        const crumbs = [{ label: "Admin", href: null }];
+
+        // Walk every group → item → child to find the active route
+        for (const group of navGroups) {
+            const allItems = [
+                ...(group.items || []),
+                ...(group.subGroups?.flatMap(sg => sg.items) || []),
+            ];
+            for (const item of allItems) {
+                if (item.children) {
+                    // Collapsible parent (e.g. Savings Deposit)
+                    for (const child of item.children) {
+                        if (route().current(child.name)) {
+                            crumbs.push({ label: group.label, href: null });
+                            crumbs.push({ label: item.label, href: null });
+                            crumbs.push({ label: child.label, href: route(child.name) });
+                            return crumbs;
+                        }
+                    }
+                } else if (item.name && item.name !== "#" && route().current(item.name)) {
+                    crumbs.push({ label: group.label, href: null });
+                    crumbs.push({ label: item.label, href: route(item.name) });
+                    return crumbs;
+                }
+            }
+        }
+
+        // Fallback: derive from URL segments
+        const segments = url.replace(/^\//, "").split("/").filter(Boolean);
+        segments.forEach((seg, i) => {
+            const label = seg.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            crumbs.push({ label, href: null });
+        });
+
+        return crumbs;
+    }, [url, navGroups]);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 export default function AdminSidebarLayout({ children }) {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [depositsOpen, setDepositsOpen] = useState(true);
+    const [sidebarOpen,   setSidebarOpen]   = useState(false);
+    const [openGroups,    setOpenGroups]    = useState({ savings: true });
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const profileRef = useRef(null);
     const { auth } = usePage().props;
-    
+
     const userRole = (auth?.user?.role || "").toLowerCase();
-    const isSuperAdmin = userRole === 'super-admin';
-    const isAccountingClerk = userRole === 'accounting-clerk';
-    const isBookkeeper = userRole === 'bookkeeper';
-    
+    const isSuperAdmin = userRole === "super-admin";
+    const isAccountingClerk = userRole === "accounting-clerk";
+    const isBookkeeper = userRole === "bookkeeper";
     const permissions = auth?.user?.permissions || [];
 
     const canAccess = (feature) => {
-        if (isSuperAdmin) return true; 
-
-        switch (feature) {
-            case 'loans':
-                return permissions.includes('view_loans');
-            case 'deposits': 
-                return permissions.includes('manage_deposits');
-            case 'members':  
-                return permissions.includes('manage_members');
-            case 'reports':
-                return permissions.includes('view_reports');
-            case 'accounting':
-                return permissions.includes('manage_accounting');
-            case 'bank':
-                return permissions.includes('access_bank');
-            case 'cash_tools':
-                return permissions.includes('access_cash_tools');
-            case 'create-user':
-                return false; 
-            default:
-                return false;
-        }
+        if (isSuperAdmin) return true;
+        const map = { loans: "view_loans", deposits: "manage_deposits", members: "manage_members", reports: "view_reports", accounting: "manage_accounting", bank: "access_bank", cash_tools: "access_cash_tools" };
+        return map[feature] ? permissions.includes(map[feature]) : false;
     };
 
+    const navGroups = buildNavGroups({ isSuperAdmin, isAccountingClerk, isBookkeeper, canAccess });
+    const breadcrumbs = useBreadcrumbs(navGroups);
+
+    // Dark mode ───────────────────────────────────────────────────────────────
     const [isDarkMode, setIsDarkMode] = useState(() => {
         if (typeof window !== "undefined") {
-            const savedTheme = localStorage.getItem("theme");
-            return savedTheme ? savedTheme === "dark" : true; 
+            const saved = localStorage.getItem("theme");
+            return saved ? saved === "dark" : true;
         }
         return true;
     });
-
     useEffect(() => {
-        const root = window.document.documentElement;
-        root.classList.remove("light", "dark");
-        if (isDarkMode) {
-            root.classList.add("dark");
-            localStorage.setItem("theme", "dark");
-        } else {
-            root.classList.add("light");
-            localStorage.setItem("theme", "light");
-        }
+        document.documentElement.classList.toggle("dark", isDarkMode);
+        document.documentElement.classList.toggle("light", !isDarkMode);
+        localStorage.setItem("theme", isDarkMode ? "dark" : "light");
     }, [isDarkMode]);
 
+    // Click-outside profile ───────────────────────────────────────────────────
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (isProfileOpen && !event.target.closest('#admin-profile-menu')) {
-                setIsProfileOpen(false);
-            }
-        };
-        document.addEventListener('click', handleClickOutside);
-        return () => document.removeEventListener('click', handleClickOutside);
-    }, [isProfileOpen]);
+        const handler = (e) => { if (profileRef.current && !profileRef.current.contains(e.target)) setIsProfileOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
 
-    const toggleTheme = () => setIsDarkMode((prev) => !prev);
+    // Close sidebar on nav ────────────────────────────────────────────────────
+    const currentUrl = usePage().url;
+    useEffect(() => { setSidebarOpen(false); }, [currentUrl]);
 
-    const NavLink = ({ name, label, icon: Icon }) => {
-        const isPlaceholder = name === "#";
-        const active = !isPlaceholder && route().current(name);
-        
-        return (
-            <Link
-                href={isPlaceholder ? "#" : route(name)}
-                className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 
-                    ${active 
-                        ? "bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-500/20 dark:bg-emerald-400/10 dark:text-emerald-200 dark:shadow-[0_0_0_1px_rgba(52,211,153,0.28)]" 
-                        : "text-slate-600 hover:bg-slate-100 hover:text-emerald-800 dark:text-slate-200/80 dark:hover:bg-white/5 dark:hover:text-emerald-100"
-                    }`}
-            >
-                <span
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-xs transition-all
-                        ${active
-                            ? "bg-emerald-100 border-emerald-200 text-emerald-700 dark:bg-emerald-400/10 dark:border-emerald-300/40 dark:text-emerald-200"
-                            : "bg-white border-slate-200 text-slate-500 group-hover:bg-emerald-50 group-hover:border-emerald-200 group-hover:text-emerald-600 dark:bg-white/5 dark:border-white/10 dark:text-slate-200/70 dark:group-hover:bg-emerald-400/10 dark:group-hover:border-emerald-300/30 dark:group-hover:text-emerald-100"
-                        }`}
-                >
-                    <Icon size={16} />
-                </span>
-                <span>{label}</span>
-            </Link>
-        );
-    };
+    const toggleGroup = (id) => setOpenGroups(p => ({ ...p, [id]: !p[id] }));
 
-    const SubLink = ({ name, label }) => {
-        const active = route().current(name);
-        return (
-            <Link
-                href={route(name)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ml-3
-                    ${active
-                        ? "text-emerald-700 bg-emerald-50 dark:text-emerald-200 dark:bg-emerald-400/10"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-emerald-700 dark:text-slate-300/80 dark:hover:text-emerald-200 dark:hover:bg-white/5"
-                    }`}
-            >
-                <div className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-300 dark:bg-white/20"}`} />
-                <span>{label}</span>
-            </Link>
-        );
-    };
+    const userName      = auth?.user?.name || "Administrator";
+    const userInitial   = userName.charAt(0).toUpperCase();
+    const userRoleLabel = (auth?.user?.role || "Staff").replace(/-/g, " ");
 
+    // ─────────────────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-screen transition-colors duration-300 bg-gray-50 text-slate-900 dark:bg-[radial-gradient(1200px_circle_at_20%_-10%,rgba(16,185,129,0.25),transparent_45%),radial-gradient(900px_circle_at_80%_0%,rgba(34,197,94,0.18),transparent_42%),linear-gradient(135deg,#04130e,#050b12_45%,#04130e)] dark:text-slate-100">
-            
+        <div className="min-h-screen bg-slate-100 dark:bg-[#0b1120] text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+            {/* Mobile backdrop */}
             <AnimatePresence>
                 {sidebarOpen && (
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         onClick={() => setSidebarOpen(false)}
                         className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
                     />
                 )}
             </AnimatePresence>
 
-            <div className="flex min-h-screen overflow-x-hidden">
-                <aside 
-                    className={`fixed inset-y-0 left-0 z-50 w-72 flex flex-col border-r border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 backdrop-blur-xl shadow-sm dark:shadow-[0_0_30px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
-                        sidebarOpen ? "translate-x-0" : "-translate-x-full"
-                    }`}
-                >
-                    <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-200 dark:border-white/10 bg-gradient-to-r from-emerald-50 via-white to-slate-50 dark:from-emerald-900/60 dark:via-emerald-950/40 dark:to-slate-950/40">
-                        <div className="h-10 w-10 rounded-2xl bg-white border border-slate-200 dark:bg-white/10 dark:border-white/15 flex items-center justify-center overflow-hidden shadow-sm dark:shadow-inner">
-                            <img src="/images/logo/pis_logo.png" alt="PIS Logo" className="h-full w-full object-contain" />
+            <div className="flex min-h-screen">
+
+                {/* ╔══════════════════════════════╗
+                    ║         SIDEBAR              ║
+                    ╚══════════════════════════════╝ */}
+                <aside className={[
+                    "fixed inset-y-0 left-0 z-50 w-64 flex flex-col",
+                    // Light
+                    "bg-white border-r border-slate-200",
+                    // Dark — solid opaque panel, no opacity tricks
+                    "dark:bg-[#111827] dark:border-[#1f2937]",
+                    "shadow-2xl",
+                    "transition-transform duration-300 ease-in-out",
+                    "lg:static lg:translate-x-0",
+                    sidebarOpen ? "translate-x-0" : "-translate-x-full",
+                ].join(" ")}>
+
+                    {/* Logo */}
+                    <div className="flex items-center gap-3 px-5 py-[18px] border-b border-slate-200 dark:border-[#1f2937] shrink-0">
+                        <div className="h-9 w-9 rounded-xl bg-white dark:bg-[#1f2937] border border-slate-200 dark:border-[#374151] flex items-center justify-center overflow-hidden shadow-sm shrink-0">
+                            <img src="/images/logo/pis_logo.png" alt="PMPC" className="h-full w-full object-contain" />
                         </div>
-                        <div>
-                            <h1 className="text-sm font-bold text-slate-900 dark:text-emerald-50 leading-tight">Admin Portal</h1>
-                            <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-200/70">PMPC System</p>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">Admin Portal</p>
+                            <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wider uppercase">PMPC System</p>
                         </div>
-                        <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white">
-                            <X size={20} />
+                        <button
+                            onClick={() => setSidebarOpen(false)}
+                            className="lg:hidden h-7 w-7 grid place-items-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#1f2937] dark:hover:text-white transition"
+                        >
+                            <X size={15} />
                         </button>
                     </div>
 
-                    <div className="flex flex-col flex-1 overflow-y-auto py-6 px-4 scrollbar-hide">
-                        <nav className="space-y-1.5">
-                            <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2">Main</p>
-                            
-                            {(!isAccountingClerk && !isBookkeeper) && (
-                                <NavLink name="admin.dashboard" label="Dashboard" icon={LayoutDashboard} />
-                            )}
-
-                            {/* ACCOUNTING SECTION */}
-                            {(canAccess('accounting') || canAccess('bank') || canAccess('cash_tools')) && (
-                                <>
-                                    <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Accounting</p>
-                                    
-                                    {/* Data Entry & Operations */}
-                                    {canAccess('accounting') && <NavLink name="admin.accounting.ledger.index" label="General Ledger" icon={BookOpen} />}
-                                    {canAccess('bank') && <NavLink name="admin.accounting.bank.index" label="Bank Records" icon={Landmark} />}
-                                    
-                                    {canAccess('cash_tools') && (
-                                        <>
-                                            <NavLink name="admin.accounting.petty.index" label="Petty Cash Fund" icon={Wallet2} />
-                                            <NavLink name="admin.accounting.ewallet.index" label="E-Wallet Logs" icon={Smartphone} />
-                                        </>
-                                    )}
-                                    
-                                    {canAccess('accounting') && (
-                                        <>
-                                            <NavLink name="admin.accounting.ppe.index" label="PPE Depreciation" icon={Briefcase} />
-                                            <NavLink name="admin.accounting.chart.index" label="Chart of Accounts" icon={Layers} />
-                                            <NavLink name="admin.accounting.journal.index" label="General Journal" icon={PenTool} />
-                                        </>
-                                    )}
-
-                                    {/* Accounting Reports */}
-                                    {canAccess('accounting') && (
-                                        <>
-                                            <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-4">Financial Reports</p>
-                                            <NavLink name="admin.accounting.reports.trial-balance" label="Trial Balance" icon={Scale} />
-                                            {/* Note: Financial Statements is accessed via the General Ledger page now! */}
-                                        </>
-                                    )}
-                                </>
-                            )}
-                            
-                            {(!isAccountingClerk && !isBookkeeper) && (
-                                <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Transactions</p>
-                            )}
-
-                            {canAccess('members') && <NavLink name="admin.members.index" label="Manage Members" icon={Users} />}
-                            {canAccess('loans') && <NavLink name="admin.loans" label="Loan Applications" icon={CreditCard} />}
-
-                            {canAccess('deposits') && (
-                                <>
-                                    <NavLink name="admin.share-capital.index" label="Capital Contribution" icon={Banknote} />
-                                    <NavLink name="admin.time.index" label="Time Deposit" icon={Hourglass} />
-
-                                    <div>
-                                        <button onClick={() => setDepositsOpen(!depositsOpen)} className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${depositsOpen ? "text-slate-900 dark:text-white" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5"}`}>
-                                            <div className="flex items-center gap-3">
-                                                <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-xs transition-all ${depositsOpen ? "bg-slate-100 border-slate-200 text-slate-700 dark:bg-white/10 dark:border-white/10 dark:text-white" : "bg-white border-slate-200 text-slate-500 dark:bg-white/5 dark:border-white/10 dark:text-slate-400"}`}>
-                                                    <PiggyBank size={16} />
-                                                </span>
-                                                <span>Savings Deposit</span>
-                                            </div>
-                                            <ChevronDown size={16} className={`transition-transform duration-200 text-slate-400 ${depositsOpen ? "rotate-180" : ""}`} />
-                                        </button>
-
-                                        <AnimatePresence>
-                                            {depositsOpen && (
-                                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                                    <div className="mt-1 space-y-1 relative ml-3 border-l-2 border-slate-100 dark:border-white/10 pl-1">
-                                                        <SubLink name="admin.savings.index" label="Savings Deposit" />
-                                                        <SubLink name="admin.savings.withdrawal.index" label="Withdrawal Request" />
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                </>
-                            )}
-
-                            {(!isAccountingClerk && !isBookkeeper) && (
-                                <>
-                                    <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Content</p>
-                                    <NavLink name="admin.news.index" label="News & Updates" icon={Megaphone} />
-                                    <NavLink name="admin.gallery.index" label="Gallery" icon={Image} />
-                                </>
-                            )}
-
-                            {(isSuperAdmin || canAccess('reports')) && (
-                                <p className="px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-200/50 mb-2 mt-6">Maintenance</p>
-                            )}
-                            
-                            {canAccess('reports') && <NavLink name="admin.reports" label="Reports" icon={BarChart3} />}
-
+                    {/* Nav scroll area */}
+                    <div className="flex-1 overflow-y-auto py-5 px-3 scrollbar-hide">
+                        <nav className="space-y-6">
+                            {navGroups.map(group => (
+                                <NavGroup key={group.id} group={group} openGroups={openGroups} toggleGroup={toggleGroup} />
+                            ))}
                         </nav>
-                        
-                        <div className="mt-auto pt-6 text-[10px] text-slate-400 dark:text-white/20 text-center">
+                    </div>
+
+                    {/* Sidebar footer */}
+                    <div className="shrink-0 px-5 py-4 border-t border-slate-100 dark:border-[#1f2937]">
+                        <p className="text-[10px] text-slate-400 dark:text-[#4b5563] text-center font-medium tracking-widest uppercase">
                             Admin Console v2.0
-                        </div>
+                        </p>
                     </div>
                 </aside>
 
-                <div className="flex-1 flex flex-col min-h-screen">
-                    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 dark:border-white/10 bg-white/90 dark:bg-slate-950/55 backdrop-blur-xl px-4 sm:px-6 transition-colors duration-300">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg dark:text-slate-300 dark:hover:bg-white/5">
-                                <MenuIcon size={24} />
+                {/* ╔══════════════════════════════╗
+                    ║       MAIN CONTENT           ║
+                    ╚══════════════════════════════╝ */}
+                <div className="flex-1 flex flex-col min-h-screen min-w-0">
+
+                    {/* Top bar */}
+                    <header className={[
+                        "sticky top-0 z-30 h-14 flex items-center justify-between px-4 sm:px-6",
+                        "border-b border-slate-200 dark:border-[#1f2937]",
+                        "bg-white/95 dark:bg-[#111827]/95",
+                        "backdrop-blur-xl shrink-0",
+                    ].join(" ")}>
+
+                        {/* Left */}
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setSidebarOpen(true)}
+                                className="lg:hidden h-8 w-8 grid place-items-center rounded-lg text-slate-500 dark:text-[#9ca3af] hover:bg-slate-100 dark:hover:bg-[#1f2937] transition"
+                            >
+                                <MenuIcon size={18} />
                             </button>
-                            <div className="hidden sm:block"><h2 className="text-sm font-semibold text-slate-800 dark:text-white">Admin Dashboard</h2></div>
+                            <div className="hidden sm:flex items-center gap-1 flex-wrap">
+                                {breadcrumbs.map((crumb, i) => (
+                                    <span key={i} className="flex items-center gap-1">
+                                        {i > 0 && <ChevronRight size={11} className="text-slate-300 dark:text-[#374151] shrink-0" />}
+                                        {i === breadcrumbs.length - 1 ? (
+                                            <span className="text-xs text-slate-400 dark:text-[#6b7280]">{crumb.label}</span>
+                                        ) : crumb.href ? (
+                                            <Link href={crumb.href} className="text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                                                {crumb.label}
+                                            </Link>
+                                        ) : (
+                                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{crumb.label}</span>
+                                        )}
+                                    </span>
+                                ))}
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-2 sm:gap-4">
-                            <button onClick={toggleTheme} className="relative inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-emerald-300 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:hover:border-emerald-300/30 transition text-slate-600 dark:text-slate-200" aria-label="Toggle Theme">
-                                {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                        {/* Right */}
+                        <div className="flex items-center gap-2">
+
+                            {/* Theme pill toggle */}
+                            <button
+                                onClick={() => setIsDarkMode(p => !p)}
+                                className={[
+                                    "relative h-7 w-14 rounded-full border transition-all duration-300",
+                                    isDarkMode
+                                        ? "bg-[#1f2937] border-[#374151]"
+                                        : "bg-slate-100 border-slate-200",
+                                ].join(" ")}
+                                aria-label="Toggle theme"
+                            >
+                                <span className={[
+                                    "absolute top-0.5 h-6 w-6 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm",
+                                    isDarkMode
+                                        ? "translate-x-7 bg-[#374151] text-yellow-300"
+                                        : "translate-x-0.5 bg-white text-slate-500",
+                                ].join(" ")}>
+                                    {isDarkMode ? <Sun size={12} /> : <Moon size={12} />}
+                                </span>
                             </button>
 
-                            <div className="relative" id="admin-profile-menu">
-                                <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-white/10 transition-colors hover:opacity-80">
-                                    <div className="hidden md:block text-right leading-tight">
-                                        <p className="text-xs font-bold text-slate-900 dark:text-white">{auth?.user?.name || 'Administrator'}</p>
-                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace(/-/g, ' ') || 'Staff'}</p>
+                            {/* Divider */}
+                            <div className="h-6 w-px bg-slate-200 dark:bg-[#1f2937] mx-1" />
+
+                            {/* Profile */}
+                            <div className="relative" ref={profileRef}>
+                                <button
+                                    onClick={() => setIsProfileOpen(p => !p)}
+                                    className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-slate-100 dark:hover:bg-[#1f2937] transition-colors"
+                                >
+                                    <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-xs shadow-sm shrink-0">
+                                        {userInitial}
                                     </div>
-                                    <div className="h-9 w-9 rounded-full bg-emerald-600 border-2 border-white dark:border-emerald-500/30 flex items-center justify-center text-white font-bold shadow-md">
-                                        {auth?.user?.name ? auth.user.name.charAt(0) : 'A'}
+                                    <div className="hidden md:block text-left">
+                                        <p className="text-xs font-bold text-slate-800 dark:text-white leading-tight">{userName}</p>
+                                        <p className="text-[10px] text-slate-400 dark:text-[#6b7280] capitalize">{userRoleLabel}</p>
                                     </div>
-                                    <ChevronDown size={14} className={`text-slate-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+                                    <ChevronDown size={13} className={`text-slate-400 dark:text-[#6b7280] transition-transform duration-200 ${isProfileOpen ? "rotate-180" : ""}`} />
                                 </button>
 
                                 <AnimatePresence>
                                     {isProfileOpen && (
-                                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: 0.15 }} className="absolute right-0 mt-3 w-48 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl overflow-hidden z-50">
-                                            <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5 md:hidden">
-                                                <p className="text-xs font-bold text-slate-900 dark:text-white">{auth?.user?.name || 'Administrator'}</p>
-                                                <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{auth?.user?.role?.replace(/-/g, ' ') || 'Staff'}</p>
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                            transition={{ duration: 0.13, ease: "easeOut" }}
+                                            className={[
+                                                "absolute right-0 mt-2 w-56 z-50",
+                                                "rounded-2xl overflow-hidden",
+                                                "bg-white dark:bg-[#111827]",
+                                                "border border-slate-200 dark:border-[#1f2937]",
+                                                "shadow-2xl dark:shadow-[0_20px_60px_rgba(0,0,0,0.6)]",
+                                            ].join(" ")}
+                                        >
+                                            {/* User card header */}
+                                            <div className="flex items-center gap-3 px-4 py-3.5 bg-slate-50 dark:bg-[#1f2937] border-b border-slate-100 dark:border-[#374151]">
+                                                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow">
+                                                    {userInitial}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{userName}</p>
+                                                    <p className="text-[11px] text-slate-400 dark:text-[#6b7280] capitalize truncate">{userRoleLabel}</p>
+                                                </div>
                                             </div>
-                                            
-                                            <div className="p-1">
-                                                <Link href={route("admin.profile.edit")} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors">
-                                                    <User size={16} /><span>My Profile</span>
-                                                </Link>
 
+                                            <div className="p-1.5">
+                                                <DropdownLink href={route("admin.profile.edit")} icon={User} label="My Profile" />
                                                 {isSuperAdmin && (
-                                                    <Link href={route("admin.create-user")} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors">
-                                                        <UserPlus size={16} /><span>Add Admin</span>
-                                                    </Link>
+                                                    <DropdownLink href={route("admin.create-user")} icon={UserPlus} label="Add Admin" />
                                                 )}
                                             </div>
 
-                                            <div className="p-1 border-t border-slate-100 dark:border-white/5">
-                                                <Link href={route("admin.logout")} method="post" as="button" className="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors">
-                                                    <LogOut size={16} /><span>Sign Out</span>
+                                            <div className="p-1.5 border-t border-slate-100 dark:border-[#1f2937]">
+                                                <Link
+                                                    href={route("admin.logout")} method="post" as="button"
+                                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                                                >
+                                                    <LogOut size={14} className="shrink-0" />
+                                                    Sign out
                                                 </Link>
                                             </div>
                                         </motion.div>
@@ -315,12 +391,154 @@ export default function AdminSidebarLayout({ children }) {
                         </div>
                     </header>
 
-                    {/* PAGE CONTENT */}
-                    <main className="flex-1 p-4 sm:p-6 lg:p-8 w-full max-w-7xl mx-auto animate-in fade-in zoom-in duration-300">
-                        {children}
+                    {/* Page content */}
+                    <main className="flex-1 p-4 sm:p-6 lg:p-7 w-full max-w-7xl mx-auto">
+                        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+                            {children}
+                        </motion.div>
                     </main>
                 </div>
             </div>
         </div>
+    );
+}
+
+// ─── NAV GROUP ────────────────────────────────────────────────────────────────
+function NavGroup({ group, openGroups, toggleGroup }) {
+    return (
+        <div className="space-y-0.5">
+            <p className="px-2 mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 dark:text-[#4b5563] select-none">
+                {group.label}
+            </p>
+            {group.items.map(item =>
+                item.children
+                    ? <CollapsibleNav key={item.id} item={item} isOpen={!!openGroups[item.id]} onToggle={() => toggleGroup(item.id)} />
+                    : <NavItem key={item.name} {...item} />
+            )}
+            {group.subGroups?.map(sub => (
+                <div key={sub.id} className="mt-3 space-y-0.5">
+                    <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-300 dark:text-[#374151] select-none">
+                        {sub.label}
+                    </p>
+                    {sub.items.map(item => <NavItem key={item.name} {...item} />)}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ─── NAV ITEM ─────────────────────────────────────────────────────────────────
+function NavItem({ name, label, icon: Icon }) {
+    const isPlaceholder = name === "#";
+    const active = !isPlaceholder && route().current(name);
+    return (
+        <Link
+            href={isPlaceholder ? "#" : route(name)}
+            className={[
+                "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                active
+                    ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                    : [
+                        "text-slate-600 dark:text-[#9ca3af]",
+                        "hover:bg-slate-100 dark:hover:bg-[#1f2937]",
+                        "hover:text-slate-900 dark:hover:text-white",
+                    ].join(" "),
+            ].join(" ")}
+        >
+            <span className={[
+                "inline-flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-all",
+                active
+                    ? "bg-white/20 text-white"
+                    : [
+                        "bg-slate-100 dark:bg-[#1f2937]",
+                        "text-slate-500 dark:text-[#6b7280]",
+                        "group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/40",
+                        "group-hover:text-emerald-700 dark:group-hover:text-emerald-400",
+                    ].join(" "),
+            ].join(" ")}>
+                <Icon size={14} />
+            </span>
+            <span className="truncate">{label}</span>
+        </Link>
+    );
+}
+
+// ─── COLLAPSIBLE NAV ──────────────────────────────────────────────────────────
+function CollapsibleNav({ item, isOpen, onToggle }) {
+    const { label, icon: Icon, children } = item;
+    const anyActive = children.some(c => route().current(c.name));
+    return (
+        <div>
+            <button
+                onClick={onToggle}
+                className={[
+                    "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                    anyActive
+                        ? "text-slate-900 dark:text-white bg-slate-100 dark:bg-[#1f2937]"
+                        : "text-slate-600 dark:text-[#9ca3af] hover:bg-slate-100 dark:hover:bg-[#1f2937] hover:text-slate-900 dark:hover:text-white",
+                ].join(" ")}
+            >
+                <div className="flex items-center gap-3 min-w-0">
+                    <span className={[
+                        "inline-flex h-7 w-7 items-center justify-center rounded-lg shrink-0 transition-all",
+                        anyActive
+                            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"
+                            : "bg-slate-100 dark:bg-[#1f2937] text-slate-500 dark:text-[#6b7280]",
+                    ].join(" ")}>
+                        <Icon size={14} />
+                    </span>
+                    <span className="truncate">{label}</span>
+                </div>
+                <ChevronDown size={13} className={`shrink-0 text-slate-400 dark:text-[#4b5563] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.18, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="mt-1 ml-5 pl-3 border-l-2 border-slate-200 dark:border-[#1f2937] space-y-0.5 pb-1">
+                            {children.map(c => <SubItem key={c.name} name={c.name} label={c.label} />)}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
+
+// ─── SUB ITEM ─────────────────────────────────────────────────────────────────
+function SubItem({ name, label }) {
+    const active = route().current(name);
+    return (
+        <Link
+            href={route(name)}
+            className={[
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                active
+                    ? "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30"
+                    : "text-slate-500 dark:text-[#6b7280] hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-[#1f2937]",
+            ].join(" ")}
+        >
+            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? "bg-emerald-500" : "bg-slate-300 dark:bg-[#374151]"}`} />
+            {label}
+        </Link>
+    );
+}
+
+// ─── DROPDOWN LINK ────────────────────────────────────────────────────────────
+function DropdownLink({ href, icon: Icon, label }) {
+    return (
+        <Link
+            href={href}
+            className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-xl text-slate-600 dark:text-[#9ca3af] hover:bg-slate-50 dark:hover:bg-[#374151] hover:text-slate-900 dark:hover:text-white transition-colors"
+        >
+            <Icon size={14} className="shrink-0 text-slate-400 dark:text-[#6b7280]" />
+            {label}
+        </Link>
     );
 }

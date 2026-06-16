@@ -40,6 +40,9 @@ class MemberController extends Controller
         $totalCivilianMembers = BranchService::whereIn('branchService', ['CIVILIAN EMPLOYEES', 'Civilian Employees', 'civilian employees', 'civ emp'])->count();
         $totalCdeaMembers = BranchService::whereIn('branchService', ['Cdea', 'CDEA', 'cdea', 'DND', 'Dnd', 'dnd'])->count();
 
+        // ADD THIS: Calculate the true total member count
+        $totalMembersCount = Member::count();
+
         $rawMembers = Member::query()
             ->leftJoin('afp_infos', 'afp_infos.memberId', '=', 'members.id')
             ->leftJoin('branch_services', 'branch_services.memberId', '=', 'members.id')
@@ -71,12 +74,13 @@ class MemberController extends Controller
 
         return Inertia::render('Admin/Members', [
             'memberSummary' => [
-                'totalActiveMembers'      => $totalActiveMembers,
-                'totalRetiredMembers'     => $totalRetiredMembers,
-                'totalPmpcMembers'        => $totalPmpcMembers,
-                'totalBeneficiaryMembers' => $totalBeneficiaryMembers,
-                'totalCivilianMembers'    => $totalCivilianMembers,
-                'totalCdeaMembers'        => $totalCdeaMembers
+                'total'           => $totalMembersCount,
+                'activeMilitary'  => $totalActiveMembers,
+                'retiredMilitary' => $totalRetiredMembers,
+                'pmpc'            => $totalPmpcMembers,
+                'beneficiary'     => $totalBeneficiaryMembers,
+                'civilian'        => $totalCivilianMembers,
+                'cdea'            => $totalCdeaMembers
             ],
             'members' => $members,
         ]);

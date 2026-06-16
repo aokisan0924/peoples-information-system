@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin\Accounting;
 
 use App\Http\Controllers\Controller;
 use App\Models\AccGeneralLedger;
-use App\Models\AccChartOfAccount;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -67,13 +66,22 @@ class AccGeneralLedgerController extends Controller
         $revenues = []; $expenses = [];
 
         foreach ($ledgers as $entry) {
-            $prefix = substr($entry->accountCode, 0, 1);
-            if (in_array($prefix, ['4', '5'])) {
-                if (!isset($revenues[$entry->accountCode])) $revenues[$entry->accountCode] = ['name' => $entry->accountName, 'balance' => 0];
-                $revenues[$entry->accountCode]['balance'] += ($entry->credit - $entry->debit);
-            } elseif (in_array($prefix, ['6', '7', '8'])) {
-                if (!isset($expenses[$entry->accountCode])) $expenses[$entry->accountCode] = ['name' => $entry->accountName, 'balance' => 0];
-                $expenses[$entry->accountCode]['balance'] += ($entry->debit - $entry->credit);
+            $code = $entry->accountCode;
+            $name = $entry->accountName;
+
+            // Explicit verification against PMPC Chart of Accounts specifications
+            $isRevenue = in_array($code, ['40110', '40120', '40140', '40610', '40650', '40730']) 
+                || ($code === '73350' && stripos($name, 'Other Income') !== false);
+
+            if ($isRevenue) {
+                if (!isset($revenues[$code])) $revenues[$code] = ['name' => $name, 'balance' => 0];
+                $revenues[$code]['balance'] += ($entry->credit - $entry->debit);
+            } else {
+                // Catches administrative exception codes (21320, 40620, 40720) and standard 6xxx-8xxx prefixes
+                if (in_array($code, ['21320', '40620', '40720']) || preg_match('/^[678]/', $code)) {
+                    if (!isset($expenses[$code])) $expenses[$code] = ['name' => $name, 'balance' => 0];
+                    $expenses[$code]['balance'] += ($entry->debit - $entry->credit);
+                }
             }
         }
 
@@ -113,26 +121,63 @@ class AccGeneralLedgerController extends Controller
         if ($branch !== 'Consolidated') $query->where('branch', $branch);
 
         $ledgers = $query->get();
-        $assets = []; $liabilities = []; $equity = [];
+        
+        // Maintained flat array structures to preserve frontend data loop compatibility
+        $assets = []; 
+        $liabilities = []; 
+        $equity = [];
         $ytdRevenue = 0; $ytdExpense = 0;
 
         foreach ($ledgers as $entry) {
-            $prefix = substr($entry->accountCode, 0, 1);
+            $code = $entry->accountCode;
+            $name = $entry->accountName;
+            $prefix = substr($code, 0, 2);
 
-            if ($prefix === '1') {
-                if (!isset($assets[$entry->accountCode])) $assets[$entry->accountCode] = ['name' => $entry->accountName, 'balance' => 0];
-                $assets[$entry->accountCode]['balance'] += ($entry->debit - $entry->credit);
-            } elseif ($prefix === '2') {
-                if (!isset($liabilities[$entry->accountCode])) $liabilities[$entry->accountCode] = ['name' => $entry->accountName, 'balance' => 0];
-                $liabilities[$entry->accountCode]['balance'] += ($entry->credit - $entry->debit);
-            } elseif ($prefix === '3') {
-                if (!isset($equity[$entry->accountCode])) $equity[$entry->accountCode] = ['name' => $entry->accountName, 'balance' => 0];
-                $equity[$entry->accountCode]['balance'] += ($entry->credit - $entry->debit);
+            // 1. ASSET CLASSIFICATION (1xxx series, excluding 11241 liability exception)
+            if (str_starts_with($code, '1') && $code !== '11241') {
+                if (!isset($assets[$code])) {
+                    $assets[$code] = [
+                        'name' => $name,
+                        'balance' => 0,
+                        'is_current' => ($prefix === '11')
+                    ];
+                }
+                $assets[$code]['balance'] += ($entry->debit - $entry->credit);
+            } 
+            
+            // 2. LIABILITY CLASSIFICATION (2xxx series + 11241 Unearned Interest exception)
+            elseif (str_starts_with($code, '2') || $code === '11241') {
+                if (!isset($liabilities[$code])) {
+                    $liabilities[$code] = [
+                        'name' => $name,
+                        'balance' => 0,
+                        'is_current' => ($prefix === '21' || $code === '11241')
+                    ];
+                }
+                $liabilities[$code]['balance'] += ($entry->credit - $entry->debit);
+            } 
+            
+            // 3. EQUITY CLASSIFICATION (3xxx series)
+            elseif (str_starts_with($code, '3')) {
+                if (!isset($equity[$code])) {
+                    $equity[$code] = [
+                        'name' => $name,
+                        'balance' => 0
+                    ];
+                }
+                $equity[$code]['balance'] += ($entry->credit - $entry->debit);
             }
 
+            // 4. NET SURPLUS ROLLING CALCULATION WINDOW
             if ($entry->transactionDate >= $startOfYear) {
-                if (in_array($prefix, ['4', '5'])) $ytdRevenue += ($entry->credit - $entry->debit);
-                if (in_array($prefix, ['6', '7', '8'])) $ytdExpense += ($entry->debit - $entry->credit);
+                $isRev = in_array($code, ['40110', '40120', '40140', '40610', '40650', '40730']) 
+                    || ($code === '73350' && stripos($name, 'Other Income') !== false);
+                
+                $isExp = in_array($code, ['21320', '40620', '40720']) 
+                    || (preg_match('/^[678]/', $code) && !($code === '73350' && stripos($name, 'Other Income') !== false));
+
+                if ($isRev) $ytdRevenue += ($entry->credit - $entry->debit);
+                if ($isExp) $ytdExpense += ($entry->debit - $entry->credit);
             }
         }
 

@@ -18,6 +18,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -820,6 +821,29 @@ class LoanController extends Controller
         $loan->status = 'released';
         $loan->processed_by = Auth::guard('admin')->id();
         $loan->save();
+
+        $scheduleData = [];
+        $baseDate = $now->copy();
+        $advanceMonths = (int) $loan->advanceInterestMonths;
+        $termMonths = (int) ($loan->termYears * 12);
+
+        $paymentDate = $baseDate->copy()->addMonths(1 + $advanceMonths);
+
+        for ($i = 1; $i <= $termMonths; $i++) {
+            $scheduleData[] = [
+                'loanId'            => $loan->id,
+                'installmentNumber' => $i,
+                'dueDate'           => $paymentDate->copy()->format('Y-m-d'),
+                'amountDue'         => $loan->monthlyAmortization,
+                'status'            => 'unpaid',
+                'createdAt'         => now(),
+                'updatedAt'         => now(),
+            ];
+
+            $paymentDate->addMonth();
+        }
+
+        DB::table('loan_amortization_schedules')->insert($scheduleData);
 
         MemberNotification::create([
             'memberId' => $loan->memberId,

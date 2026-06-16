@@ -12,6 +12,7 @@ use App\Models\MembershipPayment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ClientLoanController extends Controller
@@ -19,8 +20,7 @@ class ClientLoanController extends Controller
     /**
      * Show loan application page with summary stats.
      */
-    public function index()
-    {
+    public function index() {
         $memberId = Auth::guard('member')->id();
 
         $totalLoans = Loan::where('memberId', $memberId)->count();
@@ -42,8 +42,7 @@ class ClientLoanController extends Controller
         ]);
     }
 
-    public function list(Request $request): JsonResponse
-    {
+    public function list(Request $request): JsonResponse {
         $memberId = Auth::guard('member')->id();
 
         $search  = trim((string) $request->string('search'));
@@ -91,8 +90,7 @@ class ClientLoanController extends Controller
         ]);
     }
 
-    public function compute(Request $request): JsonResponse
-    {
+    public function compute(Request $request): JsonResponse {
         $member = Auth::guard('member')->user();
 
         $data = $request->validate([
@@ -167,8 +165,7 @@ class ClientLoanController extends Controller
         return response()->json($payload);
     }
 
-    public function submit(Request $request): JsonResponse
-    {
+    public function submit(Request $request): JsonResponse {
         $member = Auth::guard('member')->user();
 
         $data = $request->validate([
@@ -292,7 +289,7 @@ class ClientLoanController extends Controller
     /**
      * JSON details for the action modal in ClientLoanApplication.jsx
      */
-    public function showDetailJson(string $loanReference): JsonResponse{
+    public function showDetailJson(string $loanReference): JsonResponse {
         $member = Auth::guard('member')->user();
 
         $loan = Loan::where('memberId', $member->id)
@@ -354,8 +351,7 @@ class ClientLoanController extends Controller
     /**
      * Step 2: show upload requirements page
      */
-    public function showRequirements(string $loanReference)
-    {
+    public function showRequirements(string $loanReference) {
         $member = Auth::guard('member')->user();
 
         $loan = Loan::where('memberId', $member->id)
@@ -378,7 +374,7 @@ class ClientLoanController extends Controller
     /**
      * Handle upload/replace of requirements
      */
-    public function uploadRequirements(Request $request, string $loanReference): JsonResponse{
+    public function uploadRequirements(Request $request, string $loanReference): JsonResponse {
         $member = Auth::guard('member')->user();
 
         $loan = Loan::where('memberId', $member->id)
@@ -504,8 +500,7 @@ class ClientLoanController extends Controller
     // Helpers
     // ============================
 
-    protected function getBranchServiceName($member): ?string
-    {
+    protected function getBranchServiceName($member): ?string {
         if (!$member) {
             return null;
         }
@@ -513,13 +508,11 @@ class ClientLoanController extends Controller
         return optional($member->branchService)->branchService;
     }
 
-    protected function normalizeBranchService(string $branchService): string
-    {
+    protected function normalizeBranchService(string $branchService): string {
         return strtoupper(trim($branchService));
     }
 
-    protected function mapCategoryByBranchServiceName(?string $branchService): string
-    {
+    protected function mapCategoryByBranchServiceName(?string $branchService): string {
         $key = $this->normalizeBranchService($branchService ?? '');
 
         if (in_array($key, [
@@ -541,8 +534,7 @@ class ClientLoanController extends Controller
         return 'ACTIVE_PENSIONER_V1';
     }
 
-    protected function mapPreRequirementsByBranchService(string $branchService): array
-    {
+    protected function mapPreRequirementsByBranchService(string $branchService): array {
         $key = $this->normalizeBranchService($branchService);
 
         switch ($key) {
@@ -665,8 +657,7 @@ class ClientLoanController extends Controller
         ];
     }    
 
-    private function makeLoanReference(): string
-    {
+    private function makeLoanReference(): string {
         $prefix = 'LOAN-' . now()->format('Ymd') . '-';
 
         do {
@@ -674,5 +665,41 @@ class ClientLoanController extends Controller
         } while (Loan::where('loanReference', $ref)->exists());
 
         return $ref;
+    }
+
+    /**
+     * Show the member's active loan amortization schedule.
+     */
+    public function mySchedule(Request $request) {
+        $memberId = Auth::guard('member')->id();
+
+        $loans = DB::table('loans')
+            ->where('memberId', $memberId)
+            ->where('status', ['Released', 'Completed'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $selectedLoanId = $request->input('loanID');
+
+        if ($selectedLoanId) {
+            $activeLoan = $loans->firstWhere('id', $selectedLoanId);
+        } else {
+            $activeLoan = $loans->first();
+        }
+
+        $schedule = [];
+
+        if ($activeLoan) {
+            $schedule = DB::table('loan_amortization_schedules')
+                ->where('loanId', $activeLoan->id)
+                ->orderBy('installmentNumber', 'asc')
+                ->get();
+        }
+
+        return Inertia::render('Client/MySchedule', [
+            'loans' => $loans,
+            'activeLoan' => $activeLoan,
+            'schedule' => $schedule
+        ]);
     }
 }

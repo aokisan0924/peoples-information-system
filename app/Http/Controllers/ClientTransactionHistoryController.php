@@ -361,7 +361,7 @@ class ClientTransactionHistoryController extends Controller
                     
             } elseif ($category === 'savings') {
                 SavingsDeposit::where('memberId', $member->id)
-                    ->where('reference_number', $reference) 
+                    ->where('referenceNumber', $reference) 
                     ->whereIn('status', ['Pending', 'pending'])
                     ->update(['status' => 'Cancelled']);
             
