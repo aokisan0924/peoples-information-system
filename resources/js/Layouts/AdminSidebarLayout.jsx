@@ -3,7 +3,8 @@ import {
     Menu as MenuIcon, X, Users, LogOut, LayoutDashboard, BarChart3,
     PiggyBank, Banknote, Hourglass, CreditCard, ChevronDown, Sun, Moon,
     User, UserPlus, Megaphone, Image, BookOpen, Layers, Landmark,
-    Wallet2, Smartphone, Briefcase, Scale, PenTool, ChevronRight, Receipt
+    Wallet2, Smartphone, Briefcase, Scale, PenTool, ChevronRight, Receipt,
+    FileArchive, PieChart // <-- ADDED ICONS HERE
 } from "lucide-react";
 import { Link, usePage } from "@inertiajs/react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -39,6 +40,9 @@ const buildNavGroups = ({ isSuperAdmin, isAccountingClerk, isBookkeeper, canAcce
             accItems.push({ name: "admin.accounting.ewallet.index", label: "E-Wallet Logs",   icon: Smartphone });
         }
         if (canAccess("accounting")) {
+            accItems.push({ name: "admin.accounting.billing.workspace", label: "Billing Processing", icon: Receipt });
+            accItems.push({ name: "admin.accounting.receivables.index", label: "Loans Receivable", icon: BarChart3 });
+            
             accItems.push({ name: "admin.accounting.loans.workspace", label: "Loan Collections", icon: Receipt });
             accItems.push({ name: "admin.accounting.ppe.index",     label: "PPE Depreciation",  icon: Briefcase });
             accItems.push({ name: "admin.accounting.chart.index",   label: "Chart of Accounts", icon: Layers    });

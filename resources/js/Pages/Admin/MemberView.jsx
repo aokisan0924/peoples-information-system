@@ -209,7 +209,6 @@ export default function MemberView() {
                 <link rel="icon" href="/images/logo/pis_logo.png" />
             </Head>
             <AdminSidebarLayout>
-                <Toaster position="top-right" toastOptions={{ style: { borderRadius: "14px", fontWeight: 600, fontSize: "13px" } }} />
 
                 <div className="min-h-screen bg-slate-50 dark:bg-[#080e0c] transition-colors duration-300">
 

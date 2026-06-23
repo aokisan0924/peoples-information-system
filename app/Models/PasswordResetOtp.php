@@ -11,6 +11,7 @@ class PasswordResetOtp extends Model
 
     protected $fillable = [
         'memberId',
+        'purpose',
         'otpToken',
         'channel',
         'destination',

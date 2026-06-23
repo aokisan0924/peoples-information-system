@@ -31,15 +31,12 @@ class ClientTransactionHistoryController extends Controller
 
         $memberId = $member->id;
 
-        // Filters + pagination
         $dateFrom = (string) $request->string('dateFrom');
         $dateTo   = (string) $request->string('dateTo');
         $category = (string) $request->string('category', 'all');
         $status   = (string) $request->string('status', 'all');
         $perPage  = (int) $request->integer('perPage', 10);
         $page     = max(1, (int) $request->integer('page', 1));
-
-        // For dashboard preview (?preview=1)
         $preview  = $request->boolean('preview', false);
 
         $dateFrom = $dateFrom !== '' ? $dateFrom : null;
@@ -47,71 +44,48 @@ class ClientTransactionHistoryController extends Controller
         $category = $category !== '' ? $category : 'all';
         $status   = $status   !== '' ? $status   : 'all';
 
-        /*
-         * 1) SHARE CAPITAL (deposit / withdrawal)
-         *    Table: capital_contributions
-         *    Fields: id, memberId, amount, status, is_paid / is_Paid, reference_number, transactionType, created_at, paid_at
-         */
+        // 1) SHARE CAPITAL
         $shareCapitalTx = CapitalContribution::where('memberId', $memberId)
             ->when($dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo,   fn ($q) => $q->whereDate('created_at', '<=', $dateTo))
             ->get()
             ->map(function (CapitalContribution $row) {
-                $transactionType = $row->transactionType ?? null; // deposit / withdrawal (if set)
+                $transactionType = $row->transactionType ?? null;
                 $isWithdrawal    = $transactionType === 'withdrawal' || (float) $row->amount < 0;
                 $amount          = (float) abs($row->amount);
-
-                $rawStatus = $row->status ?? ($row->is_paid || $row->is_Paid ? 'posted' : 'pending');
-                $status    = strtolower((string) $rawStatus);
-
-                $referenceNumber = $row->reference_number
-                    ?? $row->referenceNumber
-                    ?? null;
-
-                $date = $row->paid_at ?? $row->created_at;
+                $rawStatus       = $row->status ?? ($row->is_paid || $row->is_Paid ? 'posted' : 'pending');
+                $status          = strtolower((string) $rawStatus);
+                $referenceNumber = $row->reference_number ?? $row->referenceNumber ?? null;
+                $date            = $row->paid_at ?? $row->created_at;
 
                 return [
                     'id'              => 'shareCapital-' . $row->id,
                     'sourceModel'     => 'CapitalContribution',
-                    'sourceId'        => $row->id,
+                    'sourceId'        => $row->id,          // ← used by cancel fix
                     'date'            => optional($date)->toDateTimeString(),
                     'category'        => 'shareCapital',
                     'type'            => $isWithdrawal ? 'Share Capital Withdrawal' : 'Share Capital Deposit',
-                    'description'     => $isWithdrawal
-                        ? 'Share capital withdrawal'
-                        : 'Share capital contribution',
+                    'description'     => $isWithdrawal ? 'Share capital withdrawal' : 'Share capital contribution',
                     'amount'          => $amount,
                     'direction'       => $isWithdrawal ? 'debit' : 'credit',
-                    'status'          => $status, // posted/Posted/POSTED → "posted", pending/Pending → "pending"
+                    'status'          => $status,
                     'referenceNumber' => $referenceNumber,
                 ];
             });
 
-        /*
-         * 2) SAVINGS (deposit / withdrawal)
-         *    Table: savings_deposits
-         */
+        // 2) SAVINGS
         $savingsTx = SavingsDeposit::where('memberId', $memberId)
             ->when($dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo,   fn ($q) => $q->whereDate('created_at', '<=', $dateTo))
             ->get()
             ->map(function (SavingsDeposit $row) {
-                $transactionType = $row->transactionType ?? null; // deposit / withdrawal
-                $isDeposit       = $transactionType === 'deposit';
+                $transactionType = $row->transactionType ?? null;
                 $isWithdrawal    = $transactionType === 'withdrawal';
-
-                $amount = (float) abs($row->amount);
-
-                $rawStatus = $row->status ?? 'posted';
-                $status    = strtolower((string) $rawStatus);
-
-                $referenceNumber = $row->referenceNumber
-                    ?? $row->reference_number
-                    ?? null;
-
-                $date = $row->paidAt
-                    ?? $row->paid_at
-                    ?? $row->created_at;
+                $amount          = (float) abs($row->amount);
+                $rawStatus       = $row->status ?? 'posted';
+                $status          = strtolower((string) $rawStatus);
+                $referenceNumber = $row->referenceNumber ?? $row->reference_number ?? null;
+                $date            = $row->paidAt ?? $row->paid_at ?? $row->created_at;
 
                 return [
                     'id'              => 'savings-' . $row->id,
@@ -120,9 +94,7 @@ class ClientTransactionHistoryController extends Controller
                     'date'            => optional($date)->toDateTimeString(),
                     'category'        => 'savings',
                     'type'            => $isWithdrawal ? 'Savings Withdrawal' : 'Savings Deposit',
-                    'description'     => $isWithdrawal
-                        ? 'Savings withdrawal'
-                        : 'Savings deposit',
+                    'description'     => $isWithdrawal ? 'Savings withdrawal' : 'Savings deposit',
                     'amount'          => $amount,
                     'direction'       => $isWithdrawal ? 'debit' : 'credit',
                     'status'          => $status,
@@ -130,36 +102,25 @@ class ClientTransactionHistoryController extends Controller
                 ];
             });
 
-        /*
-         * 3) TIME DEPOSIT (placement only)
-         *    Table: time_deposits
-         */
+        // 3) TIME DEPOSIT
         $timeDepositTx = TimeDeposit::where('memberId', $memberId)
             ->when($dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo,   fn ($q) => $q->whereDate('created_at', '<=', $dateTo))
             ->get()
             ->map(function (TimeDeposit $row) {
-                $term = $row->termYears ?? null;
-
-                $rawStatus = $row->status ?? 'active';
-                $status    = strtolower((string) $rawStatus);
-
-                $referenceNumber = $row->referenceNumber
-                    ?? $row->reference_number
-                    ?? null;
-
-                $date = $row->created_at;
+                $term            = $row->termYears ?? null;
+                $rawStatus       = $row->status ?? 'active';
+                $status          = strtolower((string) $rawStatus);
+                $referenceNumber = $row->referenceNumber ?? $row->reference_number ?? null;
 
                 return [
                     'id'              => 'timeDeposit-' . $row->id,
                     'sourceModel'     => 'TimeDeposit',
                     'sourceId'        => $row->id,
-                    'date'            => optional($date)->toDateTimeString(),
+                    'date'            => optional($row->created_at)->toDateTimeString(),
                     'category'        => 'timeDeposit',
                     'type'            => 'Time Deposit Placement',
-                    'description'     => $term
-                        ? "Time deposit placement - {$term} year(s)"
-                        : 'Time deposit placement',
+                    'description'     => $term ? "Time deposit placement - {$term} year(s)" : 'Time deposit placement',
                     'amount'          => (float) $row->amount,
                     'direction'       => 'credit',
                     'status'          => $status,
@@ -167,56 +128,40 @@ class ClientTransactionHistoryController extends Controller
                 ];
             });
 
-        /*
-         * 4) LOANS (application + status changes)
-         *    Table: loans
-         */
+        // 4) LOANS
         $loanTx = Loan::where('memberId', $memberId)
             ->when($dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo,   fn ($q) => $q->whereDate('created_at', '<=', $dateTo))
             ->get()
             ->map(function (Loan $row) {
-                $rawStatus = $row->status ?? 'pending';
-                $status    = strtolower((string) $rawStatus);
+                $rawStatus       = $row->status ?? 'pending';
+                $status          = strtolower((string) $rawStatus);
+                $referenceNumber = $row->loanReference ?? $row->referenceNumber ?? null;
+                $amount          = (float) ($row->loanAmount ?? $row->approvedAmount ?? 0);
 
-                $referenceNumber = $row->loanReference
-                    ?? $row->referenceNumber
-                    ?? null;
-
-                $date = $row->created_at;
-
-                $amount = (float) ($row->loanAmount ?? $row->approvedAmount ?? 0);
-
-                $description = 'Loan application';
-                if ($status === 'approved') {
-                    $description = 'Loan approved';
-                } elseif ($status === 'released') {
-                    $description = 'Loan released';
-                } elseif ($status === 'declined') {
-                    $description = 'Loan application declined';
-                }
+                $description = match ($status) {
+                    'approved' => 'Loan approved',
+                    'released' => 'Loan released',
+                    'declined' => 'Loan application declined',
+                    default    => 'Loan application',
+                };
 
                 return [
                     'id'              => 'loan-' . $row->id,
                     'sourceModel'     => 'Loan',
                     'sourceId'        => $row->id,
-                    'date'            => optional($date)->toDateTimeString(),
+                    'date'            => optional($row->created_at)->toDateTimeString(),
                     'category'        => 'loan',
                     'type'            => 'Loan Application',
                     'description'     => $description,
                     'amount'          => $amount,
-                    // From member POV: loan proceeds are "credit" when released; but
-                    // for history we keep it simple: always credit here.
                     'direction'       => 'credit',
                     'status'          => $status,
                     'referenceNumber' => $referenceNumber,
                 ];
             });
 
-        /*
-         * 5) MEMBERSHIP PAYMENT
-         *    Table: membership_payments
-         */
+        // 5) MEMBERSHIP
         $membershipTx = MembershipPayment::where('memberId', $memberId)
             ->when($dateFrom, fn ($q) => $q->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo,   fn ($q) => $q->whereDate('created_at', '<=', $dateTo))
@@ -227,22 +172,15 @@ class ClientTransactionHistoryController extends Controller
                     + ($row->initialCapital ?? 0)
                     + ($row->convenienceFee ?? 0)
                 ));
-
-                $rawStatus = $row->status ?? ($row->is_paid ? 'Paid' : 'Pending');
-                $status    = strtolower((string) $rawStatus);
-
-                $referenceNumber = $row->reference_number
-                    ?? $row->paymentReference
-                    ?? $row->paymentReferenceNumber
-                    ?? null;
-
-                $date = $row->created_at;
+                $rawStatus       = $row->status ?? ($row->is_paid ? 'Paid' : 'Pending');
+                $status          = strtolower((string) $rawStatus);
+                $referenceNumber = $row->reference_number ?? $row->paymentReference ?? $row->paymentReferenceNumber ?? null;
 
                 return [
                     'id'              => 'membership-' . $row->id,
                     'sourceModel'     => 'MembershipPayment',
                     'sourceId'        => $row->id,
-                    'date'            => optional($date)->toDateTimeString(),
+                    'date'            => optional($row->created_at)->toDateTimeString(),
                     'category'        => 'membership',
                     'type'            => 'Membership Payment',
                     'description'     => 'Membership fee and initial capital contribution',
@@ -253,7 +191,7 @@ class ClientTransactionHistoryController extends Controller
                 ];
             });
 
-        // MERGE ALL
+        // MERGE & FILTER
         $transactions = collect()
             ->merge($shareCapitalTx)
             ->merge($savingsTx)
@@ -261,68 +199,47 @@ class ClientTransactionHistoryController extends Controller
             ->merge($loanTx)
             ->merge($membershipTx);
 
-        // Filter by category
         if ($category !== 'all') {
+            $transactions = $transactions->filter(fn ($tx) => $tx['category'] === $category);
+        }
+
+        if ($status !== 'all') {
+            $targetStatus = strtolower($status);
             $transactions = $transactions->filter(
-                fn ($tx) => $tx['category'] === $category
+                fn ($tx) => strtolower((string) $tx['status']) === $targetStatus
             );
         }
 
-        // Filter by status (case-insensitive)
-        if ($status !== 'all') {
-            $targetStatus = strtolower($status);
-            $transactions = $transactions->filter(function ($tx) use ($targetStatus) {
-                return strtolower((string) $tx['status']) === $targetStatus;
-            });
-        }
+        $transactions = $transactions->sortByDesc('date')->values();
 
-        // Sort by date desc (latest first)
-        $transactions = $transactions
-            ->sortByDesc('date')
-            ->values();
-
-        /*
-         * PREVIEW MODE FOR DASHBOARD
-         * /client/recent-transactions?preview=1
-         * Returns a flat array for "Recent Transactions" widget.
-         */
+        // PREVIEW MODE
         if ($preview) {
-            $previewItems = $transactions
-                ->take(5)
-                ->map(function (array $tx) {
-                    $dateTime = $tx['date'] ? Carbon::parse($tx['date']) : null;
-
-                    return [
-                        'date'            => optional($dateTime)->format('Y-m-d'),
-                        'time'            => optional($dateTime)->format('H:i'),
-                        'type'            => $tx['type'] ?? null,
-                        'particulars'     => $tx['description'] ?? null,
-                        'amount'          => (float) ($tx['amount'] ?? 0),
-                        'status'          => $tx['status'] ?? null,
-                        'referenceNumber' => $tx['referenceNumber'] ?? null,
-                    ];
-                })
-                ->values();
+            $previewItems = $transactions->take(5)->map(function (array $tx) {
+                $dateTime = $tx['date'] ? Carbon::parse($tx['date']) : null;
+                return [
+                    'date'            => optional($dateTime)->format('Y-m-d'),
+                    'time'            => optional($dateTime)->format('H:i'),
+                    'type'            => $tx['type'] ?? null,
+                    'particulars'     => $tx['description'] ?? null,
+                    'amount'          => (float) ($tx['amount'] ?? 0),
+                    'status'          => $tx['status'] ?? null,
+                    'referenceNumber' => $tx['referenceNumber'] ?? null,
+                ];
+            })->values();
 
             return response()->json($previewItems);
         }
 
-        // Manual pagination for full Transactions page
-        $total   = $transactions->count();
-        $offset  = ($page - 1) * $perPage;
-        $items   = $transactions->slice($offset, $perPage)->values();
+        // PAGINATE
+        $total    = $transactions->count();
+        $offset   = ($page - 1) * $perPage;
+        $items    = $transactions->slice($offset, $perPage)->values();
         $lastPage = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
 
-        $paginator = new LengthAwarePaginator(
-            $items,
-            $total,
-            $perPage,
-            $page,
-            [
-                'path'  => $request->url(),
-                'query' => $request->query(),
-            ]
-        );
+        $paginator = new LengthAwarePaginator($items, $total, $perPage, $page, [
+            'path'  => $request->url(),
+            'query' => $request->query(),
+        ]);
 
         return response()->json([
             'data'    => $paginator->items(),
@@ -342,7 +259,13 @@ class ClientTransactionHistoryController extends Controller
         ]);
     }
 
-    public function cancelTransaction(Request $request) {
+    /**
+     * FIX: Cancel now uses sourceId (the real PK) instead of referenceNumber.
+     * referenceNumber can be null for some records, causing silent WHERE = null matches.
+     * sourceId is always present and unambiguous.
+     */
+    public function cancelTransaction(Request $request)
+    {
         try {
             $member = Auth::guard('member')->user();
 
@@ -350,37 +273,48 @@ class ClientTransactionHistoryController extends Controller
                 return response()->json(['message' => 'Unauthorized'], 401);
             }
 
-            $reference = $request->input('referenceNumber');
-            $category  = $request->input('category');
+            $sourceId = (int) $request->input('sourceId');
+            $category = (string) $request->input('category');
+
+            if (!$sourceId || !$category) {
+                return response()->json(['error' => 'Invalid cancel request: sourceId and category are required.'], 422);
+            }
+
+            $updated = 0;
 
             if ($category === 'shareCapital') {
-                CapitalContribution::where('memberId', $member->id)
-                    ->where('reference_number', $reference) 
+                $updated = CapitalContribution::where('id', $sourceId)
+                    ->where('memberId', $member->id)
                     ->whereIn('status', ['Pending', 'pending'])
                     ->update(['status' => 'Cancelled']);
-                    
+
             } elseif ($category === 'savings') {
-                SavingsDeposit::where('memberId', $member->id)
-                    ->where('referenceNumber', $reference) 
+                $updated = SavingsDeposit::where('id', $sourceId)
+                    ->where('memberId', $member->id)
                     ->whereIn('status', ['Pending', 'pending'])
                     ->update(['status' => 'Cancelled']);
-            
+
             } elseif ($category === 'loan') {
-                Loan::where('memberId', $member->id)
-                    ->where('loanReference', $reference)
+                $updated = Loan::where('id', $sourceId)
+                    ->where('memberId', $member->id)
                     ->whereIn('status', ['Pending', 'pending'])
                     ->update(['status' => 'Declined']);
-                    
+
             } else {
                 return response()->json(['error' => 'This transaction type cannot be cancelled.'], 400);
             }
 
+            if ($updated === 0) {
+                return response()->json([
+                    'error' => 'Transaction could not be cancelled. It may have already been processed or does not belong to your account.'
+                ], 422);
+            }
+
             return response()->json(['success' => true, 'message' => 'Transaction cancelled successfully.']);
-            
+
         } catch (\Exception $e) {
             Log::error("Cancel Transaction Error: " . $e->getMessage());
-            
-            return response()->json(['error' => $e->getMessage()], 500); 
+            return response()->json(['error' => 'An unexpected error occurred. Please try again.'], 500);
         }
     }
 }

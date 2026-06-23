@@ -1,340 +1,456 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Head, useForm, Link, usePage, router } from "@inertiajs/react";
-import { 
-    Plus, Edit2, Trash2, Hash, X, Search, FileUp, 
-    Download, LayoutGrid, ArrowUpDown, ChevronLeft, ChevronRight, MoreHorizontal, Activity, Layers
+import {
+    Plus, Edit2, Trash2, Hash, X, Search, FileUp,
+    Download, LayoutGrid, ArrowUpDown, ChevronLeft, ChevronRight,
+    MoreHorizontal, Layers, CheckCircle2, Loader2, FileText,
+    ChevronsLeft, ChevronsRight, AlertCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 import toast from "react-hot-toast";
 import CountUp from "react-countup";
 
-// --- COMPACT GRADIENT STAT CARD WITH HOVER ACTIONS ---
-function StatCard({ label, value, icon: Icon, color, subtext, prefix = "", actionIcon, onAction }) {
-    const gradientColors = {
-        emerald: "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20 border-emerald-400/20",
-        blue: "bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20 border-blue-400/20",
-        amber: "bg-gradient-to-br from-amber-400 to-orange-500 shadow-amber-500/20 border-amber-400/20",
-        slate: "bg-gradient-to-br from-slate-700 to-slate-900 shadow-slate-900/20 border-slate-600/50",
+// ─── ACCOUNT TYPE CLASSIFIER ──────────────────────────────────────────────────
+// Derives account category from account code prefix
+function classifyAccount(code = "") {
+    const prefix = code.toString().charAt(0);
+    const map = {
+        "1": { label: "Asset",     color: "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400"           },
+        "2": { label: "Liability", color: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"       },
+        "3": { label: "Equity",    color: "bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400"},
+        "4": { label: "Revenue",   color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"},
+        "5": { label: "Revenue",   color: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"},
+        "6": { label: "Expense",   color: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"   },
+        "7": { label: "Expense",   color: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"   },
+        "8": { label: "Expense",   color: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"   },
     };
+    return map[prefix] || { label: "Other", color: "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-white/60" };
+}
 
+// ─── SORT ICON ────────────────────────────────────────────────────────────────
+function SortIcon({ col, sortConfig }) {
+    const active = sortConfig.key === col;
     return (
-        <div className={`relative overflow-hidden rounded-[1.25rem] p-4 border shadow-sm flex items-center gap-4 transition-all hover:-translate-y-1 duration-300 group ${gradientColors[color] || gradientColors.blue}`}>
-            {/* Background Glow */}
-            <div className="absolute -right-4 -top-4 w-16 h-16 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-colors duration-500"></div>
-            
-            <div className="relative p-2.5 rounded-xl bg-white/20 backdrop-blur-md shadow-inner border border-white/20">
-                <Icon size={20} className="text-white drop-shadow-sm" />
-            </div>
-            
-            <div className="relative z-10 flex-1">
-                <p className="text-[10px] font-black text-white/80 uppercase tracking-widest mb-0.5">{label}</p>
-                <p className="text-xl font-black text-white font-mono drop-shadow-sm tracking-tight">
-                    {typeof value === 'number' || !isNaN(value) ? (
-                        <CountUp end={Number(value) || 0} duration={1.5} separator="," prefix={prefix} />
-                    ) : (
-                        <>{prefix}{value}</>
-                    )}
-                </p>
-                {subtext && <p className="text-[9px] font-bold text-white/60 mt-0.5">{subtext}</p>}
-            </div>
-
-            {/* Hover Action Button */}
-            {actionIcon && (
-                <button 
-                    onClick={onAction}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all duration-300 p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border border-white/20 shadow-sm"
-                >
-                    {actionIcon}
-                </button>
-            )}
-        </div>
+        <ArrowUpDown
+            size={12}
+            className={`transition-opacity ${active ? "opacity-100 text-indigo-500" : "opacity-30 group-hover:opacity-70"}`}
+        />
     );
 }
 
+// ─── MODAL SHELL ─────────────────────────────────────────────────────────────
+function ModalShell({ title, subtitle, headerIcon: HeaderIcon, gradientFrom, gradientTo, onClose, children }) {
+    useEffect(() => {
+        document.body.style.overflow = "hidden";
+        const handler = (e) => { if (e.key === "Escape") onClose(); };
+        window.addEventListener("keydown", handler);
+        return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", handler); };
+    }, [onClose]);
+
+    return (
+        <motion.div
+            className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            role="dialog" aria-modal="true"
+        >
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-md" onClick={onClose} aria-hidden="true" />
+            <motion.div
+                className="relative w-full max-w-lg bg-white dark:bg-[#0d1a14] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] overflow-hidden flex flex-col"
+                style={{ maxHeight: "92dvh" }}
+                initial={{ opacity: 0, scale: 0.97, y: -14 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97, y: -14 }}
+                transition={{ type: "spring", damping: 30, stiffness: 360, mass: 0.85 }}
+            >
+                {/* Gradient header */}
+                <div className={`shrink-0 flex items-center justify-between gap-4 px-5 sm:px-7 py-4 sm:py-5 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-xl bg-white/15 grid place-items-center shrink-0">
+                            <HeaderIcon size={18} className="text-white" />
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-base sm:text-lg font-black text-white tracking-tight leading-tight">{title}</h2>
+                            <p className="text-[10px] text-white/60 font-semibold hidden sm:block mt-0.5">{subtitle}</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="h-9 w-9 shrink-0 grid place-items-center rounded-xl bg-white/10 hover:bg-white/20 text-white transition active:scale-95"
+                    >
+                        <X size={18} className="text-current" />
+                    </button>
+                </div>
+
+                {children}
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// ─── DELETE CONFIRM MODAL ─────────────────────────────────────────────────────
+function DeleteModal({ account, onConfirm, onClose, isDeleting }) {
+    return (
+        <motion.div
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
+            <motion.div
+                className="relative w-full max-w-sm bg-white dark:bg-[#0d1a14] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] overflow-hidden"
+                initial={{ opacity: 0, scale: 0.96, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -10 }}
+                transition={{ type: "spring", damping: 30, stiffness: 350 }}
+            >
+                {/* Rose accent strip */}
+                <div className="h-1.5 w-full bg-gradient-to-r from-rose-500 to-pink-500" />
+
+                <div className="p-5 sm:p-6">
+                    <div className="flex items-start gap-4 mb-5">
+                        <div className="h-11 w-11 rounded-2xl bg-rose-50 dark:bg-rose-500/15 grid place-items-center shrink-0 border border-rose-100 dark:border-rose-500/20">
+                            <Trash2 size={20} className="text-rose-600 dark:text-rose-400" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="text-base font-black text-slate-900 dark:text-white">Delete Account?</h3>
+                            <p className="text-xs text-slate-500 dark:text-white/50 mt-1 leading-relaxed">
+                                This will permanently remove this account from the chart. This action cannot be undone.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Account preview */}
+                    <div className="p-3.5 bg-slate-50 dark:bg-white/[0.03] rounded-xl border border-slate-200 dark:border-white/[0.06] mb-5 flex items-center gap-3">
+                        <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-1.5 rounded-lg shrink-0">
+                            {account.accountCode}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-800 dark:text-white/90 truncate">{account.accountName}</span>
+                    </div>
+
+                    <div className="flex gap-2.5">
+                        <button
+                            onClick={onClose}
+                            disabled={isDeleting}
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10 font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
+                        >Keep it</button>
+                        <button
+                            onClick={onConfirm}
+                            disabled={isDeleting}
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-500/25 transition-all active:scale-95 disabled:opacity-60"
+                        >
+                            {isDeleting
+                                ? <><Loader2 size={14} className="animate-spin text-current" /> Deleting...</>
+                                : <><Trash2 size={14} className="text-current" /> Yes, Delete</>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ChartOfAccount() {
     const { props } = usePage();
-    const { accounts = {}, chartStats = { total: 0, newThisMonth: 0 } } = props; 
-    
-    const [showModal, setShowModal] = useState(false);
-    const [showImportModal, setShowImportModal] = useState(false);
-    const [editId, setEditId] = useState(null);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [sortConfig, setSortConfig] = useState({ key: 'accountCode', direction: 'asc' });
+    const { accounts = {}, chartStats = { total: 0, newThisMonth: 0 } } = props;
 
+    const [showModal,        setShowModal]        = useState(false);
+    const [showImportModal,  setShowImportModal]  = useState(false);
+    const [deleteTarget,     setDeleteTarget]     = useState(null);
+    const [isDeleting,       setIsDeleting]       = useState(false);
+    const [editId,           setEditId]           = useState(null);
+    const [searchTerm,       setSearchTerm]       = useState("");
+    const [sortConfig,       setSortConfig]       = useState({ key: "accountCode", direction: "asc" });
+    const [dragActive,       setDragActive]       = useState(false);
     const isFirstRender = useRef(true);
+    const fileInputRef  = useRef(null);
+
     const items = accounts?.data || [];
-    const meta = accounts || {};
+    const meta  = accounts || {};
 
     const { data, setData, post, put, delete: destroy, reset, errors, processing, clearErrors } = useForm({
-        accountCode: '',
-        accountName: '',
+        accountCode: "",
+        accountName: "",
         file: null,
     });
 
+    // Debounced server search
     useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
-        const delaySearch = setTimeout(() => {
-            router.get(
-                route('admin.accounting.chart.index'),
-                { search: searchTerm },
-                { preserveState: true, preserveScroll: true, replace: true }
-            );
-        }, 400); 
-        return () => clearTimeout(delaySearch);
+        if (isFirstRender.current) { isFirstRender.current = false; return; }
+        const t = setTimeout(() => {
+            router.get(route("admin.accounting.chart.index"), { search: searchTerm }, { preserveState: true, preserveScroll: true, replace: true });
+        }, 380);
+        return () => clearTimeout(t);
     }, [searchTerm]);
 
-    const sortedAndFilteredAccounts = useMemo(() => {
-        let result = [...items]; 
+    const sortedItems = useMemo(() => {
+        const result = [...items];
         if (sortConfig.key) {
             result.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
-                return 0;
+                const aVal = a[sortConfig.key] || "";
+                const bVal = b[sortConfig.key] || "";
+                return sortConfig.direction === "asc"
+                    ? aVal.toString().localeCompare(bVal.toString())
+                    : bVal.toString().localeCompare(aVal.toString());
             });
         }
         return result;
     }, [items, sortConfig]);
 
     const requestSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-        setSortConfig({ key, direction });
+        setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc" }));
     };
 
-    const openAddModal = () => { 
-        setEditId(null); 
-        reset(); 
-        clearErrors(); 
-        setShowModal(true); 
-    };
-    
+    const openAddModal = () => { setEditId(null); reset(); clearErrors(); setShowModal(true); };
+
     const openEditModal = (acc) => {
         setEditId(acc.id);
         setData({ accountCode: acc.accountCode, accountName: acc.accountName });
-        clearErrors(); 
+        clearErrors();
         setShowModal(true);
     };
 
-    const submit = (e) => {
-        e.preventDefault();
+    const submit = () => {
         const options = {
             preserveScroll: true,
-            onSuccess: () => { 
-                setShowModal(false); 
-                toast.success(editId ? "Account Updated Successfully" : "New Account Created");
-                reset(); 
-            }
+            onSuccess: () => {
+                setShowModal(false);
+                toast.success(editId ? "Account updated successfully." : "Account created successfully.");
+                reset();
+            },
         };
-
-        if (editId) {
-            put(route('admin.accounting.chart.update', editId), options);
-        } else {
-            post(route('admin.accounting.chart.store'), options);
-        }
+        if (editId) put(route("admin.accounting.chart.update", editId), options);
+        else        post(route("admin.accounting.chart.store"), options);
     };
 
     const handleImport = (e) => {
         e.preventDefault();
-        post(route('admin.accounting.chart.import'), {
+        post(route("admin.accounting.chart.import"), {
             preserveScroll: true,
             onSuccess: () => {
                 setShowImportModal(false);
-                toast.success("Bulk Import Successful");
+                toast.success("Accounts imported successfully.");
                 reset();
             },
         });
     };
 
-    const confirmDelete = (acc) => {
-        toast.custom((t) => (
-            <div className={`${
-                t.visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95'
-            } transform transition-all duration-300 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-white/10 shadow-2xl rounded-[2rem] p-6 flex flex-col gap-5 min-w-[340px] pointer-events-auto`}>
-                
-                <div className="flex items-center gap-4">
-                    <div className="p-3.5 bg-gradient-to-br from-rose-500 to-pink-600 text-white rounded-2xl shadow-lg shadow-rose-500/20">
-                        <Trash2 size={22} />
-                    </div>
-                    <div>
-                        <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Delete Account?</p>
-                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                            Permanently remove <span className="text-rose-500 font-bold bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded">{acc.accountCode}</span>?
-                        </p>
-                    </div>
-                </div>
-                
-                <div className="flex justify-end gap-3 mt-1 pt-4 border-t border-slate-100 dark:border-white/5">
-                    <button 
-                        onClick={() => toast.dismiss(t.id)} 
-                        className="px-5 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all active:scale-95"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={() => {
-                            toast.dismiss(t.id);
-                            destroy(route('admin.accounting.chart.destroy', acc.id), {
-                                preserveScroll: true,
-                                onSuccess: () => toast.success("Account deleted!"),
-                            });
-                        }} 
-                        className="px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 rounded-xl shadow-lg shadow-rose-500/20 transition-all active:scale-95"
-                    >
-                        Yes, Delete
-                    </button>
-                </div>
-            </div>
-        ), { duration: Infinity, position: 'top-center' });
+    const handleConfirmDelete = () => {
+        if (!deleteTarget) return;
+        setIsDeleting(true);
+        destroy(route("admin.accounting.chart.destroy", deleteTarget.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success(`Account ${deleteTarget.accountCode} deleted.`);
+                setDeleteTarget(null);
+            },
+            onError: () => toast.error("Failed to delete account."),
+            onFinish: () => setIsDeleting(false),
+        });
+    };
+
+    // Drag-and-drop file handling for import
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragActive(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.name.endsWith(".csv")) setData("file", file);
+        else toast.error("Please drop a .csv file.");
     };
 
     const todayStr = new Date().toLocaleString("en-PH", { month: "long", year: "numeric" });
 
+    const inputCls = "w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition";
+
+    // ── STAT SUMMARY ──────────────────────────────────────────────────────────
+    const assetCount    = items.filter(a => a.accountCode?.startsWith("1")).length;
+    const liabCount     = items.filter(a => a.accountCode?.startsWith("2")).length;
+    const revenueCount  = items.filter(a => ["4","5"].includes(a.accountCode?.charAt(0))).length;
+    const expenseCount  = items.filter(a => ["6","7","8"].includes(a.accountCode?.charAt(0))).length;
+
     return (
         <AdminSidebarLayout>
-            <Head title="Accounting | Chart of Accounts">
+            <Head title="Chart of Accounts">
                 <link rel="icon" href="/images/logo/pis_logo.png" />
             </Head>
-            
-            <div className="space-y-6 p-4 md:p-6 max-w-[90rem] mx-auto animate-in fade-in duration-500">
-                
-                {/* --- HEADER --- */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/20 border border-blue-400/20">
-                                <LayoutGrid className="h-5 w-5" strokeWidth={2.5} />
+
+            <div className="space-y-5 sm:space-y-6 pb-10">
+
+                {/* ── HEADER ──────────────────────────────────────────────── */}
+                <div className="bg-white dark:bg-[#0a1510] border border-slate-200 dark:border-white/[0.07] rounded-2xl sm:rounded-3xl p-5 sm:p-7 relative overflow-hidden shadow-sm">
+                    <div className="absolute -top-16 -right-16 w-64 h-64 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                            <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 grid place-items-center shadow-lg shadow-indigo-500/25 shrink-0">
+                                <LayoutGrid className="h-5 w-5 text-white" />
                             </div>
-                            Chart of Accounts
-                        </h1>
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-1.5 ml-1">
-                            Manage general ledger structures and account mappings.
-                        </p>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2.5">
-                        <button 
-                            onClick={() => setShowImportModal(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200/60 dark:border-white/10 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 text-[11px] uppercase tracking-widest font-bold shadow-sm hover:shadow-md transition-all active:scale-95"
-                        >
-                            <FileUp size={16} className="text-slate-400" />
-                            <span>Import CSV</span>
-                        </button>
-                        <button 
-                            onClick={openAddModal}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] uppercase tracking-widest font-bold shadow-lg shadow-blue-500/25 transition-all active:scale-95"
-                        >
-                            <Plus size={16} strokeWidth={2.5} />
-                            <span>New Account</span>
-                        </button>
-                    </div>
-                </div>
+                            <div>
+                                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Chart of Accounts</h1>
+                                <p className="text-xs sm:text-sm text-slate-400 dark:text-white/40 font-medium mt-0.5">Manage general ledger structures and account mappings.</p>
+                            </div>
+                        </div>
 
-                {/* --- COMPACT GRADIENT STAT CARDS WITH HOVER ACTIONS --- */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <StatCard 
-                        label="Total Accounts" 
-                        value={chartStats.total || meta.total || accounts.length || 0} 
-                        icon={Hash} 
-                        color="blue" 
-                        subtext={`Active Codes as of ${todayStr}`} 
-                        actionIcon={<Plus size={16} />}
-                        onAction={openAddModal}
-                    />
-                    <a 
-                        href={route('admin.accounting.chart.download-template')}
-                        download="chart_of_accounts_template.csv" // <--- ADD THIS
-                        target="_blank" // <--- ADD THIS
-                        rel="noopener noreferrer" // <--- ADD THIS
-                        className="relative overflow-hidden rounded-3xl p-5 border border-slate-600/50 bg-gradient-to-br from-slate-800 to-slate-950 shadow-lg shadow-slate-900/20 flex flex-col justify-center gap-2 transition-all hover:-translate-y-1 duration-300 group"
-                    >
-                        <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors duration-500"></div>
-                        <p className="relative z-10 text-[10px] font-black text-white/50 uppercase tracking-widest flex justify-between items-center">
-                            Resources
-                            <span className="p-1.5 rounded-lg bg-white/10 group-hover:bg-white/20 transition-colors">
-                                <Download size={14} className="text-white/80" />
-                            </span>
-                        </p>
-                        <p className="relative z-10 text-lg font-black text-white mt-1 group-hover:text-blue-400 transition-colors tracking-tight">
-                            Download CSV Template
-                        </p>
-                        <p className="relative z-10 text-[10px] font-bold text-white/40">Use standard mapping format</p>
-                    </a>
-                </div>
-
-                {/* --- FLOATING COMMAND BAR (SEARCH) --- */}
-                <div className="rounded-2xl border border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/80 p-2 shadow-sm transition-all">
-                    <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <input 
-                            type="text" 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Search by account code or name..." 
-                            className="w-full pl-11 pr-6 py-2.5 rounded-xl border-none bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white placeholder:text-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-500/50 transition-all outline-none text-sm font-semibold shadow-inner"
-                        />
-                        {searchTerm && (
-                            <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-full text-slate-500 transition-colors">
-                                <X size={12} />
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                            <a
+                                href={route("admin.accounting.chart.download-template")}
+                                download="chart_of_accounts_template.csv"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white/80 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
+                            >
+                                <Download size={15} className="text-slate-400 dark:text-white/40 shrink-0" />
+                                <span className="hidden xs:inline">Template</span>
+                            </a>
+                            <button
+                                onClick={() => setShowImportModal(true)}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white/80 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
+                            >
+                                <FileUp size={15} className="text-slate-400 dark:text-white/40 shrink-0" />
+                                <span>Import CSV</span>
                             </button>
-                        )}
+                            <button
+                                onClick={openAddModal}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-500/25 transition-all active:scale-95"
+                            >
+                                <Plus size={16} className="text-current shrink-0" />
+                                <span>New Account</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                {/* --- TABLE CARD --- */}
-                <div className="rounded-[1.5rem] border border-slate-200/80 bg-white dark:border-white/10 dark:bg-slate-900 shadow-xl shadow-slate-200/10 dark:shadow-none overflow-hidden transition-colors">
-                    
+                {/* ── STAT STRIP ───────────────────────────────────────────── */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                        { label: "Total Accounts", value: chartStats.total || meta.total || 0,
+                          gradient: "from-indigo-500 to-blue-600", shadow: "shadow-indigo-500/20" },
+                        { label: "Assets",   value: assetCount,   gradient: "from-sky-500 to-cyan-600",      shadow: "shadow-sky-500/20"    },
+                        { label: "Revenue",  value: revenueCount, gradient: "from-emerald-500 to-teal-600",  shadow: "shadow-emerald-500/20"},
+                        { label: "Expenses", value: expenseCount, gradient: "from-amber-500 to-orange-500",  shadow: "shadow-amber-500/20"  },
+                    ].map(s => (
+                        <div key={s.label} className={`relative overflow-hidden rounded-2xl p-4 bg-gradient-to-br ${s.gradient} shadow-lg ${s.shadow} hover:-translate-y-0.5 transition-all duration-300`}>
+                            <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                            <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1.5">{s.label}</p>
+                            <p className="text-2xl sm:text-3xl font-black text-white font-mono">
+                                <CountUp end={Number(s.value) || 0} duration={1.4} separator="," preserveValue />
+                            </p>
+                        </div>
+                    ))}
+                </div>
+
+                {/* ── SEARCH + TABLE ───────────────────────────────────────── */}
+                <div className="bg-white dark:bg-[#0a1510] border border-slate-200 dark:border-white/[0.07] rounded-2xl sm:rounded-3xl shadow-sm overflow-hidden">
+
+                    {/* Search bar */}
+                    <div className="px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+                        <div className="relative flex-1 sm:max-w-sm">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-white/30 pointer-events-none" />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                placeholder="Search by code or account name..."
+                                className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-white/30 text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded-full bg-slate-200 dark:bg-white/15 text-slate-500 dark:text-white/60 hover:bg-slate-300 dark:hover:bg-white/25 transition"
+                                >
+                                    <X size={11} className="text-current" />
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <p className="text-xs text-slate-400 dark:text-white/30 font-medium">
+                                {sortedItems.length} account{sortedItems.length !== 1 ? "s" : ""}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Table */}
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50/50 dark:bg-white/5 border-b border-slate-200/80 dark:border-white/10 text-[10px] uppercase font-black text-slate-400 tracking-widest">
+                            <thead className="bg-slate-50 dark:bg-white/[0.03] border-b border-slate-100 dark:border-white/[0.06]">
                                 <tr>
-                                    <th onClick={() => requestSort('accountCode')} className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap group/th">
-                                        <div className="flex items-center gap-2">Account Code <ArrowUpDown size={12} className="opacity-40 group-hover/th:opacity-100 transition-opacity"/></div>
+                                    <th
+                                        onClick={() => requestSort("accountCode")}
+                                        className="px-4 sm:px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap group"
+                                    >
+                                        <div className="flex items-center gap-2">Account Code <SortIcon col="accountCode" sortConfig={sortConfig} /></div>
                                     </th>
-                                    <th onClick={() => requestSort('accountName')} className="px-6 py-4 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap group/th">
-                                        <div className="flex items-center gap-2">Account Name <ArrowUpDown size={12} className="opacity-40 group-hover/th:opacity-100 transition-opacity"/></div>
+                                    <th
+                                        onClick={() => requestSort("accountName")}
+                                        className="px-4 sm:px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap group"
+                                    >
+                                        <div className="flex items-center gap-2">Account Name <SortIcon col="accountName" sortConfig={sortConfig} /></div>
                                     </th>
-                                    <th className="px-6 py-4 text-right">Actions</th>
+                                    <th className="px-4 sm:px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 hidden sm:table-cell">Type</th>
+                                    <th className="px-4 sm:px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 text-center">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="text-slate-700 dark:text-slate-200">
-                                {sortedAndFilteredAccounts.length > 0 ? sortedAndFilteredAccounts.map((acc) => (
-                                    <tr key={acc.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-blue-50/30 dark:hover:bg-white/[0.02] transition-colors last:border-0">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 hidden sm:block shadow-sm"></div>
-                                                <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-xs bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-md">{acc.accountCode}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="font-bold text-sm text-slate-800 dark:text-slate-100">{acc.accountName}</span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            {/* Action Buttons: Restored to always be visible */}
-                                            <div className="flex justify-end gap-2">
-                                                <button onClick={() => openEditModal(acc)} className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-blue-600 hover:text-white dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-blue-600 transition-all shadow-sm">
-                                                    <Edit2 size={14} strokeWidth={2.5} />
-                                                </button>
-                                                <button onClick={() => confirmDelete(acc)} className="p-2 rounded-xl bg-slate-50 text-slate-500 hover:bg-rose-600 hover:text-white dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-rose-600 transition-all shadow-sm">
-                                                    <Trash2 size={14} strokeWidth={2.5} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )) : (
-                                    <tr>
-                                        <td colSpan="3" className="px-6 py-16 text-center">
-                                            <div className="flex flex-col items-center justify-center space-y-3">
-                                                <div className="p-3 rounded-full bg-slate-50 dark:bg-slate-800/50">
-                                                    <Layers className="w-6 h-6 text-slate-400 dark:text-slate-500" strokeWidth={2} />
-                                                </div>
+                            <tbody className="divide-y divide-slate-50 dark:divide-white/[0.04]">
+                                {sortedItems.length > 0 ? sortedItems.map(acc => {
+                                    const type = classifyAccount(acc.accountCode);
+                                    return (
+                                        <tr key={acc.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.025] transition-colors group">
+                                            <td className="px-4 sm:px-6 py-3 sm:py-4 whitespace-nowrap">
+                                                <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-1.5 rounded-lg">
+                                                    {acc.accountCode}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 sm:px-6 py-3 sm:py-4">
                                                 <div>
-                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No accounts found</p>
-                                                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Try adjusting your search criteria.</p>
+                                                    <p className="font-semibold text-sm text-slate-900 dark:text-white">{acc.accountName}</p>
+                                                    {/* Type badge inline on mobile (column hidden below sm) */}
+                                                    <span className={`sm:hidden inline-flex items-center mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${type.color}`}>
+                                                        {type.label}
+                                                    </span>
                                                 </div>
+                                            </td>
+                                            <td className="px-4 sm:px-6 py-3 sm:py-4 hidden sm:table-cell">
+                                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold ${type.color}`}>
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-current shrink-0 opacity-70" />
+                                                    {type.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 sm:px-6 py-3 sm:py-4 text-center">
+                                                <div className="flex items-center justify-center gap-1.5">
+                                                    <button
+                                                        onClick={() => openEditModal(acc)}
+                                                        title="Edit"
+                                                        className="h-8 w-8 grid place-items-center rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-500 dark:text-white/50 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 transition-all active:scale-95"
+                                                    >
+                                                        <Edit2 size={13} className="text-current" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setDeleteTarget(acc)}
+                                                        title="Delete"
+                                                        className="h-8 w-8 grid place-items-center rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-500 dark:text-white/50 hover:border-rose-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 transition-all active:scale-95"
+                                                    >
+                                                        <Trash2 size={13} className="text-current" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                }) : (
+                                    <tr>
+                                        <td colSpan="4" className="px-6 py-20 text-center">
+                                            <div className="flex flex-col items-center gap-3 text-slate-300 dark:text-white/20">
+                                                <div className="h-14 w-14 rounded-2xl bg-slate-50 dark:bg-white/5 grid place-items-center">
+                                                    <Layers size={26} className="opacity-50" />
+                                                </div>
+                                                <p className="text-sm font-semibold text-slate-500 dark:text-white/40">
+                                                    {searchTerm ? "No accounts match your search" : "No accounts found"}
+                                                </p>
+                                                {searchTerm && (
+                                                    <button onClick={() => setSearchTerm("")} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold">
+                                                        Clear search
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -343,33 +459,32 @@ export default function ChartOfAccount() {
                         </table>
                     </div>
 
-                    {/* --- PAGINATION --- */}
+                    {/* Pagination */}
                     {meta.links && meta.last_page > 1 && (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-slate-50/50 dark:bg-slate-800/20">
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                Page <span className="text-blue-600 dark:text-blue-400">{meta.current_page}</span> of {meta.last_page}
-                            </div>
-                            <div className="flex gap-2 flex-wrap">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-slate-100 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.02]">
+                            <p className="text-xs font-medium text-slate-400 dark:text-white/30">
+                                Page <span className="font-bold text-indigo-600 dark:text-indigo-400">{meta.current_page}</span> of {meta.last_page} · {meta.total} total
+                            </p>
+                            <div className="flex items-center gap-1.5">
                                 {meta.links.map((link, i) => {
-                                    const isPrevious = link.label.includes('Previous');
-                                    const isNext = link.label.includes('Next');
-                                    const isEllipsis = link.label.includes('...');
-
-                                    if (isEllipsis) return <div key={i} className="flex items-center justify-center w-8 h-8 text-slate-400"><MoreHorizontal size={14} /></div>;
-
+                                    const isPrev     = link.label.includes("Previous");
+                                    const isNext     = link.label.includes("Next");
+                                    const isEllipsis = link.label === "...";
+                                    if (isEllipsis) return (
+                                        <span key={i} className="h-8 w-8 grid place-items-center text-slate-400 dark:text-white/30 text-xs">…</span>
+                                    );
                                     return (
                                         <Link
                                             key={i}
-                                            href={link.url || '#'}
-                                            preserveScroll
-                                            preserveState
-                                            className={`h-8 min-w-[32px] px-2.5 flex items-center justify-center rounded-xl text-xs font-black transition-all ${
-                                                link.active 
-                                                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/30 border-none' 
-                                                    : 'bg-white border border-slate-200/80 text-slate-500 hover:border-blue-500 hover:text-blue-600 dark:bg-slate-800 dark:border-white/10 dark:text-slate-400'
-                                            } ${!link.url ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                            href={link.url || "#"}
+                                            preserveScroll preserveState
+                                            className={`h-8 min-w-[2rem] px-2 grid place-items-center rounded-xl text-xs font-bold transition-all ${
+                                                link.active
+                                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25"
+                                                    : "border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-600 dark:text-white/50 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                            } ${!link.url ? "opacity-30 pointer-events-none" : ""}`}
                                         >
-                                            {isPrevious ? <ChevronLeft size={14} strokeWidth={3} /> : isNext ? <ChevronRight size={14} strokeWidth={3} /> : <span dangerouslySetInnerHTML={{ __html: link.label }} />}
+                                            {isPrev ? <ChevronLeft size={14} className="text-current" /> : isNext ? <ChevronRight size={14} className="text-current" /> : <span dangerouslySetInnerHTML={{ __html: link.label }} />}
                                         </Link>
                                     );
                                 })}
@@ -379,106 +494,223 @@ export default function ChartOfAccount() {
                 </div>
             </div>
 
-            {/* --- ADD / EDIT MODAL --- */}
+            {/* ── ADD / EDIT MODAL ─────────────────────────────────────────── */}
             <AnimatePresence>
                 {showModal && (
-                    <motion.div className="fixed inset-0 z-50 flex items-center justify-center px-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-                        <motion.div initial={{ scale: 0.95, y: 10, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 10, opacity: 0 }} className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col border border-slate-200/50 dark:border-white/10">
-                            
-                            <div className="px-8 py-6 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50/50 dark:bg-white/5">
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{editId ? 'Modify Account' : 'New Account'}</h2>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Configure ledger credentials</p>
+                    <ModalShell
+                        title={editId ? "Edit Account" : "New Account"}
+                        subtitle={editId ? "Update account code and name" : "Add a new account to the chart"}
+                        headerIcon={editId ? Edit2 : Plus}
+                        gradientFrom="from-indigo-600"
+                        gradientTo="to-blue-600"
+                        onClose={() => setShowModal(false)}
+                    >
+                        <div className="p-5 sm:p-7 space-y-4 flex-1 overflow-y-auto bg-slate-50/40 dark:bg-white/[0.01]">
+
+                            {/* Account Code */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/40 ml-0.5">
+                                    Account Code <span className="text-rose-400">*</span>
+                                </label>
+                                <div className="relative">
+                                    <Hash size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/30 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={data.accountCode}
+                                        onChange={e => setData("accountCode", e.target.value)}
+                                        placeholder="e.g. 101-01"
+                                        className={`${inputCls} pl-9 ${errors.accountCode ? "border-rose-400 focus:border-rose-400 focus:ring-rose-400/20" : ""}`}
+                                        autoFocus
+                                        required
+                                    />
                                 </div>
-                                <button onClick={() => setShowModal(false)} className="p-2.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 hover:bg-slate-100 text-slate-500 transition-all active:scale-95 shadow-sm"><X size={18} strokeWidth={2.5}/></button>
+                                {errors.accountCode && (
+                                    <p className="text-rose-500 text-xs font-semibold flex items-center gap-1.5 ml-0.5">
+                                        <AlertCircle size={12} className="text-current shrink-0" /> {errors.accountCode}
+                                    </p>
+                                )}
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-8 space-y-6">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest pl-1">Account Code</label>
-                                    <input 
-                                        type="text" 
-                                        value={data.accountCode} 
-                                        onChange={e => setData('accountCode', e.target.value)} 
-                                        className="w-full px-5 py-3.5 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 outline-none text-sm font-bold transition-all shadow-sm" 
-                                        placeholder="e.g. 101-01" 
-                                        required 
+                            {/* Account Name */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/40 ml-0.5">
+                                    Account Name <span className="text-rose-400">*</span>
+                                </label>
+                                <div className="relative">
+                                    <FileText size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-white/30 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={data.accountName}
+                                        onChange={e => setData("accountName", e.target.value)}
+                                        placeholder="e.g. Cash in Bank - BDO"
+                                        className={`${inputCls} pl-9 ${errors.accountName ? "border-rose-400 focus:border-rose-400 focus:ring-rose-400/20" : ""}`}
+                                        required
                                     />
-                                    {errors.accountCode && <div className="text-rose-500 text-xs mt-2 font-bold pl-1">{errors.accountCode}</div>}
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-widest pl-1">Account Name</label>
-                                    <input 
-                                        type="text" 
-                                        value={data.accountName} 
-                                        onChange={e => setData('accountName', e.target.value)} 
-                                        className="w-full px-5 py-3.5 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 outline-none text-sm font-bold transition-all shadow-sm" 
-                                        placeholder="e.g. Cash in Bank" 
-                                        required 
-                                    />
-                                    {errors.accountName && <div className="text-rose-500 text-xs mt-2 font-bold pl-1">{errors.accountName}</div>}
-                                </div>
+                                {errors.accountName && (
+                                    <p className="text-rose-500 text-xs font-semibold flex items-center gap-1.5 ml-0.5">
+                                        <AlertCircle size={12} className="text-current shrink-0" /> {errors.accountName}
+                                    </p>
+                                )}
                             </div>
 
-                            <div className="px-8 py-6 border-t border-slate-100 dark:border-white/10 flex justify-end gap-3 bg-slate-50/50 dark:bg-white/5">
-                                <button onClick={() => setShowModal(false)} className="px-6 py-3.5 rounded-2xl text-[11px] font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors uppercase tracking-widest">Cancel</button>
-                                <button onClick={submit} disabled={processing} className="px-8 py-3.5 rounded-2xl text-[11px] font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/30 transition-all disabled:opacity-50 uppercase tracking-widest active:scale-95">
-                                    {processing ? 'Saving...' : 'Save Account'}
+                            {/* Account type hint */}
+                            {data.accountCode && (
+                                <div className="flex items-center gap-2 p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                                    <span className="text-xs text-slate-400 dark:text-white/40 font-medium">Classified as:</span>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${classifyAccount(data.accountCode).color}`}>
+                                        {classifyAccount(data.accountCode).label}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 dark:text-white/30 font-medium ml-auto">Based on first digit of code</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="shrink-0 flex flex-col-reverse sm:flex-row justify-between items-center gap-3 px-5 sm:px-7 py-4 border-t border-slate-100 dark:border-white/[0.06] bg-white dark:bg-[#0a1510]">
+                            <p className="text-[10px] text-slate-400 dark:text-white/30 hidden sm:block">
+                                {editId ? "Changes will update the ledger mapping." : "Account will be available for GL mappings immediately."}
+                            </p>
+                            <div className="flex gap-2.5 w-full sm:w-auto">
+                                <button
+                                    onClick={() => setShowModal(false)}
+                                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10 font-semibold text-sm transition-all active:scale-95"
+                                >Cancel</button>
+                                <button
+                                    onClick={submit}
+                                    disabled={processing}
+                                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 disabled:opacity-60 transition-all active:scale-95"
+                                >
+                                    {processing
+                                        ? <><Loader2 size={14} className="animate-spin text-current" /> Saving...</>
+                                        : <><CheckCircle2 size={14} className="text-current" /> {editId ? "Update Account" : "Create Account"}</>
+                                    }
                                 </button>
                             </div>
-
-                        </motion.div>
-                    </motion.div>
+                        </div>
+                    </ModalShell>
                 )}
             </AnimatePresence>
 
-            {/* --- IMPORT MODAL --- */}
+            {/* ── IMPORT MODAL ─────────────────────────────────────────────── */}
             <AnimatePresence>
                 {showImportModal && (
-                    <motion.div className="fixed inset-0 z-50 flex items-center justify-center px-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowImportModal(false)} />
-                        <motion.div initial={{ scale: 0.95, y: 10, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.95, y: 10, opacity: 0 }} className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col border border-slate-200/50 dark:border-white/10">
-                            
-                            <div className="px-8 py-6 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50/50 dark:bg-white/5">
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Import Accounts</h2>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">Upload CSV Database</p>
+                    <ModalShell
+                        title="Import Accounts"
+                        subtitle="Bulk upload via CSV file"
+                        headerIcon={FileUp}
+                        gradientFrom="from-teal-600"
+                        gradientTo="to-emerald-600"
+                        onClose={() => setShowImportModal(false)}
+                    >
+                        <form onSubmit={handleImport} className="flex-1 overflow-y-auto">
+                            <div className="p-5 sm:p-7 space-y-5 bg-slate-50/40 dark:bg-white/[0.01]">
+
+                                {/* CSV format hint */}
+                                <div className="p-4 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-2xl">
+                                    <p className="text-xs font-bold text-indigo-700 dark:text-indigo-400 mb-2 flex items-center gap-2">
+                                        <AlertCircle size={14} className="text-current shrink-0" /> Required CSV Format
+                                    </p>
+                                    <p className="text-xs text-indigo-700/80 dark:text-indigo-300/70 leading-relaxed">
+                                        Your file must have exactly two columns:
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <code className="text-[11px] font-mono font-bold bg-white/60 dark:bg-white/10 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-lg border border-indigo-200/50 dark:border-indigo-500/20">accountCode</code>
+                                        <span className="text-indigo-400 text-xs">and</span>
+                                        <code className="text-[11px] font-mono font-bold bg-white/60 dark:bg-white/10 text-indigo-700 dark:text-indigo-300 px-2 py-1 rounded-lg border border-indigo-200/50 dark:border-indigo-500/20">accountName</code>
+                                    </div>
                                 </div>
-                                <button onClick={() => setShowImportModal(false)} className="p-2.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 hover:bg-slate-100 text-slate-500 transition-all active:scale-95 shadow-sm"><X size={18} strokeWidth={2.5}/></button>
+
+                                {/* Drop zone */}
+                                <div
+                                    onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+                                    onDragLeave={() => setDragActive(false)}
+                                    onDrop={handleDrop}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={`relative flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${
+                                        dragActive
+                                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
+                                            : data.file
+                                                ? "border-emerald-400 bg-emerald-50/50 dark:bg-emerald-500/5"
+                                                : "border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-emerald-400 hover:bg-emerald-50/30 dark:hover:bg-emerald-500/5"
+                                    }`}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".csv"
+                                        className="hidden"
+                                        onChange={e => setData("file", e.target.files?.[0] || null)}
+                                    />
+                                    {data.file ? (
+                                        <>
+                                            <div className="h-12 w-12 rounded-2xl bg-emerald-100 dark:bg-emerald-500/20 grid place-items-center">
+                                                <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400" />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{data.file.name}</p>
+                                                <p className="text-xs text-slate-400 dark:text-white/30 mt-0.5">{(data.file.size / 1024).toFixed(1)} KB · Ready to import</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={e => { e.stopPropagation(); setData("file", null); }}
+                                                className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold"
+                                            >Remove file</button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className={`h-12 w-12 rounded-2xl grid place-items-center ${dragActive ? "bg-emerald-100 dark:bg-emerald-500/20" : "bg-slate-100 dark:bg-white/10"}`}>
+                                                <FileUp size={22} className={dragActive ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-white/40"} />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-sm font-semibold text-slate-700 dark:text-white/70">
+                                                    {dragActive ? "Drop your CSV here" : "Drag & drop or click to browse"}
+                                                </p>
+                                                <p className="text-xs text-slate-400 dark:text-white/30 mt-0.5">Supports .csv files only</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {errors.file && (
+                                    <p className="text-rose-500 text-xs font-semibold flex items-center gap-1.5">
+                                        <AlertCircle size={12} className="text-current shrink-0" /> {errors.file}
+                                    </p>
+                                )}
                             </div>
 
-                            <form onSubmit={handleImport} className="p-8 space-y-6">
-                                <div className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl border border-blue-100/50 dark:border-blue-500/20 shadow-inner">
-                                    <p className="text-[11px] font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                        <FileUp size={16}/> CSV Format Required
-                                    </p>
-                                    <p className="text-sm font-medium text-blue-800/80 dark:text-blue-300/80 leading-relaxed">
-                                        Ensure your file contains exactly two headers: <br/>
-                                        <span className="font-mono font-bold bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded border border-blue-200/50 dark:border-blue-500/30">accountCode</span> and <span className="font-mono font-bold bg-white/60 dark:bg-black/20 px-1.5 py-0.5 rounded border border-blue-200/50 dark:border-blue-500/30">accountName</span>.
-                                    </p>
-                                </div>
-                                
-                                <div className="relative group/upload">
-                                    <input 
-                                        type="file" 
-                                        accept=".csv"
-                                        onChange={e => setData('file', e.target.files[0])}
-                                        className="w-full border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-[2rem] p-8 text-center text-sm font-bold text-slate-500 cursor-pointer bg-slate-50/30 hover:bg-slate-50 dark:bg-slate-800/30 dark:hover:bg-slate-800/50 transition-colors file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-[11px] file:uppercase file:tracking-widest file:font-black file:bg-blue-50 file:text-blue-700 group-hover/upload:file:bg-blue-100 dark:file:bg-blue-500/20 dark:file:text-blue-400"
-                                    />
-                                </div>
-                                {errors.file && <p className="text-rose-500 text-xs font-bold text-center">{errors.file}</p>}
-                                
-                                <div className="pt-2 flex justify-end gap-3">
-                                    <button type="button" onClick={() => setShowImportModal(false)} className="px-6 py-3.5 rounded-2xl text-[11px] font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors uppercase tracking-widest">Cancel</button>
-                                    <button type="submit" disabled={processing || !data.file} className="px-8 py-3.5 rounded-2xl text-[11px] font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/30 transition-all disabled:opacity-50 uppercase tracking-widest active:scale-95">
-                                        {processing ? 'Uploading...' : 'Confirm Import'}
-                                    </button>
-                                </div>
-                            </form>
+                            {/* Footer */}
+                            <div className="shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-2.5 px-5 sm:px-7 py-4 border-t border-slate-100 dark:border-white/[0.06] bg-white dark:bg-[#0a1510]">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowImportModal(false)}
+                                    className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10 font-semibold text-sm transition-all active:scale-95"
+                                >Cancel</button>
+                                <button
+                                    type="submit"
+                                    disabled={processing || !data.file}
+                                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                                >
+                                    {processing
+                                        ? <><Loader2 size={14} className="animate-spin text-current" /> Importing...</>
+                                        : <><FileUp size={14} className="text-current" /> Confirm Import</>
+                                    }
+                                </button>
+                            </div>
+                        </form>
+                    </ModalShell>
+                )}
+            </AnimatePresence>
 
-                        </motion.div>
-                    </motion.div>
+            {/* ── DELETE CONFIRM MODAL ─────────────────────────────────────── */}
+            <AnimatePresence>
+                {deleteTarget && (
+                    <DeleteModal
+                        account={deleteTarget}
+                        onConfirm={handleConfirmDelete}
+                        onClose={() => !isDeleting && setDeleteTarget(null)}
+                        isDeleting={isDeleting}
+                    />
                 )}
             </AnimatePresence>
 

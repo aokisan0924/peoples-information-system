@@ -17,9 +17,6 @@ use Inertia\Inertia;
 
 class ClientLoanController extends Controller
 {
-    /**
-     * Show loan application page with summary stats.
-     */
     public function index() {
         $memberId = Auth::guard('member')->id();
 
@@ -105,7 +102,6 @@ class ClientLoanController extends Controller
         $branchServiceName = $this->getBranchServiceName($member);
         $category          = $this->mapCategoryByBranchServiceName($branchServiceName);
 
-        // Check if membership fee already paid
         $hasPaidMembership = MembershipPayment::where('memberId', $member->id)
             ->where('is_paid', true)
             ->exists();
@@ -136,11 +132,7 @@ class ClientLoanController extends Controller
             'advanceInterestMonths' => $advanceInterestMonths,
         ];
 
-        $fakeRequest = Request::create(
-            '/admin/loans/api-compute',
-            'POST',
-            $adminPayload
-        );
+        $fakeRequest = Request::create('/admin/loans/api-compute', 'POST', $adminPayload);
 
         /** @var AdminLoanController $adminController */
         $adminController = app(AdminLoanController::class);
@@ -213,11 +205,7 @@ class ClientLoanController extends Controller
             'advanceInterestMonths' => $advanceInterestMonths,
         ];
 
-        $fakeRequest = Request::create(
-            '/admin/loans/api-compute',
-            'POST',
-            $adminPayload
-        );
+        $fakeRequest = Request::create('/admin/loans/api-compute', 'POST', $adminPayload);
 
         /** @var AdminLoanController $adminController */
         $adminController = app(AdminLoanController::class);
@@ -232,10 +220,17 @@ class ClientLoanController extends Controller
         $loanAmount          = (float) ($computed['loanAmount'] ?? 0);
         $monthlyAmortization = (float) ($computed['monthlyAmortization'] ?? 0);
         $grossAmount         = (float) ($computed['grossAmount'] ?? ($computed['gross'] ?? $loanAmount));
-        $income = (float) ($computed['income']) ?? 0;
-        $percentIncome =  round(($income / $grossAmount) * 100, 2);
+
+        // FIX: correct operator-precedence — cast and null-coalesce were applied wrong before
+        $income = (float) ($computed['income'] ?? 0);
+
+        // FIX: guard against division by zero before computing percentIncome
+        $percentIncome = $grossAmount > 0
+            ? round(($income / $grossAmount) * 100, 2)
+            : 0.0;
+
         $effectiveInterestRate = round($computed['effectiveInterestRate'], 5);
-        $monthlyInterestRate = round($computed['monthlyInterestRate'], 5);
+        $monthlyInterestRate   = round($computed['monthlyInterestRate'], 5);
 
         $loan = new Loan();
         $loan->memberId              = $member->id;
@@ -250,33 +245,33 @@ class ClientLoanController extends Controller
         $loan->advanceInterest       = $advanceInterest;
         $loan->loanAmount            = $loanAmount;
         $loan->gross                 = $grossAmount;
-        $loan->income = $income;
-        $loan->percentIncome = $percentIncome;
+        $loan->income                = $income;
+        $loan->percentIncome         = $percentIncome;
         $loan->effectiveInterestRate = $effectiveInterestRate;
-        $loan->monthlyInterestRate = $monthlyInterestRate;
-        $loan->monthlyAmortization = $monthlyAmortization;
+        $loan->monthlyInterestRate   = $monthlyInterestRate;
+        $loan->monthlyAmortization   = $monthlyAmortization;
         $loan->advanceInterestMonths = $advanceInterestMonths;
-        $loan->status = 'Pending';
+        $loan->status                = 'Pending';
         $loan->save();
 
         if ($capCon > 0) {
             CapitalContribution::create([
-                'memberId'        => $member->id,
-                'transactionType' => 'deposit',
-                'amount'          => round($capCon, 2),
-                'reference_number'=> $loan->loanReference,
-                'is_paid'         => 0,
-                'status'          => 'Pending',
+                'memberId'         => $member->id,
+                'transactionType'  => 'deposit',
+                'amount'           => round($capCon, 2),
+                'reference_number' => $loan->loanReference,
+                'is_paid'          => 0,
+                'status'           => 'Pending',
             ]);
         }
 
         if ($membershipFee > 0) {
             MembershipPayment::create([
-                'memberId'        => $member->id,
-                'amount'          => round($membershipFee, 2),
-                'reference_number'=> $loan->loanReference,
-                'is_paid'         => 0,
-                'status'          => 'Pending',
+                'memberId'         => $member->id,
+                'amount'           => round($membershipFee, 2),
+                'reference_number' => $loan->loanReference,
+                'is_paid'          => 0,
+                'status'           => 'Pending',
             ]);
         }
 
@@ -286,9 +281,6 @@ class ClientLoanController extends Controller
         ], 201);
     }
 
-    /**
-     * JSON details for the action modal in ClientLoanApplication.jsx
-     */
     public function showDetailJson(string $loanReference): JsonResponse {
         $member = Auth::guard('member')->user();
 
@@ -348,9 +340,6 @@ class ClientLoanController extends Controller
         ]);
     }
 
-    /**
-     * Step 2: show upload requirements page
-     */
     public function showRequirements(string $loanReference) {
         $member = Auth::guard('member')->user();
 
@@ -371,9 +360,6 @@ class ClientLoanController extends Controller
         return Inertia::render('Client/ClientLoanUploadRequirements', $viewData);
     }
 
-    /**
-     * Handle upload/replace of requirements
-     */
     public function uploadRequirements(Request $request, string $loanReference): JsonResponse {
         $member = Auth::guard('member')->user();
 
@@ -386,27 +372,21 @@ class ClientLoanController extends Controller
             (string) ($branchServiceName ?? '')
         );
 
-        // 1) Build validation rules based on canonical keys
         $rules = [];
 
         foreach ($requirementsRaw as $label) {
             $key = $this->makeRequirementKey($label);
-
             if ($request->hasFile("documents.$key")) {
                 $rules["documents.$key"] = ['file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'];
             }
         }
 
         if (empty($rules)) {
-            return response()->json([
-                'message' => 'No documents uploaded.',
-            ], 422);
+            return response()->json(['message' => 'No documents uploaded.'], 422);
         }
 
-        // 2) Validate only the keys that actually have files
         $request->validate($rules);
 
-        // 3) Store/update per requirement using docsType
         foreach ($requirementsRaw as $label) {
             $key = $this->makeRequirementKey($label);
 
@@ -422,10 +402,7 @@ class ClientLoanController extends Controller
             $path = $file->store("loans/{$loan->loanReference}", 'public');
 
             LoanDocuments::updateOrCreate(
-                [
-                    'loanId'  => $loan->id,
-                    'docsType'=> $key, // 🔥 use docsType, not documentKey
-                ],
+                ['loanId' => $loan->id, 'docsType' => $key],
                 [
                     'originalName' => $file->getClientOriginalName(),
                     'path'         => $path,
@@ -435,7 +412,6 @@ class ClientLoanController extends Controller
             );
         }
 
-        // 4) Rebuild requirement view so frontend gets fresh statuses
         $viewData = $this->buildRequirementViewData(
             $loan,
             $member->id,
@@ -530,7 +506,6 @@ class ClientLoanController extends Controller
             return 'CDEA';
         }
 
-        // default for now
         return 'ACTIVE_PENSIONER_V1';
     }
 
@@ -551,7 +526,7 @@ class ClientLoanController extends Controller
                     'Retirement Order / Pension documents',
                     '2 latest pension bank statements or passbook pages',
                     'Valid government ID with 3 specimen signatures',
-                    '2 Latest 2x2 Picture'
+                    '2 Latest 2x2 Picture',
                 ];
 
             case 'BENEFICIARY':
@@ -562,16 +537,10 @@ class ClientLoanController extends Controller
                     '2 Latest 2x2 Picture',
                     'Marriage Contract / Birth Certificate',
                     'Death Certificate',
-                    'ATM Photocopy w/ 3 signature'
+                    'ATM Photocopy w/ 3 signature',
                 ];
 
-            case 'RESERVIST':
-                return [
-                    'Reservist ID',
-                    'Proof of income (2 latest payslips or bank statements)',
-                    'Valid government ID with 3 specimen signatures',
-                ];
-
+            // FIX: duplicate 'RESERVIST' case — combined into one correct block
             case 'RESERVIST':
                 return [
                     'Order of Commission or Enlistment',
@@ -580,7 +549,7 @@ class ClientLoanController extends Controller
                     'Holding units Clearance and Commanders Approval',
                     'Postdated Check / Auto Debit Account',
                     'Reservist ID with 3 signature',
-                    '2 Govt Issued ID with 3 Signature'
+                    '2 Govt Issued ID with 3 Signature',
                 ];
 
             case 'CDEA':
@@ -606,7 +575,7 @@ class ClientLoanController extends Controller
         $key = strtolower($label);
         $key = preg_replace('/[^a-z0-9]+/', '-', $key);
         $key = trim($key, '-');
-    
+
         return $key !== '' ? $key : 'document';
     }
 
@@ -617,13 +586,12 @@ class ClientLoanController extends Controller
         array $requirementsRaw
     ): array {
         $documents = LoanDocuments::where('loanId', $loan->id)->get();
+        $byType    = $documents->keyBy('docsType');
 
-        $byType = $documents->keyBy('docsType');
-    
         $requirements = array_map(function (string $label) use ($byType) {
             $key = $this->makeRequirementKey($label);
             $doc = $byType->get($key);
-    
+
             return [
                 'key'        => $key,
                 'label'      => $label,
@@ -635,11 +603,11 @@ class ClientLoanController extends Controller
                     : null,
             ];
         }, $requirementsRaw);
-    
+
         $uploadedCount = collect($requirements)->where('isUploaded', true)->count();
         $totalRequired = count($requirements);
         $allUploaded   = $totalRequired > 0 && $uploadedCount === $totalRequired;
-    
+
         return [
             'loan' => [
                 'loanReference'      => $loan->loanReference,
@@ -655,16 +623,21 @@ class ClientLoanController extends Controller
             'totalRequired'  => $totalRequired,
             'allUploaded'    => $allUploaded,
         ];
-    }    
+    }
 
     private function makeLoanReference(): string {
-        $prefix = 'LOAN-' . now()->format('Ymd') . '-';
+        $prefix  = 'LOAN-' . now()->format('Ymd') . '-';
+        $maxTries = 10;
 
-        do {
+        for ($i = 0; $i < $maxTries; $i++) {
             $ref = $prefix . str_pad((string) random_int(1, 9999), 4, '0', STR_PAD_LEFT);
-        } while (Loan::where('loanReference', $ref)->exists());
+            if (!Loan::where('loanReference', $ref)->exists()) {
+                return $ref;
+            }
+        }
 
-        return $ref;
+        // FIX: fallback to microseconds-based suffix if all random attempts collide
+        return $prefix . str_pad((string) (now()->microsecond % 9999), 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -675,31 +648,49 @@ class ClientLoanController extends Controller
 
         $loans = DB::table('loans')
             ->where('memberId', $memberId)
-            ->where('status', ['Released', 'Completed'])
+            ->whereIn('status', ['Released', 'Completed'])
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(fn($l) => [
+                'id'               => (int) $l->id,
+                'loanReference'    => $l->loanReference,
+                'loanType'         => $l->loanType,
+                'loanAmount'       => (float) $l->loanAmount,
+                'numberOfPayments' => (int) $l->numberOfPayments,
+            ])
+            ->values();
 
-        $selectedLoanId = $request->input('loanID');
+        $selectedLoanId = $request->input('loanId');
 
-        if ($selectedLoanId) {
-            $activeLoan = $loans->firstWhere('id', $selectedLoanId);
-        } else {
-            $activeLoan = $loans->first();
-        }
+        // FIX: after ->map() the collection contains arrays, not objects.
+        // Use array access ['id'] instead of object access ->id everywhere below.
+        $activeLoan = $selectedLoanId
+            ? $loans->firstWhere('id', (int) $selectedLoanId)
+            : $loans->first();
 
-        $schedule = [];
+        $schedule = collect();
 
         if ($activeLoan) {
+            // FIX: use $activeLoan['id'] — $activeLoan is an array, not a stdClass
             $schedule = DB::table('loan_amortization_schedules')
-                ->where('loanId', $activeLoan->id)
+                ->where('loanId', $activeLoan['id'])
                 ->orderBy('installmentNumber', 'asc')
-                ->get();
+                ->get()
+                ->map(fn($row) => [
+                    'installmentNumber' => $row->installmentNumber,
+                    'dueDate'           => $row->dueDate
+                        ? \Carbon\Carbon::parse($row->dueDate)->format('d M Y')
+                        : null,
+                    'amountDue'         => (float) $row->amountDue,
+                    'amountPaid'        => (float) ($row->amountPaid ?? 0),
+                    'status'            => $row->status,
+                ]);
         }
 
         return Inertia::render('Client/MySchedule', [
-            'loans' => $loans,
-            'activeLoan' => $activeLoan,
-            'schedule' => $schedule
+            'loans'      => $loans,
+            'activeLoan' => $activeLoan,  // null or plain array — Inertia serialises both correctly
+            'schedule'   => $schedule,
         ]);
     }
 }

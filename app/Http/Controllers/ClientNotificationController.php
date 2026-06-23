@@ -3,20 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\ClientNotification;
 use App\Models\MemberNotification;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class ClientNotificationController extends Controller
 {
-    public function index() {
+    public function index(): \Inertia\Response
+    {
         return Inertia::render('Client/ClientNotification');
     }
 
+    /**
+     * GET /client/notifications/list
+     * Supports ?preview=1 for the sidebar bell dropdown (returns flat array, no pagination).
+     * Full paginated list for the Notifications page.
+     */
     public function list(Request $request): JsonResponse
     {
         $member = Auth::guard('member')->user();
@@ -26,76 +32,79 @@ class ClientNotificationController extends Controller
         }
 
         $memberId = $member->id;
-
-        $status  = (string) $request->string('status', 'all');
-        $type    = (string) $request->string('type', 'all');
-        $perPage = (int) $request->integer('perPage', 10);
-        $page    = (int) $request->integer('page', 1);
-        $preview = $request->boolean('preview', false);
-
-        if ($perPage <= 0) {
-            $perPage = 10;
-        }
+        $status   = (string) $request->string('status', 'all');
+        $type     = (string) $request->string('type', 'all');
+        $perPage  = max(1, (int) $request->integer('perPage', 10));
+        $page     = max(1, (int) $request->integer('page', 1));
+        $preview  = $request->boolean('preview', false);
 
         $query = MemberNotification::where('memberId', $memberId)
             ->orderByDesc('created_at');
 
-        // status filter
+        // STATUS FILTER
         if ($status === 'read') {
             $query->where('isRead', true);
         } elseif ($status === 'unread') {
             $query->where('isRead', false);
         }
 
-        // type filter
+        // TYPE FILTER
         if ($type !== 'all' && $type !== '') {
             $query->where('type', $type);
         }
 
-        // 🔹 PREVIEW: for top-right bell dropdown in SidebarLayout.jsx
+        // PREVIEW MODE — top-right bell dropdown
         if ($preview) {
-            $notifications = $query->limit(5)->get();
+            try {
+                $notifications = $query->limit(5)->get();
 
-            $data = $notifications
-                ->map(fn (MemberNotification $notification) => $this->transformNotification($notification))
-                ->values()
-                ->all();
-
-            // Sidebar expects an array (no { data: ... })
-            return response()->json($data);
+                return response()->json(
+                    $notifications
+                        ->map(fn (MemberNotification $n) => $this->transformNotification($n))
+                        ->values()
+                        ->all()
+                );
+            } catch (\Exception $e) {
+                Log::error('Notification preview error: ' . $e->getMessage());
+                return response()->json([], 200); // Graceful empty fallback for sidebar
+            }
         }
 
-        // 🔹 FULL PAGINATED LIST: for ClientNotifications.jsx page
-        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+        // FULL PAGINATED LIST
+        try {
+            $paginator = $query->paginate($perPage, ['*'], 'page', $page);
 
-        $data = $paginator->getCollection()
-            ->map(fn (MemberNotification $notification) => $this->transformNotification($notification))
-            ->values()
-            ->all();
+            // FIX: also return unread count so frontend badge stays in sync
+            $unreadCount = MemberNotification::where('memberId', $memberId)
+                ->where('isRead', false)
+                ->count();
 
-        $meta = [
-            'currentPage' => $paginator->currentPage(),
-            'perPage'     => $paginator->perPage(),
-            'lastPage'    => $paginator->lastPage(),
-            'total'       => $paginator->total(),
-        ];
-
-        $filters = [
-            'status'  => $status,
-            'type'    => $type,
-            'perPage' => $perPage,
-        ];
-
-        return response()->json([
-            'data'    => $data,
-            'meta'    => $meta,
-            'filters' => $filters,
-        ]);
+            return response()->json([
+                'data'        => $paginator->getCollection()
+                    ->map(fn (MemberNotification $n) => $this->transformNotification($n))
+                    ->values()
+                    ->all(),
+                'meta'        => [
+                    'currentPage' => $paginator->currentPage(),
+                    'perPage'     => $paginator->perPage(),
+                    'lastPage'    => $paginator->lastPage(),
+                    'total'       => $paginator->total(),
+                    'unreadCount' => $unreadCount,
+                ],
+                'filters'     => [
+                    'status'  => $status,
+                    'type'    => $type,
+                    'perPage' => $perPage,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Notification list error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to load notifications.'], 500);
+        }
     }
 
     /**
      * POST /client/notifications/{id}/read
-     * Mark a single notification as read.
      */
     public function markAsRead(Request $request, int $id): JsonResponse
     {
@@ -105,29 +114,39 @@ class ClientNotificationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $notification = MemberNotification::where('id', $id)
-            ->where('memberId', $member->id)
-            ->first();
+        try {
+            $notification = MemberNotification::where('id', $id)
+                ->where('memberId', $member->id)
+                ->first();
 
-        if (!$notification) {
-            return response()->json(['message' => 'Notification not found'], 404);
+            if (!$notification) {
+                return response()->json(['message' => 'Notification not found.'], 404);
+            }
+
+            if (!$notification->isRead) {
+                $notification->isRead = true;
+                $notification->readAt = now();
+                $notification->save();
+            }
+
+            // FIX: return updated unread count so the sidebar badge updates immediately
+            $unreadCount = MemberNotification::where('memberId', $member->id)
+                ->where('isRead', false)
+                ->count();
+
+            return response()->json([
+                'message'      => 'Marked as read.',
+                'notification' => $this->transformNotification($notification),
+                'unreadCount'  => $unreadCount,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Mark as read error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to mark as read.'], 500);
         }
-
-        if (!$notification->isRead) {
-            $notification->isRead = true;
-            $notification->readAt = now();
-            $notification->save();
-        }
-
-        return response()->json([
-            'message'      => 'Notification marked as read',
-            'notification' => $this->transformNotification($notification),
-        ]);
     }
 
     /**
      * POST /client/notifications/read-all
-     * Mark all notifications as read for the current member.
      */
     public function markAllAsRead(Request $request): JsonResponse
     {
@@ -137,39 +156,45 @@ class ClientNotificationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        MemberNotification::where('memberId', $member->id)
-            ->where('isRead', false)
-            ->update([
-                'isRead' => true,
-                'readAt' => now(),
-            ]);
+        try {
+            $updated = MemberNotification::where('memberId', $member->id)
+                ->where('isRead', false)
+                ->update([
+                    'isRead' => true,
+                    'readAt' => now(),
+                ]);
 
-        return response()->json([
-            'message' => 'All notifications marked as read',
-        ]);
+            return response()->json([
+                'message'      => 'All notifications marked as read.',
+                'updatedCount' => $updated,
+                'unreadCount'  => 0,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Mark all as read error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to update notifications.'], 500);
+        }
     }
 
     /**
-     * Convert model to safe array for frontend only.
-     * No raw model objects returned.
+     * Safe transform — only exposes what the frontend needs.
+     * FIX: removed dead camelCase fallback for created_at (Eloquent always uses snake_case).
      */
     protected function transformNotification(MemberNotification $notification): array
     {
-        $createdAt = $notification->created_at ?? $notification->createdAt ?? null;
-        $created   = $createdAt instanceof Carbon
-            ? $createdAt
-            : ($createdAt ? Carbon::parse($createdAt) : null);
+        $created = $notification->created_at
+            ? Carbon::parse($notification->created_at)
+            : null;
 
         return [
             'id'         => $notification->id,
-            'title'      => (string) $notification->title,
-            'message'    => (string) $notification->message,
-            'type'       => $notification->type ?? null,
-            'isRead'     => (bool) $notification->isRead,
+            'title'      => (string) ($notification->title   ?? ''),
+            'message'    => (string) ($notification->message ?? ''),
+            'type'       => $notification->type    ?? 'general',
+            'isRead'     => (bool)   $notification->isRead,
             'linkUrl'    => $notification->linkUrl ?? null,
-            'date'       => $created ? $created->format('M d, Y') : null,
-            'time'       => $created ? $created->format('h:i A') : null,
-            'createdAgo' => $created ? $created->diffForHumans() : null,
+            'date'       => $created?->format('M d, Y'),
+            'time'       => $created?->format('h:i A'),
+            'createdAgo' => $created?->diffForHumans(),
         ];
     }
 }

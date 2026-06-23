@@ -296,7 +296,7 @@ export default function Loan() {
             monthlyInterestRate:toNumber(monthlyInterestRate), effectiveInterestRate:toNumber(effectiveInterestRate),
             serviceFee:toNumber(serviceFee), insurance:toNumber(insurance), advanceInterest:toNumber(advanceInterest), journalEntries
         }).then(() => { toast.success("Loan saved successfully."); setShowModal(false); loadData(1); })
-          .catch(() => toast.error("Submit failed. Please verify the backend controller."));
+            .catch(() => toast.error("Submit failed. Please verify the backend controller."));
     };
 
     const todayStr = new Date().toLocaleString("en-PH", { month: "long", year: "numeric" });
@@ -304,7 +304,9 @@ export default function Loan() {
     // ─────────────────────────────────────────────────────────────────────────
     return (
         <AdminSidebarLayout>
-            <Head title="Loan Management"><link rel="icon" href="/images/logo/pis_logo.png" /></Head>
+            <Head title="Loan Management">
+                <link rel="icon" href="/images/logo/pis_logo.png" />
+            </Head>
 
             <div className="space-y-5 sm:space-y-6 pb-10">
 

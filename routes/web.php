@@ -8,7 +8,9 @@ use App\Http\Controllers\Admin\Accounting\AccGeneralLedgerController;
 use App\Http\Controllers\Admin\Accounting\AccPettyCashController;
 use App\Http\Controllers\Admin\Accounting\AccPpeDepreciationController;
 use App\Http\Controllers\Admin\Accounting\AccTrialBalanceController;
+use App\Http\Controllers\Admin\Accounting\BillingController;
 use App\Http\Controllers\Admin\Accounting\LoanCollectionController;
+use App\Http\Controllers\Admin\Accounting\LoansReceivableController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -34,6 +36,7 @@ use App\Http\Controllers\Admin\ShareCapitalController;
 use App\Http\Controllers\Admin\TimeDepositController;
 use App\Http\Controllers\Api\PayMongoController;
 use App\Http\Controllers\Auth\MemberPasswordResetController;
+use App\Http\Controllers\MemberChangePasswordController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ClientLoanController;
 use App\Http\Controllers\ClientNotificationController;
@@ -41,7 +44,6 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LoanInformationController;
 use App\Http\Controllers\MemberPaymentStatusController;
-use App\Http\Controllers\MemberSettingsController;
 use App\Http\Controllers\PettyCashController;
 use App\Http\Controllers\PublicCalculatorController;
 use App\Http\Controllers\SavingsDepositController as publicSavingsDepositController;
@@ -49,12 +51,9 @@ use App\Http\Controllers\ShareCapitalCalculatorController;
 use App\Http\Controllers\TimeDepositCalculatorController;
 use App\Http\Middleware\AdminMiddleware;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
-
-// --- FIXED IMPORTS ---
 use App\Http\Controllers\Admin\NewsController;
 use App\Http\Controllers\Admin\GalleryController as AdminGalleryController; // Aliased for Admin
 use App\Http\Controllers\GalleryController;
-use App\Http\Controllers\Public\PageController; // Assuming you created this for Public views
 use App\Http\Controllers\NewsFeedController;
 
 /*
@@ -151,9 +150,11 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
 
     // Notifications
     Route::get('/notifications', [ClientNotificationController::class, 'index'])->name('notifications.index');
-    Route::get('/notifications/list', [ClientNotificationController::class, 'list']);
-    Route::post('/notifications/{id}/read', [ClientNotificationController::class, 'markAsRead']);
-    Route::post('/notifications/read-all', [ClientNotificationController::class, 'markAllAsRead']);
+    Route::get('/notifications/list', [ClientNotificationController::class, 'list'])->name('notifications.list');
+    Route::post('/notifications/read-all', [ClientNotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
+    Route::post('/notifications/{id}/read', [ClientNotificationController::class, 'markAsRead'])
+        ->whereNumber('id')
+        ->name('notifications.read');
 
     // Transactions
     Route::get('/recent-transactions', [ClientTransactionHistoryController::class, 'getTransactionHistory'])->name('transactions.history');
@@ -175,7 +176,7 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::get('/api/loans', [ClientLoanController::class, 'list'])->name('loans.list');
     Route::post('/api/loans/compute', [ClientLoanController::class, 'compute'])->name('loans.compute');
     Route::post('/api/loans/submit', [ClientLoanController::class, 'submit'])->name('loans.submit');
-    Route::get('/my-schedule', [ClientLoanController::class, 'mySchedule'])->name('schedule');
+    Route::get('/my-schedule', [ClientLoanController::class, 'mySchedule'])->name('loans.schedule');
 
     Route::get('/api/loans/{loanReference}', [ClientLoanController::class, 'showDetailJson'])->name('loans.show.json');
     Route::get('/loans/{loanReference}/requirements', [ClientLoanController::class, 'showRequirements'])->name('loans.requirements');
@@ -193,9 +194,16 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::get('/payment/failure', [PaymentController::class, 'failure']);
     Route::get('/payment/cancel', [PaymentController::class, 'cancel']);
 
-    // Settings
-    Route::get('/settings/password', [MemberSettingsController::class, 'edit'])->name('settings');
-    Route::post('/settings/password', [MemberSettingsController::class, 'update'])->name('settings.update');
+    // Change Password (OTP-verified — authenticated member only)
+    // Step 1: validate current password → send OTP to member's email/mobile
+    Route::post('/settings/change-password/send-otp', [MemberChangePasswordController::class, 'sendOtp'])
+        ->name('update-password')                  // keeps route('member.update-password') used in SidebarLayout
+        ->middleware('throttle:3,1');
+
+    // Step 2: verify OTP + apply new password
+    Route::post('/settings/change-password/verify', [MemberChangePasswordController::class, 'verifyAndChange'])
+        ->name('settings.change-password.verify')
+        ->middleware('throttle:10,1');
 
     Route::post('/logout', [MemberAuthController::class, 'memberLogout'])->name('logout');
 });
@@ -228,12 +236,27 @@ Route::prefix('admin')->name('admin.')->group(function () {
             // 1. ACCOUNTING CLERK EXCLUSIVE (Full Ledger & Chart Access)
             Route::middleware('can_access:manage_accounting')->group(function () {
 
-            Route::prefix('loans')->name('loans.')->group(function () {
-                Route::get('/workspace', [LoanCollectionController::class, 'index'])->name('workspace');
-                Route::get('/search', [LoanCollectionController::class, 'searchMembers'])->name('search');
-                Route::get('/member/{id}', [LoanCollectionController::class, 'getMemberLoanDetails'])->name('member-details');
-                Route::post('/post-amortization', [LoanCollectionController::class, 'postAmortization'])->name('post-amortization');
-            });
+                Route::prefix('loans')->name('loans.')->group(function () {
+                    Route::get('/workspace', [LoanCollectionController::class, 'index'])->name('workspace');
+                    Route::get('/search', [LoanCollectionController::class, 'searchMembers'])->name('search');
+                    Route::get('/member/{id}', [LoanCollectionController::class, 'getMemberLoanDetails'])->name('member-details');
+                    Route::post('/post-amortization', [LoanCollectionController::class, 'postAmortization'])->name('post-amortization');
+                    Route::post('/post-bulk', [LoanCollectionController::class, 'postBulkAmortization'])->name('post-bulk');
+                });
+
+                // 1. BILLING PROCESSING
+                Route::prefix('billing')->name('billing.')->group(function () {
+                    Route::get('/workspace', [BillingController::class, 'workspace'])->name('workspace');
+                    Route::get('/api/pending', [BillingController::class, 'getPendingBilling'])->name('pending');
+                    Route::post('/approve', [BillingController::class, 'approveBilling'])->name('approve');
+                    Route::get('/export/cd-archive', [BillingController::class, 'generateCdArchive'])->name('cd-archive');
+                });
+
+                // 2. LOANS RECEIVABLE
+                Route::prefix('receivables')->name('receivables.')->group(function () {
+                    Route::get('/ledger', [LoansReceivableController::class, 'index'])->name('index');
+                    Route::get('/api/data', [LoansReceivableController::class, 'getReceivablesData'])->name('data');
+                });
 
                 // Chart of Accounts Management
                 Route::get('/chart/download-template', [AccChartofAccountController::class, 'downloadTemplate'])->name('chart.download-template');
@@ -353,6 +376,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/loans/{loanReference}/download/application', [LoanController::class, 'downloadapplication'])->name('loan.download.application');
             Route::get('/loans/{loanReference}/download/release-voucher', [LoanController::class, 'downloadReleaseVoucher'])->name('loan.download.releaseVoucher');
             Route::get('/loans/{loanReference}/download/ledger', [LoanController::class, 'downloadLedger'])->name('loan.download.ledger');
+            Route::get('/loans/{loanReference}/download/authority-to-deduct', [LoanController::class, 'downloadAuthorityToDeduct'])->name('loan.download.authorityToDeduct');
+            Route::get('/loans/{loanReference}/download/data-privacy', [LoanController::class, 'downloadDataPrivacy'])->name('loan.download.dataPrivacy');
+            Route::get('/loans/{loanReference}/download/ghq-declaration', [LoanController::class, 'downloadGhqDeclaration'])->name('loan.download.ghqDeclaration');
+            Route::get('/loans/{loanReference}/download/disclosure', [LoanController::class, 'downloadDisclosureStatement'])->name('loan.download.disclosure');
 
             Route::get('/api/loans', [LoanController::class, 'apiList'])->name('api.loans.index'); 
             Route::get('/api/loans/{loanReference}/details', [LoanController::class, 'apiDetails'])->name('api.loans.details');

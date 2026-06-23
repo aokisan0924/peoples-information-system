@@ -538,7 +538,7 @@ class LoanController extends Controller
         $request->validate([
             'files'            => ['required', 'array', 'min:1'],
             'files.*.file'     => ['required', 'file', 'max:20480'],
-            'files.*.docsType' => ['required', 'string', 'in:signedApplication,releaseVoucher,borrowerPhoto,scannedCheck'],
+            'files.*.docsType' => ['required', 'string', 'in:signedApplication,releaseVoucher,borrowerPhoto,scannedCheck,authorityToDeduct,dataPrivacyConsent,disclosureStatement,ghqDeclaration'], 
         ]);
 
         $folderName = preg_replace(
@@ -757,7 +757,7 @@ class LoanController extends Controller
             return response()->json(['message' => 'Please confirm downloads first'], 422);
         }
 
-        $requiredPost = $this->postTypes();
+        $requiredPost = $this->getRequiredPostDocs($loan);
 
         $havePost = PostApprovalDocuments::where('loanId', $loan->id)
             ->pluck('docsType')
@@ -1109,8 +1109,14 @@ class LoanController extends Controller
         }
     }
 
-    private function postTypes(): array {
-        return ['signedApplication','releaseVoucher','borrowerPhoto','scannedCheck'];
+    private function getRequiredPostDocs(Loan $loan): array {
+        $required = ['signedApplication', 'releaseVoucher', 'borrowerPhoto', 'scannedCheck', 'authorityToDeduct', 'dataPrivacyConsent', 'disclosureStatement'];
+        
+        $service = strtoupper(trim($loan->member->branchService->branchService ?? ''));
+        if (in_array($service, ['RETIRED MILITARY', 'RETIRED', 'PENSIONER', 'BENEFICIARY', 'RETIRED/PENSIONER/BENEFICIARY'])) {
+            $required[] = 'ghqDeclaration';
+        }
+        return $required;
     }
 
     private function hasAllRequired(array $required, array $have): bool {
@@ -1238,5 +1244,62 @@ class LoanController extends Controller
         $key = trim($key, '-');
 
         return $key !== '' ? $key : 'document';
+    }
+
+    public function downloadAuthorityToDeduct(Request $request, string $loanReference) {
+        $loan = Loan::with(['member.branchService'])->where('loanReference', $loanReference)->firstOrFail();
+        $service = strtoupper(trim($loan->member->branchService->branchService ?? ''));
+        $isPensioner = in_array($service, ['RETIRED MILITARY', 'RETIRED', 'PENSIONER', 'BENEFICIARY', 'RETIRED/PENSIONER/BENEFICIARY']);
+        $view = $isPensioner ? 'pdf.authority-to-deduct-pensioner' : 'pdf.authority-to-deduct-active';
+        
+        // Updated format here
+        $pdf = Pdf::loadView($view, ['loan' => $loan, 'member' => $loan->member, 'date' => now()->format('d F Y')])->setPaper('A4', 'portrait');
+        return $pdf->stream('authority-to-deduct-'.$loanReference.'.pdf');
+    }
+
+    public function downloadDataPrivacy(Request $request, string $loanReference) {
+        $loan = Loan::with(['member'])->where('loanReference', $loanReference)->firstOrFail();
+        
+        // Updated format here
+        $pdf = Pdf::loadView('pdf.data-privacy', ['loan' => $loan, 'member' => $loan->member, 'date' => now()->format('d F Y')])->setPaper('A4', 'portrait');
+        return $pdf->stream('data-privacy-'.$loanReference.'.pdf');
+    }
+
+    public function downloadGhqDeclaration(Request $request, string $loanReference) {
+        $loan = Loan::with(['member.branchService'])->where('loanReference', $loanReference)->firstOrFail();
+        $service = strtoupper(trim($loan->member->branchService->branchService ?? ''));
+        if (!in_array($service, ['RETIRED MILITARY', 'RETIRED', 'PENSIONER', 'BENEFICIARY', 'RETIRED/PENSIONER/BENEFICIARY'])) abort(403, 'GHQ Declaration is only for Pensioners.');
+        
+        // Updated format here
+        $pdf = Pdf::loadView('pdf.ghq-declaration', ['loan' => $loan, 'member' => $loan->member, 'date' => now()->format('d F Y')])->setPaper('A4', 'portrait');
+        return $pdf->stream('ghq-declaration-'.$loanReference.'.pdf');
+    }
+
+    public function downloadDisclosureStatement(Request $request, string $loanReference) {
+        $loan = Loan::with(['member.afpInfo'])->where('loanReference', $loanReference)->firstOrFail();
+        
+        $termMonths = (int)($loan->termYears * 12);
+        $totalNonFinance = (float)$loan->advanceInterest + (float)$loan->insurance;
+        $totalFinance = (float)($loan->gross - $loan->loanAmount) + (float)$loan->serviceFee;
+
+        $baseDate = $loan->created_at ? Carbon::parse($loan->created_at) : now();
+        $advanceMonths = (int)$loan->advanceInterestMonths;
+        $startPayment = $baseDate->copy()->addMonths(1 + $advanceMonths);
+        $endPayment = $baseDate->copy()->addMonths($termMonths + $advanceMonths);
+
+        $data = [
+            'loan' => $loan,
+            'member' => $loan->member,
+            'date' => now()->format('d F Y'), // Updated format
+            'termMonths' => $termMonths,
+            'totalFinance' => $totalFinance,
+            'totalNonFinance' => $totalNonFinance,
+            'startPayment' => $startPayment->format('d F Y'), // Updated format
+            'endPayment' => $endPayment->format('d F Y'),     // Updated format
+            'processedBy' => $loan->processor ? $loan->processor->name : 'Denise Joy F. Antolin',
+        ];
+
+        $pdf = Pdf::loadView('pdf.disclosure-statement', $data)->setPaper('A4', 'portrait');
+        return $pdf->stream('disclosure-statement-'.$loanReference.'.pdf');
     }
 }
