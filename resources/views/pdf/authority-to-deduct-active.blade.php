@@ -7,6 +7,7 @@
         body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6; }
         .text-center { text-align: center; }
         .font-bold { font-weight: bold; }
+        .uppercase { text-transform: uppercase; }
         .header-table { width: 100%; margin-bottom: 30px; border-bottom: 2px solid #047857; padding-bottom: 10px; }
         .coop-name { font-size: 11pt; font-weight: bold; color: #047857; text-transform: uppercase; margin-bottom: 2px; }
         .address-block { font-size: 7.5pt; color: #444; line-height: 1.2; }
@@ -37,14 +38,45 @@
     </table>
 
     <h3 class="text-center font-bold">AUTHORIZATION FOR ACTIVE DEDUCTION</h3>
-    <p style="margin-top:20px;"><strong>{{ $date }}</strong><br><span style="font-size:10pt;">(DATE)</span></p>
     
-    <p>To whom it may concern:</p>
-    <p style="text-indent: 40px; text-align: justify;">I hereby authorize that the amount of <span class="font-bold" style="text-decoration:underline;">Php {{ number_format($loan->monthlyAmortization, 2) }}</span> be deducted from my monthly salary for a period of <span class="font-bold" style="text-decoration:underline;">{{ $loan->termYears * 12 }}</span> months with the total amount of <span class="font-bold" style="text-decoration:underline;">Php {{ number_format($loan->gross, 2) }}</span>. Furthermore, I hereby irrevocably assign/appoint the <strong>PEOPLE’S MULTI – PURPOSE COOPERATIVE (PMPC)</strong> as my attorney in fact to ensure the implementation of such deduction until the full settlement of my loan obligation with People’s Multi – Purpose Cooperative (PMPC).</p>
-    
-    <div style="margin-top: 50px; text-align:center; margin-left: 50%;">
-        <p class="font-bold" style="text-decoration:underline; margin-bottom: 2px;">{{ strtoupper($member->firstName . ' ' . $member->lastName) }}</p>
-        <p style="margin-top: 0;">(Signature Over Printed Name)<br>Borrower</p>
+    <div style="text-align: right; margin-top: 20px;">
+        <strong>{{ $date }}</strong>
     </div>
+    
+    <p style="margin-top: 20px;">To whom it may concern:</p>
+    
+    <p style="text-indent: 40px; text-align: justify;">
+        I hereby authorize that the amount of <span class="font-bold" style="text-decoration:underline;">Php {{ number_format($loan->monthlyAmortization, 2) }}</span> be deducted from my monthly salary for a period of <span class="font-bold" style="text-decoration:underline;">{{ $loan->termYears * 12 }}</span> months with the total amount of <span class="font-bold" style="text-decoration:underline;">Php {{ number_format($loan->gross, 2) }}</span>. Furthermore, I hereby irrevocably assign/appoint the <strong>PEOPLE’S MULTI – PURPOSE COOPERATIVE (PMPC)</strong> as my attorney in fact to ensure the implementation of such deduction until the full settlement of my loan obligation with People’s Multi – Purpose Cooperative (PMPC).
+    </p>
+    
+    <table style="width: 100%; margin-top: 40px;">
+        <tr>
+            <td width="50%"></td>
+            <td width="50%" class="text-center">
+                <div class="font-bold uppercase" style="border-bottom: 1px solid black; margin-bottom: 2px;">{{ $member->firstName . ' ' . $member->lastName }}</div>
+                <div style="font-size: 10pt;">(Signature Over Printed Name)<br>Borrower</div>
+            </td>
+        </tr>
+    </table>
+
+    <p style="margin-top: 40px;">To whom it may concern:</p>
+    
+    <p style="text-indent: 40px; text-align: justify;">
+        I hereby undertake to deduct the amount indicated in the foregoing authorization and cause the remittance of same to People’s Multi – Purpose Cooperative (PMPC).
+    </p>
+
+    <table style="width: 100%; margin-top: 50px;">
+        <tr>
+            <td width="50%" style="vertical-align: bottom;">
+                <div class="font-bold" style="margin-bottom: 15px;">VALIDATED</div>
+                <div style="margin-bottom: 10px;">RMB: ___________________</div>
+                <div>DATE: __________________</div>
+            </td>
+            <td width="50%" class="text-center" style="vertical-align: bottom;">
+                <div style="border-bottom: 1px solid black; margin-bottom: 5px; height: 30px;"></div>
+                <div style="font-size: 10pt;">(Signature of Finance/Disbursing Officer over printed name)</div>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('disk')->default('local');
             $table->string('path');
             $table->timestamps();
-            $table->unique(['loanId','docsType']); // 1 each type per loan
+            $table->unique(['loanId','docsType']);
         });
     }
 

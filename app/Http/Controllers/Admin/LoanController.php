@@ -125,17 +125,15 @@ class LoanController extends Controller
         $capCon = CapitalContribution::where('reference_number', $loanReference)->value('amount') ?? 0;
         $membershipFee = MembershipPayment::where('reference_number', $loanReference)->value('amount') ?? 0; 
 
+        // FIX: removed duplicate query that overwrote the if/else branch.
+        // For released loans, use the posted GL entries; for pending, use the stored journal_entries JSON.
         if (strtolower($loan->status) === 'released') {
             $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
-                ->orderBy('debit','desc')
+                ->orderBy('debit', 'desc')
                 ->get();
         } else {
-            $journalEntries = $loan->journal_entries ?? [];
+            $journalEntries = collect($loan->journal_entries ?? [])->map(fn ($e) => (object) $e)->values();
         }
-
-        $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
-            ->orderBy('debit','desc')
-            ->get();
             
         $requiredLabels = $this->mapPreRequirementsByBranchService(
             (string) $branchServiceName
@@ -266,7 +264,7 @@ class LoanController extends Controller
             'advanceInterestMonths' => ['nullable', 'integer', 'min:0'], // default 2 if omitted
         ]);
 
-        $category = strtoupper($date['category'] ?? 'ACTIVE_PENSIONER_V1');
+        $category = strtoupper($data['category'] ?? 'ACTIVE_PENSIONER_V1');
         $termMonths = (int)$data['terms'];
 
         // 1) Active computation (by category + term)
@@ -551,6 +549,7 @@ class LoanController extends Controller
 
         $files = $request->file('files', []);
 
+        try {
         foreach ($files as $idx => $meta) {
             $file = is_array($meta) ? ($meta['file'] ?? null) : $meta;
             if (!$file) {
@@ -558,7 +557,22 @@ class LoanController extends Controller
             }
 
             $docsType = $request->input("files.$idx.docsType") ?? 'Unknown';
-            $path     = $file->store($uploadDir, 'public');
+
+            // FIX: $file->store() returns false if the public disk or storage symlink
+            // is not configured. Storing false as path crashes on the DB NOT NULL
+            // constraint, producing a 500. Guard here and return a clear error.
+            $path = $file->store($uploadDir, 'public');
+
+            if ($path === false) {
+                \Illuminate\Support\Facades\Log::error("Post-approval doc upload failed: storage disk error", [
+                    'loanReference' => $loanReference,
+                    'docsType'      => $docsType,
+                    'file'          => $file->getClientOriginalName(),
+                ]);
+                return response()->json([
+                    'message' => 'File upload failed. Please ensure server storage is configured correctly (run: php artisan storage:link).',
+                ], 500);
+            }
 
             PostApprovalDocuments::create([
                 'loanId'       => $loan->id,
@@ -569,6 +583,16 @@ class LoanController extends Controller
                 'path'         => $path,
             ]);
         }
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("storePostApprovalDocs exception: " . $e->getMessage(), [
+                'loanReference' => $loanReference,
+            ]);
+            return response()->json(['message' => 'An unexpected error occurred during upload.'], 500);
+        }
+
+        return response()->json(['message' => 'Document uploaded successfully'], 201);
+
     }
 
     public function previewPreApprovalDocuments(Request $request, string $loanReference, string $documentId) {
@@ -1077,10 +1101,6 @@ class LoanController extends Controller
                     'Reservist ID',
                     'Proof of income (2 latest payslips or bank statements)',
                     'Valid government ID with 3 specimen signatures',
-                ];
-
-            case 'RESERVIST':
-                return [
                     'Order of Commission or Enlistment',
                     '2 Latest 2x2 Picture',
                     'Authenticated Assignment Order',

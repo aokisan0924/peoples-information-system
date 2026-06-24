@@ -183,7 +183,6 @@ export default function AdminLoanDetails({ loanReference }) {
     return (
         <>
             <Head title={`Loan #${loanReference}`} />
-            <Toaster position="top-right" />
             <AdminSidebarLayout>
                 
                 {/* TOP HEADER */}

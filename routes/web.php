@@ -372,7 +372,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/loans/{loanReference}', [LoanController::class, 'showLoanDetails'])->name('loans.showLoan');
 
             Route::get('/loans/{loanReference}/documents/{documentId}/preview', [LoanController::class, 'previewPreApprovalDocuments'])->whereNumber('documentId')->name('loans.preDocuments.preview');
-            Route::get('/admin/loans/{loanReference}/post-documents/{documentId}/preview',[LoanController::class, 'previewPostApprovalDocument'])->name('loans.postDocuments.preview');
+            Route::get('/loans/{loanReference}/post-documents/{documentId}/preview', [LoanController::class, 'previewPostApprovalDocument'])->whereNumber('documentId')->name('loans.postDocuments.preview');
             Route::get('/loans/{loanReference}/download/application', [LoanController::class, 'downloadapplication'])->name('loan.download.application');
             Route::get('/loans/{loanReference}/download/release-voucher', [LoanController::class, 'downloadReleaseVoucher'])->name('loan.download.releaseVoucher');
             Route::get('/loans/{loanReference}/download/ledger', [LoanController::class, 'downloadLedger'])->name('loan.download.ledger');
