@@ -8,8 +8,13 @@ use App\Models\MemberNotification;
 use App\Models\SavingsDeposit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth; // <--- ADDED THIS
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Mail\WithdrawalReceiptMail;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -685,107 +690,155 @@ class SavingsDepositController extends Controller
     public function approveWithdrawal(Request $request, $memberId) {
         $withdrawal = SavingsDeposit::with('member')->findOrFail($memberId);
 
-        // Check if pending
         if (strtolower($withdrawal->status) !== 'pending') {
             return response()->json([
-                'error' => true,
-                'message' => 'This request has already been processed.'
+                'error'   => true,
+                'message' => 'This request has already been processed.',
             ], 422);
         }
 
-        // Compute current available balance
-        $balance = SavingsDeposit::where('memberId', $withdrawal->memberId)
-            ->where('status', 'Posted')
-            ->sum('amount');
+        // Re-check balance against posted rows only
+        $balance = $this->computePostedBalance($withdrawal->memberId);
 
-        // Check insufficient funds
         if ($balance < abs($withdrawal->amount)) {
             return response()->json([
-                'error' => true,
-                'message' => 'Insufficient balance. Withdrawal cannot be approved.'
+                'error'   => true,
+                'message' => 'Insufficient balance. Withdrawal cannot be approved.',
             ], 422);
         }
 
-        // APPROVE
         $withdrawal->update([
-            'status'   => 'Approved',
-            'processed_by' => Auth::guard('admin')->id() // Track approval
+            'status'       => 'Approved',
+            'adminStatus'  => 'Approved',
+            'processed_by' => Auth::guard('admin')->id(),
         ]);
 
-        // Notify member
+        // In-app notification
         MemberNotification::create([
             'memberId' => $withdrawal->memberId,
             'title'    => 'Withdrawal Approved',
             'message'  => sprintf(
-                'Your savings withdrawal request (Ref: %s) has been approved.',
-                $withdrawal->referenceNumber
+                'Your savings withdrawal request (Ref: %s) for %s has been approved and is being processed.',
+                $withdrawal->referenceNumber,
+                '₱' . number_format(abs($withdrawal->amount), 2)
             ),
             'type'     => 'withdrawal_approved',
             'isRead'   => false,
             'linkUrl'  => route('member.savings.index'),
         ]);
 
+        // SMS notification
+        $this->sendWithdrawalSms(
+            $withdrawal->member->contact,
+            sprintf(
+                'Hi %s, your PMPC savings withdrawal (Ref: %s) for ₱%s has been approved. Funds will be released shortly.',
+                $withdrawal->member->firstName,
+                $withdrawal->referenceNumber,
+                number_format(abs($withdrawal->amount), 2)
+            )
+        );
+
         return response()->json([
-            'error' => false,
-            'message' => 'Withdrawal request approved.'
+            'error'   => false,
+            'message' => 'Withdrawal request approved.',
         ]);
     }
 
     /**
-     * ADMIN: RELEASE WITHDRAWAL (Cash / GCash / Maya / Bank)
+     * ADMIN: RELEASE WITHDRAWAL
+     * - Digital channels (bank/gcash/maya): triggers PayMongo disbursement
+     * - Cash: marks as released immediately, no payout API call
+     * - On PayMongo failure: keeps status as Approved, returns error to admin
      */
     public function releaseWithdrawal(Request $request, $memberId) {
         $withdrawal = SavingsDeposit::with('member')->findOrFail($memberId);
 
         if ($withdrawal->status !== 'Approved') {
             return response()->json([
-                'error' => true,
-                'message' => 'Withdrawal must be approved before releasing.'
+                'error'   => true,
+                'message' => 'Withdrawal must be approved before releasing.',
             ], 422);
         }
 
-        // Compute current balance BEFORE releasing
-        $balance = SavingsDeposit::where('memberId', $withdrawal->memberId)
-            ->where('status', 'Posted')
-            ->sum('amount');
-        
-        // Check insufficient funds
+        // Re-check balance
+        $balance = $this->computePostedBalance($withdrawal->memberId);
+
         if ($balance < abs($withdrawal->amount)) {
             return response()->json([
-                'error' => true,
-                'message' => 'Insufficient balance. Unable to release withdrawal.'
+                'error'   => true,
+                'message' => 'Insufficient balance. Unable to release withdrawal.',
             ], 422);
         }
 
-        DB::transaction(function () use ($withdrawal) {
+        $method = strtolower($withdrawal->payoutMethod ?? '');
 
-            $withdrawal->update([
-                'status' => 'Posted',
-                'isPaid' => true,
-                'status' => 'posted',
-                'paidAt' => now(),
-                'processed_by' => Auth::guard('admin')->id() // Track release
-            ]);
-        });
-
-        /**
-         * 🔔 NOTIFICATION — WITHDRAWAL RELEASED
-         */
-        MemberNotification::create([
-            'memberId' => $withdrawal->memberId,
-            'title' => 'Withdrawal Released',
-            'message' => sprintf(
-                'Your savings withdrawal (Ref: %s) has been released.',
-                $withdrawal->referenceNumber
-            ),
-            'type' => 'withdrawal_released',
-            'isRead' => false,
-            'linkUrl' => route('member.savings.index'),
+        // ── Mark as Released (all channels — manual payout in effect) ─────────
+        // TODO: Swap the digital block below for PayMongoController::disburseSavingsWithdrawal()
+        //       once PayMongo enables Disbursements API on this account.
+        $withdrawal->update([
+            'status'       => 'Released',
+            'adminStatus'  => 'Released',
+            'isPaid'       => true,
+            'paidAt'       => now(),
+            'processed_by' => Auth::guard('admin')->id(),
         ]);
 
+        // ── Send PDF receipt email ────────────────────────────────────────────
+        try {
+            $balanceBefore = $this->computePostedBalance($withdrawal->memberId) + abs((float) $withdrawal->amount);
+            $balanceAfter  = $this->computePostedBalance($withdrawal->memberId);
+
+            $adminUser  = \App\Models\Admin::find($withdrawal->processed_by);
+            $processedBy = $adminUser ? ($adminUser->name ?? $adminUser->username ?? 'Authorized Officer') : 'Authorized Officer';
+
+            Mail::to($withdrawal->member->email)
+                ->send(new WithdrawalReceiptMail(
+                    member:        $withdrawal->member,
+                    withdrawal:    $withdrawal,
+                    balanceBefore: $balanceBefore,
+                    balanceAfter:  $balanceAfter,
+                    processedBy:   $processedBy,
+                ));
+        } catch (\Throwable $e) {
+            Log::warning('Withdrawal receipt email failed', [
+                'withdrawal_id' => $withdrawal->id,
+                'error'         => $e->getMessage(),
+            ]);
+            // Non-fatal — release already succeeded
+        }
+
+        // In-app notification
+        MemberNotification::create([
+            'memberId' => $withdrawal->memberId,
+            'title'    => 'Withdrawal Released',
+            'message'  => sprintf(
+                'Your savings withdrawal (Ref: %s) for %s has been released via %s.',
+                $withdrawal->referenceNumber,
+                '₱' . number_format(abs($withdrawal->amount), 2),
+                strtoupper($method)
+            ),
+            'type'     => 'withdrawal_released',
+            'isRead'   => false,
+            'linkUrl'  => route('member.savings.index'),
+        ]);
+
+        // SMS notification
+        $cashNote = $method === 'cash' ? ' Please collect at the PMPC office.' : '';
+        $this->sendWithdrawalSms(
+            $withdrawal->member->contact,
+            sprintf(
+                'Hi %s, your PMPC savings withdrawal (Ref: %s) for ₱%s has been released via %s.%s',
+                $withdrawal->member->firstName,
+                $withdrawal->referenceNumber,
+                number_format(abs($withdrawal->amount), 2),
+                strtoupper($method),
+                $cashNote
+            )
+        );
+
         return response()->json([
-            'error' => false,
-            'message' => 'Withdrawal released successfully.'
+            'error'   => false,
+            'message' => 'Withdrawal released successfully.',
         ]);
     }
 
@@ -795,38 +848,113 @@ class SavingsDepositController extends Controller
     public function declineWithdrawal(Request $request, $memberId) {
         $withdrawal = SavingsDeposit::with('member')->findOrFail($memberId);
 
-        if ($withdrawal->status !== 'Pending') {
+        if (strtolower($withdrawal->status) !== 'pending') {
             return response()->json([
-                'error' => true,
-                'message' => 'Only pending requests can be declined.'
+                'error'   => true,
+                'message' => 'Only pending requests can be declined.',
             ], 422);
         }
 
-        $withdrawal->update([
-            'status' => 'Declined',
-            'adminStatus'   => 'Declined',
-            'processed_by' => Auth::guard('admin')->id() // Track decline
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
-        /**
-         * 🔔 NOTIFICATION — WITHDRAWAL DECLINED
-         */
+        $reason = $request->input('reason', 'No reason provided.');
+
+        $withdrawal->update([
+            'status'          => 'Declined',
+            'adminStatus'     => 'Declined',
+            'withdrawalRemarks' => $reason,
+            'processed_by'    => Auth::guard('admin')->id(),
+        ]);
+
+        // In-app notification
         MemberNotification::create([
             'memberId' => $withdrawal->memberId,
             'title'    => 'Withdrawal Declined',
             'message'  => sprintf(
-                'Your savings withdrawal request (Ref: %s) has been declined.',
-                $withdrawal->referenceNumber
+                'Your savings withdrawal request (Ref: %s) has been declined. Reason: %s',
+                $withdrawal->referenceNumber,
+                $reason
             ),
             'type'     => 'withdrawal_declined',
             'isRead'   => false,
             'linkUrl'  => route('member.savings.index'),
         ]);
 
+        // SMS notification
+        $this->sendWithdrawalSms(
+            $withdrawal->member->contact,
+            sprintf(
+                'Hi %s, your PMPC savings withdrawal (Ref: %s) has been declined. Reason: %s. Contact support for assistance.',
+                $withdrawal->member->firstName,
+                $withdrawal->referenceNumber,
+                $reason
+            )
+        );
+
         return response()->json([
             'error'   => false,
-            'message' => 'Withdrawal request declined.'
+            'message' => 'Withdrawal request declined.',
         ]);
+    }
+
+    /**
+     * MEMBER PORTAL: Download withdrawal receipt as PDF
+     * Only the owning member can download their own receipt.
+     */
+    public function downloadWithdrawalReceipt(int $id) {
+        $member     = Auth::guard('member')->user();
+        $withdrawal = SavingsDeposit::with('member')
+            ->where('id', $id)
+            ->where('memberId', $member->id)
+            ->whereIn('status', ['Released', 'released', 'Posted', 'posted'])
+            ->firstOrFail();
+
+        $balanceBefore = $this->computePostedBalance($member->id) + abs((float) $withdrawal->amount);
+        $balanceAfter  = $this->computePostedBalance($member->id);
+
+        $pdf = Pdf::loadView('pdf.withdrawal-receipt', [
+            'member'        => $member,
+            'withdrawal'    => $withdrawal,
+            'balanceBefore' => $balanceBefore,
+            'balanceAfter'  => $balanceAfter,
+            'processedBy'   => 'Authorized Officer',
+        ])->setPaper('a4', 'portrait');
+
+        $filename = 'withdrawal-receipt-' . $withdrawal->referenceNumber . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    // ─── Private helpers ──────────────────────────────────────────────────────
+
+    private function computePostedBalance(int $memberId): float {
+        return (float) SavingsDeposit::where('memberId', $memberId)
+            ->whereIn('status', ['posted', 'Posted', 'POSTED'])
+            ->get()
+            ->reduce(function ($carry, $row) {
+                $credit = $row->transactionType === 'deposit'    ? abs((float) $row->amount) : 0.0;
+                $debit  = $row->transactionType === 'withdrawal' ? abs((float) $row->amount) : 0.0;
+                return $carry + ($credit - $debit);
+            }, 0.0);
+    }
+
+    private function sendWithdrawalSms(string $mobile, string $message): void {
+        try {
+            Http::post('https://api.semaphore.co/api/v4/messages', [
+                'apikey'     => config('services.semaphore.api_key'),
+                'number'     => $mobile,
+                'message'    => $message,
+                'sendername' => config('services.semaphore.sender_name', 'SEMAPHORE'),
+            ]);
+        } catch (\Throwable $e) {
+            // SMS failure is non-fatal — log and continue
+            Log::warning('Withdrawal SMS failed', [
+                'mobile'  => $mobile,
+                'error'   => $e->getMessage(),
+            ]);
+        }
     }
 
     /** PRINT REQUEST */

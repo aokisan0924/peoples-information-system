@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
     Menu as MenuIcon, X, Users, LogOut, LayoutDashboard, BarChart3,
     PiggyBank, Banknote, Hourglass, CreditCard, ChevronDown, Sun, Moon,
     User, UserPlus, Megaphone, Image, BookOpen, Layers, Landmark,
     Wallet2, Smartphone, Briefcase, Scale, PenTool, ChevronRight, Receipt,
-    FileArchive, PieChart // <-- ADDED ICONS HERE
+    FileArchive, PieChart, Bell
 } from "lucide-react";
-import { Link, usePage } from "@inertiajs/react";
+import { Link, usePage, router } from "@inertiajs/react";
+import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 
 // ─── DARK MODE TOKEN REFERENCE ────────────────────────────────────────────────
@@ -149,7 +150,50 @@ export default function AdminSidebarLayout({ children }) {
     const [sidebarOpen,   setSidebarOpen]   = useState(false);
     const [openGroups,    setOpenGroups]    = useState({ savings: true });
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isBellOpen,    setIsBellOpen]    = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount,   setUnreadCount]   = useState(0);
     const profileRef = useRef(null);
+    const bellRef    = useRef(null);
+
+    // ── Fetch notifications ───────────────────────────────────────────────────
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const { data } = await axios.get(route("admin.savings.notifications.index"));
+            setNotifications(data.notifications || []);
+            setUnreadCount(data.unreadCount || 0);
+        } catch {
+            // Silently fail — non-critical
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 30_000); // poll every 30s
+        return () => clearInterval(interval);
+    }, [fetchNotifications]);
+
+    const markRead = async (id) => {
+        try {
+            await axios.post(route("admin.savings.notifications.read", id));
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        } catch { /* silent */ }
+    };
+
+    const markAllRead = async () => {
+        try {
+            await axios.post(route("admin.savings.notifications.read-all"));
+            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+            setUnreadCount(0);
+        } catch { /* silent */ }
+    };
+
+    const handleNotificationClick = (notif) => {
+        if (!notif.isRead) markRead(notif.id);
+        setIsBellOpen(false);
+        if (notif.linkUrl) router.visit(notif.linkUrl);
+    };
     const { auth } = usePage().props;
 
     const userRole = (auth?.user?.role || "").toLowerCase();
@@ -181,9 +225,12 @@ export default function AdminSidebarLayout({ children }) {
         localStorage.setItem("theme", isDarkMode ? "dark" : "light");
     }, [isDarkMode]);
 
-    // Click-outside profile ───────────────────────────────────────────────────
+    // Click-outside profile + bell ────────────────────────────────────────────
     useEffect(() => {
-        const handler = (e) => { if (profileRef.current && !profileRef.current.contains(e.target)) setIsProfileOpen(false); };
+        const handler = (e) => {
+            if (profileRef.current && !profileRef.current.contains(e.target)) setIsProfileOpen(false);
+            if (bellRef.current && !bellRef.current.contains(e.target)) setIsBellOpen(false);
+        };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
@@ -305,6 +352,93 @@ export default function AdminSidebarLayout({ children }) {
 
                         {/* Right */}
                         <div className="flex items-center gap-2">
+
+                            {/* ── Notification Bell ─────────────────────────── */}
+                            <div className="relative" ref={bellRef}>
+                                <button
+                                    onClick={() => { setIsBellOpen(p => !p); if (!isBellOpen) fetchNotifications(); }}
+                                    className="relative h-8 w-8 grid place-items-center rounded-lg text-slate-500 dark:text-[#9ca3af] hover:bg-slate-100 dark:hover:bg-[#1f2937] transition"
+                                    aria-label="Notifications"
+                                >
+                                    <Bell size={17} />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-sm">
+                                            {unreadCount > 9 ? "9+" : unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+
+                                <AnimatePresence>
+                                    {isBellOpen && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                            transition={{ duration: 0.13, ease: "easeOut" }}
+                                            className="absolute right-0 mt-2 w-80 z-50 rounded-2xl overflow-hidden bg-white dark:bg-[#111827] border border-slate-200 dark:border-[#1f2937] shadow-2xl dark:shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+                                        >
+                                            {/* Header */}
+                                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-[#1f2937] bg-slate-50 dark:bg-[#1f2937]">
+                                                <span className="text-sm font-bold text-slate-800 dark:text-white">Notifications</span>
+                                                {unreadCount > 0 && (
+                                                    <button
+                                                        onClick={markAllRead}
+                                                        className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                                                    >
+                                                        Mark all read
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* List */}
+                                            <div className="max-h-80 overflow-y-auto divide-y divide-slate-50 dark:divide-[#1f2937]">
+                                                {notifications.length === 0 ? (
+                                                    <div className="px-4 py-8 text-center text-sm text-slate-400 dark:text-[#6b7280]">
+                                                        No notifications yet.
+                                                    </div>
+                                                ) : notifications.map((notif) => (
+                                                    <button
+                                                        key={notif.id}
+                                                        onClick={() => handleNotificationClick(notif)}
+                                                        className={[
+                                                            "w-full text-left px-4 py-3 flex gap-3 items-start hover:bg-slate-50 dark:hover:bg-[#1f2937] transition-colors",
+                                                            !notif.isRead ? "bg-emerald-50/60 dark:bg-emerald-900/10" : "",
+                                                        ].join(" ")}
+                                                    >
+                                                        {/* Dot indicator */}
+                                                        <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${!notif.isRead ? "bg-emerald-500" : "bg-slate-200 dark:bg-[#374151]"}`} />
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs font-bold text-slate-800 dark:text-white leading-snug truncate">
+                                                                {notif.title}
+                                                            </p>
+                                                            <p className="text-[11px] text-slate-500 dark:text-[#9ca3af] mt-0.5 leading-relaxed line-clamp-2">
+                                                                {notif.message}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-400 dark:text-[#6b7280] mt-1">
+                                                                {new Date(notif.created_at).toLocaleString("en-PH", {
+                                                                    month: "short", day: "numeric",
+                                                                    hour: "numeric", minute: "2-digit",
+                                                                })}
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Footer */}
+                                            <div className="px-4 py-2.5 border-t border-slate-100 dark:border-[#1f2937] bg-slate-50 dark:bg-[#1f2937]">
+                                                <Link
+                                                    href={route("admin.savings.withdrawal.index")}
+                                                    onClick={() => setIsBellOpen(false)}
+                                                    className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                                                >
+                                                    View all withdrawal requests →
+                                                </Link>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
 
                             {/* Theme pill toggle */}
                             <button

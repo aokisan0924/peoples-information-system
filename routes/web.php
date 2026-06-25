@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\Accounting\AccTrialBalanceController;
 use App\Http\Controllers\Admin\Accounting\BillingController;
 use App\Http\Controllers\Admin\Accounting\LoanCollectionController;
 use App\Http\Controllers\Admin\Accounting\LoansReceivableController;
+use App\Http\Controllers\Admin\AdminNotificationController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -166,7 +167,10 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
     Route::post('/paymongo/capital-checkout', [PayMongoController::class, 'createCapitalCheckout'])->name('paymongo.capitalCheckout');
 
     Route::get('/savings-deposit', [publicSavingsDepositController::class, 'memberIndex'])->name('savings.index');
-    Route::post('/savings/withdrawal-request', [publicSavingsDepositController::class, 'createWithdrawalRequest'])->name('savings.withdrawal');
+    Route::post('/savings/withdrawal/send-otp',   [publicSavingsDepositController::class, 'sendWithdrawalOtp'])->name('savings.withdrawal.sendOtp');
+    Route::post('/savings/withdrawal/verify-otp', [publicSavingsDepositController::class, 'verifyWithdrawalOtp'])->name('savings.withdrawal.verifyOtp');
+    Route::post('/savings/withdrawal',            [publicSavingsDepositController::class, 'createWithdrawalRequest'])->name('savings.withdrawal');
+    Route::get('/savings/withdrawal/{id}/receipt', [publicSavingsDepositController::class, 'downloadWithdrawalReceipt'])->name('savings.withdrawal.receipt');
     Route::post('/paymongo/savings-checkout', [PayMongoController::class, 'createSavingsCheckout'])->name('paymongo.savingsCheckout');
     
     Route::get('/time-deposit', [TimeDepositCalculatorController::class, 'showClientTimeDeposit'])->name('time-deposit');
@@ -462,6 +466,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
                     Route::post('/{memberId}/decline', [SavingsDepositController::class, 'declineWithdrawal'])->name('decline');
                     Route::post('/{memberId}/release', [SavingsDepositController::class, 'releaseWithdrawal'])->name('release');
                     Route::get('/print/{memberId}', [SavingsDepositController::class, 'printWithdrawal'])->name('print');
+                });
+
+                // Admin Notifications (polled by sidebar)
+                Route::prefix('/notifications')->name('notifications.')->group(function () {
+                    Route::get('/', [AdminNotificationController::class, 'index'])->name('index');
+                    Route::post('/{id}/read', [AdminNotificationController::class, 'markRead'])->name('read');
+                    Route::post('/read-all', [AdminNotificationController::class, 'markAllRead'])->name('read-all');
                 });
 
                 // APIs

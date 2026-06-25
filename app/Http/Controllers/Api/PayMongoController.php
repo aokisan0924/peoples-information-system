@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccChartOfAccount;
+use App\Models\AccGeneralLedger;
 use App\Models\MembershipPayment;
 use App\Models\CapitalContribution;
 use App\Models\Member;
 use App\Models\MemberNotification;
 use App\Models\SavingsDeposit;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -38,17 +41,15 @@ class PayMongoController extends Controller
             if (!$member = $this->getMember()) return $this->unauthorized();
             
             $reference = $request->input('referenceNumber');
-            $category  = $request->input('category'); // <--- READ IT HERE
+            $category  = $request->input('category'); 
             
             if (!$reference) return response()->json(['error' => 'Reference number required'], 400);
 
             $totalRaw = 0;
             $description = "";
-            $paymentType = ""; // We will set this for the PayMongo metadata
+            $paymentType = ""; 
 
-            // USE THE REACT CATEGORY TO ROUTE IT
             if ($category === 'membership') {
-                // Determine if this is a combined MEMCAP or just MEM
                 if (str_starts_with($reference, 'MEMCAP-')) {
                     $paymentType = 'memcap';
                     $mem = MembershipPayment::where('reference_number', $reference)->whereIn('status', ['Pending', 'pending'])->first();
@@ -66,7 +67,7 @@ class PayMongoController extends Controller
                     $description = "Membership Payment - {$reference}";
                 }
                 
-            } elseif ($category === 'shareCapital') { // <--- MATCHES REACT EXACTLY
+            } elseif ($category === 'shareCapital') { 
                 $paymentType = 'capital';
                 $cap = CapitalContribution::where('reference_number', $reference)->whereIn('status', ['Pending', 'pending'])->first();
                 if (!$cap) return response()->json(['error' => 'Transaction not found.'], 404);
@@ -110,7 +111,6 @@ class PayMongoController extends Controller
             $totalRaw = $membershipFee + $shareCapital;
             $totalWithFee = $this->calculateAmountWithFee($totalRaw);
             
-            // 1. Check for EXISTING Pending Onboarding Payment
             $pendingMembership = MembershipPayment::where('memberId', $member->id)
                 ->where('is_paid', false)
                 ->where('status', 'Pending')
@@ -123,7 +123,6 @@ class PayMongoController extends Controller
                 ->where('reference_number', 'LIKE', 'MEMCAP-%')
                 ->first();
 
-            // 2. Reuse or Create Reference
             if ($pendingMembership && $pendingCapital && $pendingMembership->reference_number === $pendingCapital->reference_number) {
                 $parentReference = $pendingMembership->reference_number;
                 $pendingMembership->update(['amount' => $membershipFee]);
@@ -278,18 +277,15 @@ class PayMongoController extends Controller
         try {
             Log::info('Webhook received from PayMongo!', ['payload' => $request->getContent()]);
 
-            // 1. Security Check
             if (!$this->isSignatureValid($request)) {
                 return response()->json(['error' => 'Invalid Signature'], 401);
             }
 
-            // 2. Event Filtering
             $eventType = $request->input('data.attributes.type');
             if (!in_array($eventType, ['payment.paid', 'link.payment.paid'])) {
                 return response()->json(['message' => 'Ignored event: ' . $eventType]);
             }
 
-            // 3. Payload Normalization
             $paymentData = $request->input('data.attributes.data.attributes');
             if (!$paymentData || ($paymentData['status'] ?? '') !== 'paid') {
                 return response()->json(['message' => 'Invalid or unpaid status context.'], 200);
@@ -299,7 +295,6 @@ class PayMongoController extends Controller
             $description = (string) ($paymentData['description'] ?? '');
             $rawAmount   = $metadata['rawAmount'] ?? ($paymentData['amount'] / 100);
 
-            // Extract reference key strings
             $reference = $metadata['reference'] ?? null;
             if (!$reference && preg_match('/(MEMCAP-|MEM-|CC-|SD-)[0-9\-]+/', $description, $match)) {
                 $reference = $match[0];
@@ -316,7 +311,6 @@ class PayMongoController extends Controller
                 return response()->json(['ok' => true]);
             }
 
-            // 4. State Synchronization Processing Pipeline
             $this->processDatabaseUpdate($paymentType, $reference, (float) $rawAmount);
 
             return response()->json(['ok' => true]);
@@ -324,6 +318,71 @@ class PayMongoController extends Controller
         } catch (\Throwable $e) {
             Log::error("Webhook Handling Execution Error: " . $e->getMessage());
             return response()->json(['error' => 'Server Error'], 500);
+        }
+    }
+
+    /* ===============================================================
+     * SAVINGS WITHDRAWAL DISBURSEMENT (Admin-triggered)
+     * Called by SavingsDepositController::releaseWithdrawal()
+     * Returns ['error' => bool, 'message' => string, 'referenceId' => string|null]
+     * =============================================================== */
+    public function disburseSavingsWithdrawal(SavingsDeposit $withdrawal): array {
+        $method = strtolower($withdrawal->payoutMethod ?? '');
+
+        $typeMap = [
+            'gcash' => 'gcash',
+            'maya'  => 'paymaya',
+            'bank'  => 'bank_account',
+        ];
+
+        $type = $typeMap[$method] ?? null;
+        if (!$type) {
+            return ['error' => true, 'message' => "Unsupported payout method: {$method}", 'referenceId' => null];
+        }
+
+        $amount = (int) round(abs((float) $withdrawal->amount) * 100); // centavos
+
+        $payload = [
+            'data' => [
+                'attributes' => [
+                    'amount'      => $amount,
+                    'currency'    => 'PHP',
+                    'description' => 'Savings withdrawal ' . $withdrawal->referenceNumber,
+                    'remarks'     => $withdrawal->withdrawalRemarks ?? '',
+                    'recipient'   => [
+                        'type'           => $type,
+                        'name'           => $withdrawal->withdrawalAccountName ?? '',
+                        'account_number' => $withdrawal->withdrawalAccountNumber ?? '',
+                        'bank_code'      => $withdrawal->withdrawalBankName ?? null,
+                    ],
+                ],
+            ],
+        ];
+
+        try {
+            $response = Http::withBasicAuth($this->secretKey, '')
+                ->post($this->baseUrl . '/disbursements', $payload);
+
+            if ($response->successful()) {
+                return [
+                    'error'       => false,
+                    'message'     => 'Disbursement created.',
+                    'referenceId' => $response->json('data.id'),
+                ];
+            }
+
+            $detail = $response->json('errors.0.detail') ?? $response->body();
+            Log::error('PayMongo disbursement failed', [
+                'withdrawal_id' => $withdrawal->id,
+                'status'        => $response->status(),
+                'detail'        => $detail,
+            ]);
+
+            return ['error' => true, 'message' => $detail, 'referenceId' => null];
+
+        } catch (\Throwable $e) {
+            Log::error('PayMongo disbursement exception', ['error' => $e->getMessage()]);
+            return ['error' => true, 'message' => $e->getMessage(), 'referenceId' => null];
         }
     }
 
@@ -356,7 +415,6 @@ class PayMongoController extends Controller
                 Log::info("MemCap Update Result - Membership: {$memUpdated}, Capital: {$capUpdated}");
 
                 if ($memUpdated > 0 || $capUpdated > 0) {
-                    // Fetch Member ID from whichever table updated successfully
                     $memberId = (int) MembershipPayment::where('reference_number', $reference)->value('memberId') 
                             ?: (int) CapitalContribution::where('reference_number', $reference)->value('memberId');
 
@@ -366,6 +424,11 @@ class PayMongoController extends Controller
                         "Your membership fee and initial share capital have been successfully posted.", 
                         "PMPC: Your onboarding payment of ₱" . number_format($rawAmount, 2) . " has been received and posted. Ref: {$reference}."
                     );
+                    
+                    if ($capUpdated > 0) {
+                        $capAmount = CapitalContribution::where('reference_number', $reference)->value('amount');
+                        $this->recordShareCapitalJournalEntry($memberId, (float)$capAmount, $reference);
+                    }
                 }
                 break;
 
@@ -388,6 +451,8 @@ class PayMongoController extends Controller
                 if ($updated > 0) {
                     $memberId = (int) CapitalContribution::where('reference_number', $reference)->value('memberId');
                     $this->finalizeTransaction($memberId, 'Capital Contribution Posted', "Your capital contribution of ₱" . number_format($rawAmount, 2) . " has been posted.", "PMPC: Your capital contribution of ₱" . number_format($rawAmount, 2) . " has been posted. Ref: {$reference}.");
+                    
+                    $this->recordShareCapitalJournalEntry($memberId, $rawAmount, $reference);
                 }
                 break;
 
@@ -407,7 +472,6 @@ class PayMongoController extends Controller
     private function finalizeTransaction(int $memberId, string $title, string $notifMsg, string $smsMsg): void  {
         if (!$memberId) return;
         
-        // Internal DB Notification Panel
         MemberNotification::create([
             'memberId' => $memberId,
             'title'    => $title,
@@ -416,7 +480,6 @@ class PayMongoController extends Controller
             'isRead'   => 0
         ]);
 
-        // Semaphore SMS Integration
         $this->sendSms($memberId, $smsMsg);
     }
 
@@ -475,7 +538,7 @@ class PayMongoController extends Controller
     }
 
     private function calculateAmountWithFee(float $amount): float {
-        return round($amount + ($amount * self::CONVENIENCE_FEE_RATE), 2);
+        return round($amount / (1 - self::CONVENIENCE_FEE_RATE), 2);
     }
 
     private function deducePaymentType(string $reference): ?string {
@@ -528,6 +591,67 @@ class PayMongoController extends Controller
             }
         } catch (\Throwable $e) {
             Log::error('Email invoice delivery failed: ' . $e->getMessage());
+        }
+    }
+
+    /* ===============================================================
+     * AUTOMATED GENERAL LEDGER RECORDING
+     * =============================================================== */
+    private function recordShareCapitalJournalEntry(int $memberId, float $amount, string $reference): void {
+        try {
+            $member = Member::with('branchService')->find($memberId);
+            if (!$member) return;
+
+            $memberName = "{$member->lastName}, {$member->firstName}";
+            $branch = $member->branchService->branchService ?? 'Main Office'; 
+
+            $status = strtolower($member->accountStatus ?? 'unverified');
+
+            // 1. DETERMINE THE CORRECT SHARE CAPITAL ACCOUNT CODE
+            if ($status === 'regular') {
+                $entry['accountCode'] = '30010';
+            } else {
+                $entry['accountCode'] = '30020';
+            }
+
+            // 2. FETCH FROM CHART OF ACCOUNTS TABLE
+            $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+            $creditCode = $entry['accountCode'];
+            $creditName = $account ? $account->accountName : 'Subscribed Share Capital';
+
+            $paymongoAccount = AccChartOfAccount::where('accountCode', '11205')->first();
+            $debitName = $paymongoAccount ? $paymongoAccount->accountName : 'Cash in Bank - PayMongo';
+
+            // 3. DEBIT: Cash in Bank - PayMongo
+            AccGeneralLedger::create([
+                'branch'          => $branch,
+                'referenceNo'     => $reference,
+                'memberId'        => $member->id,
+                'accountCode'     => '11205',
+                'accountName'     => $debitName,
+                'debit'           => $amount,
+                'credit'          => 0.00,
+                'particulars'     => "PayMongo Deposit: Share Capital - {$memberName}",
+                'transactionDate' => Carbon::now(),
+            ]);
+
+            // 4. CREDIT: Subscribed Share Capital (Common or Preferred)
+            AccGeneralLedger::create([
+                'branch'          => $branch,
+                'referenceNo'     => $reference,
+                'memberId'        => $member->id,
+                'accountCode'     => $creditCode, 
+                'accountName'     => $creditName,
+                'debit'           => 0.00,
+                'credit'          => $amount,
+                'particulars'     => "PayMongo Deposit: {$creditName} - {$memberName}",
+                'transactionDate' => Carbon::now(),
+            ]);
+            
+            Log::info("Journal Entry successfully created for PayMongo Share Capital: {$reference}");
+
+        } catch (\Throwable $e) {
+            Log::error("Failed to create Journal Entry for Share Capital: " . $e->getMessage());
         }
     }
 }
