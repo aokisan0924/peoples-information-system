@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Head, Link, usePage } from "@inertiajs/react";
 import { 
     Download, Loader2, RefreshCcw, Search, Eye, Plus, Banknote, Wallet, 
-    TrendingUp, Users, X, ChevronLeft, ChevronRight, Check, ChevronDown 
+    TrendingUp, Users, X, ChevronLeft, ChevronRight, Check, ChevronDown, CalendarDays,
+    ArrowDownCircle, ArrowUpCircle, AlertTriangle, Hash
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Combobox } from "@headlessui/react";
@@ -12,6 +13,14 @@ import toast from "react-hot-toast";
 import axios from "axios";
 
 const toNumber = (v) => (Number.isFinite(+v) ? +v : 0);
+
+const todayISO = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+};
 
 const asMoney = (v) => {
     const num = Number(v);
@@ -49,6 +58,7 @@ export default function SavingsDeposit() {
         transactionType: 'deposit',
         amount: '',
         referenceNumber: '',
+        transactionDate: todayISO(),
     });
 
     const [submitting, setSubmitting] = useState(false);
@@ -66,7 +76,7 @@ export default function SavingsDeposit() {
 
     const openModal = async () => {
         setShowModal(true);
-        setForm({ memberId: '', transactionType: 'deposit', amount: '', referenceNumber: '' });
+        setForm({ memberId: '', transactionType: 'deposit', amount: '', referenceNumber: '', transactionDate: todayISO() });
         setMemberQuery("");
 
         if (!memberOptions.length) {
@@ -90,8 +100,13 @@ export default function SavingsDeposit() {
     const submitForm = async (e) => {
         e.preventDefault();
 
-        if (!form.memberId || !form.transactionType || !form.amount) {
+        if (!form.memberId || !form.transactionType || !form.amount || !form.transactionDate) {
             toast.error('Please fill in all required fields.');
+            return;
+        }
+
+        if (form.transactionDate > todayISO()) {
+            toast.error('Transaction date cannot be in the future.');
             return;
         }
 
@@ -102,6 +117,7 @@ export default function SavingsDeposit() {
                 transactionType: form.transactionType,
                 amount: Number(form.amount),
                 referenceNumber: form.referenceNumber || null,
+                transactionDate: form.transactionDate,
             });
 
             if (!data?.success) {
@@ -255,9 +271,9 @@ export default function SavingsDeposit() {
                             {/* Date & Filter Controls */}
                             <div className="flex flex-col sm:flex-row gap-2 lg:gap-4">
                                 <div className="flex gap-2">
-                                    <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full sm:w-auto px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 text-slate-900 dark:text-white text-sm outline-none focus:border-emerald-500 transition-all" />
+                                    <ModernDatePicker value={dateFrom} onChange={setDateFrom} maxDate={todayISO()} placeholder="From" allowClear className="w-full sm:w-36" />
                                     <span className="text-slate-400 self-center hidden sm:block">-</span>
-                                    <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full sm:w-auto px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5 text-slate-900 dark:text-white text-sm outline-none focus:border-emerald-500 transition-all" />
+                                    <ModernDatePicker value={dateTo} onChange={setDateTo} maxDate={todayISO()} placeholder="To" allowClear className="w-full sm:w-36" />
                                 </div>
                                 
                                 {/* Action Buttons Grid on Mobile */}
@@ -360,12 +376,17 @@ export default function SavingsDeposit() {
                     {showModal && (
                         <motion.div className="fixed inset-0 z-50 flex items-center justify-center px-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-                            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                                 
                                 <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5 shrink-0">
-                                    <div>
-                                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Transaction</h2>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">Savings Deposit Entry</p>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${form.transactionType === 'withdrawal' ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'}`}>
+                                            {form.transactionType === 'withdrawal' ? <ArrowUpCircle size={20} /> : <ArrowDownCircle size={20} />}
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Transaction</h2>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Savings Deposit Entry</p>
+                                        </div>
                                     </div>
                                     <button onClick={closeModal} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 transition"><X size={20} /></button>
                                 </div>
@@ -409,40 +430,84 @@ export default function SavingsDeposit() {
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <InputGroup label="Transaction Type">
-                                            <select 
-                                                value={form.transactionType} 
-                                                onChange={(e) => handleFormChange("transactionType", e.target.value)}
-                                                className="input-field"
-                                            >
-                                                <option value="deposit" className="text-slate-900 dark:text-slate-900">Deposit</option>
-                                                <option value="withdrawal" className="text-slate-900 dark:text-slate-900">Withdrawal</option>
-                                            </select>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleFormChange("transactionType", "deposit")}
+                                                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold border transition-all ${form.transactionType === "deposit" ? "bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-500/20" : "border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"}`}
+                                                >
+                                                    <ArrowDownCircle size={15} /> Deposit
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleFormChange("transactionType", "withdrawal")}
+                                                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold border transition-all ${form.transactionType === "withdrawal" ? "bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-500/20" : "border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"}`}
+                                                >
+                                                    <ArrowUpCircle size={15} /> Withdrawal
+                                                </button>
+                                            </div>
                                         </InputGroup>
                                         <InputGroup label="Amount">
-                                            <input 
-                                                type="number" 
-                                                value={form.amount} 
-                                                onChange={(e) => handleFormChange("amount", e.target.value)}
-                                                className="input-field font-mono"
-                                                placeholder="0.00"
-                                            />
+                                            <div className="relative">
+                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm pointer-events-none">₱</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={form.amount} 
+                                                    onChange={(e) => handleFormChange("amount", e.target.value)}
+                                                    className="input-field font-mono pl-7"
+                                                    placeholder="0.00"
+                                                    min="0"
+                                                    step="0.01"
+                                                />
+                                            </div>
                                         </InputGroup>
                                     </div>
 
-                                    <InputGroup label="Reference (Optional)">
-                                        <input 
-                                            type="text" 
-                                            value={form.referenceNumber} 
-                                            onChange={(e) => handleFormChange("referenceNumber", e.target.value)}
-                                            className="input-field"
-                                            placeholder="OR#, Ref#, Note"
+                                    <InputGroup label="Transaction Date">
+                                        <ModernDatePicker
+                                            value={form.transactionDate}
+                                            onChange={(val) => handleFormChange("transactionDate", val)}
+                                            maxDate={todayISO()}
                                         />
+                                        {form.transactionDate === todayISO() ? (
+                                            <p className="text-[11px] text-slate-400 mt-1.5 ml-1">Defaults to today — pick an earlier date to log a past deposit or withdrawal.</p>
+                                        ) : (
+                                            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 ml-1 flex items-center gap-1">
+                                                <AlertTriangle size={11} className="shrink-0" />
+                                                Backdated entry — this will post as if made on {new Date(form.transactionDate + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}.
+                                            </p>
+                                        )}
                                     </InputGroup>
+
+                                    <InputGroup label="Reference (Optional)">
+                                        <div className="relative">
+                                            <Hash size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                            <input 
+                                                type="text" 
+                                                value={form.referenceNumber} 
+                                                onChange={(e) => handleFormChange("referenceNumber", e.target.value)}
+                                                className="input-field pl-9"
+                                                placeholder="OR#, Ref#, Note"
+                                            />
+                                        </div>
+                                    </InputGroup>
+
+                                    {form.memberId && Number(form.amount) > 0 && (
+                                        <div className={`rounded-xl px-4 py-3 text-xs leading-relaxed border ${form.transactionType === "withdrawal" ? "bg-rose-50 border-rose-100 text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/20 dark:text-rose-300" : "bg-emerald-50 border-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300"}`}>
+                                            Recording a <strong className="font-mono">{asMoney(form.amount)}</strong> {form.transactionType} for{" "}
+                                            <strong>{memberOptions.find(m => m.id === form.memberId)?.label || "the selected member"}</strong>
+                                            , dated {new Date(form.transactionDate + "T00:00:00").toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}.
+                                        </div>
+                                    )}
                                 </form>
 
                                 <div className="px-6 py-4 border-t border-slate-100 dark:border-white/10 flex justify-end gap-3 bg-slate-50 dark:bg-white/5 shrink-0">
                                     <button onClick={closeModal} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10 transition">Cancel</button>
-                                    <button onClick={submitForm} disabled={submitting} className="px-6 py-2 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 active:scale-95">
+                                    <button
+                                        onClick={submitForm}
+                                        disabled={submitting || !form.memberId || !form.amount || !form.transactionDate}
+                                        className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 ${form.transactionType === "withdrawal" ? "bg-rose-600 hover:bg-rose-500 shadow-rose-500/20" : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20"}`}
+                                    >
                                         {submitting ? 'Saving...' : 'Save Transaction'}
                                     </button>
                                 </div>
@@ -508,6 +573,286 @@ function InputGroup({ label, children }) {
         <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 ml-1 uppercase tracking-wide">{label}</label>
             {children}
+        </div>
+    );
+}
+
+// Modernized calendar dropdown — replaces native <input type="date">.
+// No extra dependency: built on the framer-motion / lucide-react already used in this file.
+// Click the header label to jump from day-grid -> month-grid -> year-grid for fast navigation.
+function ModernDatePicker({ value, onChange, maxDate, placeholder = "Select date", allowClear = false, className = "" }) {
+    const [open, setOpen] = useState(false);
+    const [viewMode, setViewMode] = useState("days"); // "days" | "months" | "years"
+    const containerRef = useRef(null);
+
+    const parseISO = (s) => {
+        const [y, m, d] = s.split("-").map(Number);
+        return new Date(y, m - 1, d);
+    };
+    const toISODate = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+    };
+
+    const baseDate = value ? parseISO(value) : new Date();
+    const [viewYear, setViewYear] = useState(baseDate.getFullYear());
+    const [viewMonth, setViewMonth] = useState(baseDate.getMonth());
+    const [yearPageStart, setYearPageStart] = useState(Math.floor(baseDate.getFullYear() / 12) * 12);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const max = maxDate ? parseISO(maxDate) : null;
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
+
+    const cells = [];
+    for (let i = 0; i < firstWeekday; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+    // ── Navigation (meaning depends on which view is active) ───────────────
+    const goPrev = () => {
+        if (viewMode === "days") {
+            if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
+            else setViewMonth((m) => m - 1);
+        } else if (viewMode === "months") {
+            setViewYear((y) => y - 1);
+        } else {
+            setYearPageStart((s) => s - 12);
+        }
+    };
+    const goNext = () => {
+        if (viewMode === "days") {
+            if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
+            else setViewMonth((m) => m + 1);
+        } else if (viewMode === "months") {
+            setViewYear((y) => y + 1);
+        } else {
+            setYearPageStart((s) => s + 12);
+        }
+    };
+
+    const headerLabel = viewMode === "days" ? monthLabel
+        : viewMode === "months" ? String(viewYear)
+        : `${yearPageStart} – ${yearPageStart + 11}`;
+
+    const handleHeaderClick = () => {
+        if (viewMode === "days") setViewMode("months");
+        else if (viewMode === "months") {
+            setYearPageStart(Math.floor(viewYear / 12) * 12);
+            setViewMode("years");
+        }
+    };
+
+    // ── Day grid ─────────────────────────────────────────────────────────
+    const isCellDisabled = (d) => {
+        if (!max) return false;
+        return new Date(viewYear, viewMonth, d) > max;
+    };
+    const selectDay = (d) => {
+        if (isCellDisabled(d)) return;
+        onChange(toISODate(new Date(viewYear, viewMonth, d)));
+        setOpen(false);
+    };
+    const isSelected = (d) => {
+        if (!value) return false;
+        const sel = parseISO(value);
+        return sel.getFullYear() === viewYear && sel.getMonth() === viewMonth && sel.getDate() === d;
+    };
+    const isToday = (d) =>
+        today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
+
+    // ── Month grid ───────────────────────────────────────────────────────
+    const isMonthDisabled = (m) => {
+        if (!max) return false;
+        if (viewYear > max.getFullYear()) return true;
+        return viewYear === max.getFullYear() && m > max.getMonth();
+    };
+    const selectMonth = (m) => {
+        if (isMonthDisabled(m)) return;
+        setViewMonth(m);
+        setViewMode("days");
+    };
+    const isSelectedMonth = (m) => value && (() => {
+        const sel = parseISO(value);
+        return sel.getFullYear() === viewYear && sel.getMonth() === m;
+    })();
+    const isCurrentMonth = (m) => today.getFullYear() === viewYear && today.getMonth() === m;
+
+    // ── Year grid ────────────────────────────────────────────────────────
+    const yearCells = Array.from({ length: 12 }, (_, i) => yearPageStart + i);
+    const isYearDisabled = (y) => max ? y > max.getFullYear() : false;
+    const selectYear = (y) => {
+        if (isYearDisabled(y)) return;
+        setViewYear(y);
+        setViewMode("months");
+    };
+    const isSelectedYear = (y) => value && parseISO(value).getFullYear() === y;
+    const isCurrentYear = (y) => today.getFullYear() === y;
+
+    const jumpToday = () => {
+        setViewYear(today.getFullYear());
+        setViewMonth(today.getMonth());
+        setViewMode("days");
+        onChange(toISODate(today));
+        setOpen(false);
+    };
+
+    const clearValue = () => {
+        onChange("");
+        setOpen(false);
+    };
+
+    const displayLabel = value
+        ? parseISO(value).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
+        : placeholder;
+
+    return (
+        <div className={`relative ${className}`} ref={containerRef}>
+            <button
+                type="button"
+                onClick={() => setOpen((o) => { const next = !o; if (next) setViewMode("days"); return next; })}
+                className={`input-field flex items-center justify-between gap-2 text-left ${!value ? "text-slate-400 dark:text-slate-500" : ""}`}
+            >
+                <span className="flex items-center gap-2 truncate">
+                    <CalendarDays size={15} className="text-emerald-500 shrink-0" />
+                    {displayLabel}
+                </span>
+                <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+            </button>
+
+            <AnimatePresence>
+                {open && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute z-20 mt-2 w-72 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 shadow-2xl p-3"
+                    >
+                        <div className="flex items-center justify-between mb-2 px-1">
+                            <button type="button" onClick={goPrev} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-slate-300 transition">
+                                <ChevronLeft size={16} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleHeaderClick}
+                                disabled={viewMode === "years"}
+                                className={`text-sm font-bold text-slate-800 dark:text-white rounded-md px-2 py-0.5 transition ${viewMode !== "years" ? "hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer" : "cursor-default"}`}
+                            >
+                                {headerLabel}
+                            </button>
+                            <button type="button" onClick={goNext} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-slate-300 transition">
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+
+                        {viewMode === "days" && (
+                            <>
+                                <div className="grid grid-cols-7 gap-1 mb-1">
+                                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                                        <div key={d} className="text-[10px] font-bold text-slate-400 text-center uppercase">{d}</div>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-7 gap-1">
+                                    {cells.map((d, idx) => {
+                                        if (d === null) return <div key={idx} className="h-8" />;
+                                        const disabled = isCellDisabled(d);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={idx}
+                                                disabled={disabled}
+                                                onClick={() => selectDay(d)}
+                                                className={`h-8 text-xs rounded-lg font-medium transition-all
+                                                    ${isSelected(d) ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/30"
+                                                        : isToday(d) ? "border border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                                        : disabled ? "text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                                                        : "text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-white/10"}`}
+                                            >
+                                                {d}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        )}
+
+                        {viewMode === "months" && (
+                            <div className="grid grid-cols-3 gap-1.5 py-1">
+                                {monthNames.map((label, m) => {
+                                    const disabled = isMonthDisabled(m);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={label}
+                                            disabled={disabled}
+                                            onClick={() => selectMonth(m)}
+                                            className={`h-10 text-xs rounded-lg font-semibold transition-all
+                                                ${isSelectedMonth(m) ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/30"
+                                                    : isCurrentMonth(m) ? "border border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                                    : disabled ? "text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                                                    : "text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-white/10"}`}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {viewMode === "years" && (
+                            <div className="grid grid-cols-3 gap-1.5 py-1">
+                                {yearCells.map((y) => {
+                                    const disabled = isYearDisabled(y);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={y}
+                                            disabled={disabled}
+                                            onClick={() => selectYear(y)}
+                                            className={`h-10 text-xs rounded-lg font-semibold transition-all
+                                                ${isSelectedYear(y) ? "bg-emerald-600 text-white shadow-md shadow-emerald-500/30"
+                                                    : isCurrentYear(y) ? "border border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                                    : disabled ? "text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                                                    : "text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-white/10"}`}
+                                        >
+                                            {y}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-100 dark:border-white/10">
+                            {allowClear ? (
+                                <button type="button" onClick={clearValue} className="text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                    Clear
+                                </button>
+                            ) : (
+                                <span className="text-[11px] text-slate-400">No future dates</span>
+                            )}
+                            <button type="button" onClick={jumpToday} className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline">
+                                Today
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

@@ -85,10 +85,10 @@ class SavingsDepositController extends Controller
                 }
             })
             ->when($dateFrom, function ($q) use ($dateFrom) {
-                $q->whereDate('created_at', '>=', $dateFrom);
+                $q->whereDate('paidAt', '>=', $dateFrom);
             })
             ->when($dateTo, function ($q) use ($dateTo) {
-                $q->whereDate('created_at', '<=', $dateTo);
+                $q->whereDate('paidAt', '<=', $dateTo);
             })
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($w) use ($search) {
@@ -235,10 +235,12 @@ class SavingsDepositController extends Controller
 
             return [
                 'id'              => $r->id,
-                // original transaction date
-                'date'            => optional($r->created_at)->toDateString(),
-                // posted/paid date
+                // effective transaction date (admin-entered, can be backdated)
+                'date'            => optional($r->paidAt ?? $r->created_at)->toDateString(),
+                // posted/paid date — kept for backward compatibility, same as 'date' for posted rows
                 'datePosted'      => optional($r->paidAt)->toDateString(),
+                // when this row was actually keyed into the system (audit trail, not shown by default)
+                'dateRecorded'    => optional($r->created_at)->toDateString(),
 
                 // main fields the frontend uses
                 'transactionType' => $r->transactionType,
@@ -294,6 +296,7 @@ class SavingsDepositController extends Controller
             'transactionType' => ['required', 'in:deposit,withdrawal'],
             'amount'          => ['required', 'numeric', 'min:0.01'],
             'referenceNumber' => ['nullable', 'string', 'max:120'],
+            'transactionDate' => ['nullable', 'date', 'before_or_equal:today'],
         ]);
 
         if ($v->fails()) {
@@ -310,8 +313,14 @@ class SavingsDepositController extends Controller
 
         $reference = $request->referenceNumber ?: $this->makeSavingsReference($memberId);
 
-        $now    = now();
-        $paidAt = $now->copy();
+        $now = now();
+
+        // Effective transaction date: admin-selected date (can be backdated), with the
+        // current time-of-day kept for natural same-day ordering. created_at is left
+        // alone so it still reflects when the record was actually keyed into the system.
+        $paidAt = $request->filled('transactionDate')
+            ? Carbon::parse($request->transactionDate)->setTime($now->hour, $now->minute, $now->second)
+            : $now->copy();
 
         if ($type === 'withdrawal') {
             $postedBalance = (float) SavingsDeposit::where('memberId', $memberId)
@@ -574,10 +583,10 @@ class SavingsDepositController extends Controller
                 }
             })
             ->when($dateFrom, function ($q) use ($dateFrom) {
-                $q->whereDate('created_at', '>=', $dateFrom);
+                $q->whereDate('paidAt', '>=', $dateFrom);
             })
             ->when($dateTo, function ($q) use ($dateTo) {
-                $q->whereDate('created_at', '<=', $dateTo);
+                $q->whereDate('paidAt', '<=', $dateTo);
             })
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($w) use ($search) {

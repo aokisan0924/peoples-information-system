@@ -5,12 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AccChartOfAccount;
 use App\Models\AccGeneralLedger;
+use App\Models\AccJournalEntry;
 use App\Models\CapitalContribution;
 use App\Models\Computations;
 use App\Models\Loan;
 use App\Models\LoanDocuments;
 use App\Models\PostApprovalDocuments;
-use App\Models\LoanSetting;
 use App\Models\Member;
 use App\Models\MemberNotification;
 use App\Models\MembershipPayment;
@@ -46,7 +46,7 @@ class LoanController extends Controller
             ->orderBy('accountCode')
             ->get();
 
-        return Inertia::render('Admin/Loan', [ 
+        return Inertia::render('Admin/Loan', [
             'loanStats' => $loanStats,
             'members'   => $members,
             'chartOfAccounts' => $chartOfAccount,
@@ -66,8 +66,8 @@ class LoanController extends Controller
         $query = Loan::query()
             ->select('loans.*')
             ->with([
-                'member:id,firstName,lastName,username', 
-                'processor:id,name' 
+                'member:id,firstName,lastName,username',
+                'processor:id,name'
             ])
             ->when($search, function($q) use ($search) {
                 $q->where('loanReference', 'like', "%{$search}%")
@@ -123,10 +123,8 @@ class LoanController extends Controller
         $branchServiceName = $this->getBranchServiceName($member);
 
         $capCon = CapitalContribution::where('reference_number', $loanReference)->value('amount') ?? 0;
-        $membershipFee = MembershipPayment::where('reference_number', $loanReference)->value('amount') ?? 0; 
+        $membershipFee = MembershipPayment::where('reference_number', $loanReference)->value('amount') ?? 0;
 
-        // FIX: removed duplicate query that overwrote the if/else branch.
-        // For released loans, use the posted GL entries; for pending, use the stored journal_entries JSON.
         if (strtolower($loan->status) === 'released') {
             $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
                 ->orderBy('debit', 'desc')
@@ -134,7 +132,7 @@ class LoanController extends Controller
         } else {
             $journalEntries = collect($loan->journal_entries ?? [])->map(fn ($e) => (object) $e)->values();
         }
-            
+
         $requiredLabels = $this->mapPreRequirementsByBranchService(
             (string) $branchServiceName
         );
@@ -178,7 +176,7 @@ class LoanController extends Controller
                 'memberId'              => $loan->memberId,
                 'status'                => $loan->status,
                 'downloadsAcknowledged' => (bool) $loan->downloadsAcknowledged,
-                
+
                 // Financials
                 'loanAmount'            => (float) $loan->loanAmount,
                 'grossAmount'           => (float) $loan->gross,
@@ -197,7 +195,7 @@ class LoanController extends Controller
                 'loanType'              => $loan->loanType,
                 'loanClassification'    => $loan->loanClassification,
                 'deductionCode'         => $loan->deductionCode,
-                
+
                 'created_at'            => $loan->created_at,
                 'processed_by'          => $loan->processed_by,
                 'processor'             => $loan->processor ? ($loan->processor->name ?? 'Admin') : 'System',
@@ -222,7 +220,7 @@ class LoanController extends Controller
     public function downloadAccountingEntry(Request $request, string $loanReference) {
         $loan = Loan::with(['member', 'processor'])->where('loanReference', $loanReference)->firstOrFail();
         $memberName = $loan->member->firstName . ', ' . $loan->member->lastName;
-        
+
         if (strtolower($loan->status) === 'released') {
             $journalEntries = AccGeneralLedger::where('referenceNo', $loanReference)
                 ->orderBy('debit', 'desc')
@@ -233,7 +231,7 @@ class LoanController extends Controller
                 return (object) $item;
             })->sortByDesc('debit')->values();
         }
-        
+
         $totalDebits = $journalEntries->sum('debit');
         $totalCredits = $journalEntries->sum('credit');
 
@@ -272,6 +270,10 @@ class LoanController extends Controller
             ->where('termMonths', $termMonths)
             ->where('isActive', true)
             ->first();
+
+        if (!$active) {
+            $active = $this->excelDefaultComputation($termMonths);
+        }
 
         if (!$active) {
             return response()->json(['error' => "No active computation for {$category} term {$termMonths}"], 422);
@@ -365,9 +367,9 @@ class LoanController extends Controller
             'memberId' => ['required', 'exists:members,id'],
             'deductionCode' => ['required', 'string'],
             'loanType' => ['required','string','max:50'],
-            'loanClassification' => ['required','string','max:50'], 
+            'loanClassification' => ['required','string','max:50'],
             'termYears' => ['required','integer','min:1','max:5'],
-            
+
             // Financials (Manual)
             'netProceeds' => ['required','numeric','min:0'],
             'capCon' => ['nullable','numeric','min:0'],
@@ -375,11 +377,11 @@ class LoanController extends Controller
             'grossAmount' => ['required','numeric','min:0'],
             'loanAmount' => ['required','numeric','min:0'],
             'monthlyAmortization' => ['required','numeric','min:0'],
-            
+
             // Rates for Ledger PDF
             'monthlyInterestRate' => ['required','numeric','min:0'],
             'effectiveInterestRate' => ['required','numeric','min:0'],
-            
+
             // Deductions
             'serviceFee' => ['required','numeric','min:0'],
             'insurance' => ['required','numeric','min:0'],
@@ -420,14 +422,14 @@ class LoanController extends Controller
             'loanType' => $data['loanType'],
             'loanClassification' => $data['loanClassification'],
             'termYears' => $data['termYears'],
-            
+
             'netProceeds' => round($data['netProceeds'], 2),
             'serviceFee' => round($data['serviceFee'], 2),
             'insurance' => round($data['insurance'], 2),
             'advanceInterest' => round($data['advanceInterest'], 2),
             'loanAmount' => round($data['loanAmount'], 2), // Principal
             'monthlyAmortization' => round($data['monthlyAmortization'], 2),
-            'monthlyInterestRate' => round($data['monthlyInterestRate'] / 100, 5), 
+            'monthlyInterestRate' => round($data['monthlyInterestRate'] / 100, 5),
             'effectiveInterestRate' => round($data['effectiveInterestRate'] / 100, 5),
             'gross' => round($data['grossAmount'], 2),
             'income' => round($income, 2),
@@ -536,7 +538,7 @@ class LoanController extends Controller
         $request->validate([
             'files'            => ['required', 'array', 'min:1'],
             'files.*.file'     => ['required', 'file', 'max:20480'],
-            'files.*.docsType' => ['required', 'string', 'in:signedApplication,releaseVoucher,borrowerPhoto,scannedCheck,authorityToDeduct,dataPrivacyConsent,disclosureStatement,ghqDeclaration'], 
+            'files.*.docsType' => ['required', 'string', 'in:signedApplication,releaseVoucher,borrowerPhoto,scannedCheck,authorityToDeduct,dataPrivacyConsent,disclosureStatement,ghqDeclaration'],
         ]);
 
         $folderName = preg_replace(
@@ -601,17 +603,17 @@ class LoanController extends Controller
         $doc = LoanDocuments::where('loanId', $loan->id)
             ->where('id', $documentId)
             ->first();
-    
+
         if (!$doc || empty($doc->path)) {
             abort(404, 'File not found');
         }
-    
+
         if (!Storage::disk('public')->exists($doc->path)) {
             abort(404, 'File not found');
         }
-    
+
         $stream = Storage::disk('public')->readStream($doc->path);
-    
+
         return Response::stream(function () use ($stream) {
             fpassthru($stream);
         }, 200, [
@@ -827,17 +829,24 @@ class LoanController extends Controller
             $currentBranch = Auth::guard('admin')->user()->branch ?? 'Main Office';
             $applicationDate = $loan->created_at;
 
+            // CHANGED: this no longer writes straight to AccGeneralLedger.
+            // Loan releases now go through the same clerk-review queue as
+            // membership, capital, savings, and memcap transactions — an
+            // accounting clerk must approve this batch via
+            // AccJournalController::approve() before it posts to the ledger.
             foreach ($loan->journal_entries as $entry) {
-                AccGeneralLedger::create([
-                    'branch' => $currentBranch,
-                    'referenceNo' => $loan->loanReference,
-                    'memberId' => $loan->memberId,
-                    'accountCode' => $entry['accountCode'],
-                    'accountName' => $entry['accountName'] ?? 'Unknown Account',
-                    'debit' => round($entry['debit'], 2),
-                    'credit' => round($entry['credit'], 2),
-                    'particulars'     => "Loan Release of {$memberName} - {$loan->loanType}",
-                    'transactionDate' => $applicationDate,
+                AccJournalEntry::create([
+                    'batch_reference'  => $loan->loanReference,
+                    'source_type'      => 'loan',
+                    'memberId'         => $loan->memberId,
+                    'branch'           => $currentBranch,
+                    'account_code'     => $entry['accountCode'],
+                    'account_name'     => $entry['accountName'] ?? 'Unknown Account',
+                    'debit'            => round($entry['debit'], 2),
+                    'credit'           => round($entry['credit'], 2),
+                    'particulars'      => "Loan Release of {$memberName} - {$loan->loanType}",
+                    'transaction_date' => $applicationDate,
+                    'status'           => 'pending_review',
                 ]);
             }
         }
@@ -894,7 +903,7 @@ class LoanController extends Controller
     $data = [
         'date' => now()->format('F d, Y'),
         'loanReference' => $loan->loanReference,
-        'lvNo'             => $loan->lrvNumber ?? '—', 
+        'lvNo'             => $loan->lrvNumber ?? '—',
         'loanType' => $loan->loanType,
         'loanClass' => $loan->loanClassification,
         'termMonths' => (int)($loan->termYears * 12),
@@ -902,7 +911,7 @@ class LoanController extends Controller
         'monthlyAmortization' => (float)$loan->monthlyAmortization,
         'netProceeds' => (float)$loan->netProceeds,
         'processedBy' => Auth::user()->name ?? 'Loan Processor',
-        
+
         // Pass member as an array or object (View supports both)
         'member' => [
             'firstName' => strtoupper($loan->member->firstName),
@@ -933,7 +942,7 @@ class LoanController extends Controller
     public function downloadReleaseVoucher(Request $request, string $loanReference) {
         $loan = Loan::with(['member.afpInfo'])->where('loanReference', $loanReference)->firstOrFail();
         $termMonths = (int) ($loan->termYears * 12);
-        
+
         // Calculate Base Date & First Payment
         $baseDate = $loan->created_at ? Carbon::parse($loan->created_at) : now();
         $advanceMonths = (int) $loan->advanceInterestMonths;
@@ -947,12 +956,12 @@ class LoanController extends Controller
             'coopAddress'      => 'Purok 3, Brgy. Militar, Fort Magsaysay, Palayan City, Nueva Ecija',
             'title'            => 'LOAN RELEASE VOUCHER',
             'date'             => $baseDate->format('d-M-y'), // e.g. 10-Oct-25
-            'lvNo'             => $loan->lrvNumber ?? '—', 
-            
+            'lvNo'             => $loan->lrvNumber ?? '—',
+
             'borrowerName'     => strtoupper(($loan->member->firstName ?? '').' '.($loan->member->middleName ?? '').' '.($loan->member->lastName ?? '')),
             'serialNo'         => $loan->member->afpInfo->afpsn ?? '—',
             'address'          => $loan->member->fullAddress  ?? '—',
-            
+
             'principalAmount'  => (float) $loan->loanAmount,
             'balanceOldLoans'  => (float) ($loan->balanceOldLoans ?? 0),
             'membershipFee'    => (float) ($loan->membershipFee ?? 300),
@@ -961,7 +970,7 @@ class LoanController extends Controller
             'insurancePremium' => (float) ($loan->insurance ?? 0),
             'advanceInterest'  => (float) ($loan->advanceInterest ?? 0),
             'netProceeds'      => (float) $loan->netProceeds,
-            
+
             'termMonths'       => $termMonths,
             'monthlyAmort'     => (float) $loan->monthlyAmortization,
             'firstPayment'     => $firstPaymentDate->format('m/d/Y'),
@@ -983,7 +992,7 @@ class LoanController extends Controller
     public function downloadLedger(Request $request, string $loanReference) {
         $loan = Loan::with('member')->where('loanReference', $loanReference)->firstOrFail();
         $termMonths = (int) ($loan->termYears * 12);
-        
+
         // --- FIXED: DETERMINE DATE BASE AND PASS TO BUILDER ---
         $baseDate = $loan->created_at ? Carbon::parse($loan->created_at) : now();
         $rows = $this->buildLedgerRows($loan, $termMonths, $baseDate);
@@ -994,13 +1003,13 @@ class LoanController extends Controller
             'lvNo'          => $loan->lvNo ?? '—',
             'loanRef'       => $loan->loanReference,
             'loanAmount'    => (float) $loan->loanAmount,
-            
+
             // UPDATED: d (Day), M (Short Month), Y (Year) -> 19-Dec-2025
             'dateOfLoan'    => $baseDate->format('d-M-Y'),
             'maturityDate'  => $baseDate->copy()->addMonths($termMonths + (int)$loan->advanceInterestMonths)->format('d-M-Y'),
-            
+
             'termMonths'    => $termMonths,
-            'schedule'      => $rows, 
+            'schedule'      => $rows,
         ];
 
         $pdf = Pdf::loadView('pdf.loan-ledger', $data)->setPaper('A4', 'portrait');
@@ -1018,7 +1027,7 @@ class LoanController extends Controller
         for ($i = 1; $i <= $termMonths; $i++) {
             $interest = $balance * $monthlyRate;
             $principal = $installment - $interest;
-            
+
             if ($i == $termMonths) {
                 $principal = $balance;
                 $balance = 0.0;
@@ -1065,7 +1074,7 @@ class LoanController extends Controller
         }
         return $member->branchService?->branchService;
     }
-    
+
     private function mapPreRequirementsByBranchService(string $branchService): array {
         $key = $this->normalizeBranchService($branchService);
         switch ($key) {
@@ -1131,7 +1140,7 @@ class LoanController extends Controller
 
     private function getRequiredPostDocs(Loan $loan): array {
         $required = ['signedApplication', 'releaseVoucher', 'borrowerPhoto', 'scannedCheck', 'authorityToDeduct', 'dataPrivacyConsent', 'disclosureStatement'];
-        
+
         $service = strtoupper(trim($loan->member->branchService->branchService ?? ''));
         if (in_array($service, ['RETIRED MILITARY', 'RETIRED', 'PENSIONER', 'BENEFICIARY', 'RETIRED/PENSIONER/BENEFICIARY'])) {
             $required[] = 'ghqDeclaration';
@@ -1144,16 +1153,16 @@ class LoanController extends Controller
             fn ($v) => mb_strtoupper(trim((string) $v)),
             $have
         );
-    
+
         $haveNorm = array_unique($haveNorm);
-    
+
         foreach ($required as $r) {
             $rNorm = mb_strtoupper(trim((string) $r));
             if (!in_array($rNorm, $haveNorm, true)) {
                 return false;
             }
         }
-    
+
         return true;
     }
 
@@ -1171,6 +1180,63 @@ class LoanController extends Controller
         }
 
         return 'document';
+    }
+
+    /**
+     * Annual interest rate per term, as hardcoded in 'DATA ENTRY' (row 13) /
+     * 'Computation Table' (C11/C37/C64/C90/C116) of NEW_LOAN_TABLE_5_21_26.xlsx.
+     */
+    private function excelDefaultRates(): array {
+        return [
+            12 => 0.075,
+            24 => 0.0812,
+            36 => 0.085,
+            48 => 0.0878,
+            60 => 0.09,
+        ];
+    }
+
+    /**
+     * Fallback Computations row built directly from NEW_LOAN_TABLE_5_21_26.xlsx.
+     * Used only when no admin-configured, active Computations row exists for the
+     * requested category/term — keeps the calculator working "out of the box"
+     * with the exact numbers the coop's Excel table produces.
+     *
+     * Formula sources (Computation Table sheet, per-term block):
+     *   annualRateFormula      -> C11 / C37 / C64 / C90 / C116 (hardcoded per term)
+     *   monthlyRateFormula     -> =C11/12
+     *   serviceFeeFormula      -> =NET*(0.0225*TermYears)
+     *   insuranceFormula       -> =(NET/1000)*1.25*n   (n = number of monthly payments)
+     *   advanceInterestFormula -> =MonthlyRate*NET*2   (column C multiplier; the "5"
+     *                              multiplier seen in the sheet's E/F/G scenario
+     *                              columns was an inconsistency in the workbook and
+     *                              is intentionally NOT reproduced here)
+     *   effectiveRateFormula   -> =(1+AnnualRate/n)^n-1 (reproduced as-is, including
+     *                              the workbook's use of n — number of payments —
+     *                              as the compounding divisor instead of 12; this
+     *                              only matches the standard effective-annual-rate
+     *                              definition for the 12-month term)
+     */
+    private function excelDefaultComputation(int $termMonths): ?object {
+        $rates = $this->excelDefaultRates();
+
+        if (!isset($rates[$termMonths])) {
+            return null;
+        }
+
+        return (object) [
+            'id' => null,
+            'title' => "Excel Loan Table Default ({$termMonths} mos)",
+            'category' => null,
+            'termMonths' => $termMonths,
+            'isActive' => true,
+            'annualRateFormula' => (string) $rates[$termMonths],
+            'monthlyRateFormula' => 'annualInterestRate / 12',
+            'serviceFeeFormula' => 'netProceeds * (0.0225 * (terms / 12))',
+            'insuranceFormula' => '(netProceeds / 1000) * 1.25 * terms',
+            'advanceInterestFormula' => 'monthlyInterestRate * netProceeds * advanceInterestMonths',
+            'effectiveRateFormula' => 'pow(1 + (annualInterestRate / terms), terms) - 1',
+        ];
     }
 
     private function evaluateFormulaSafely (string $formula, array $variables): float {
@@ -1254,7 +1320,7 @@ class LoanController extends Controller
                 'value' => $m->id,
                 'label' => "{$m->username} - {$m->lastName}, {$m->firstName}",
             ]);
-        
+
         return response()->json(['data' => $members]);
     }
 
@@ -1271,7 +1337,7 @@ class LoanController extends Controller
         $service = strtoupper(trim($loan->member->branchService->branchService ?? ''));
         $isPensioner = in_array($service, ['RETIRED MILITARY', 'RETIRED', 'PENSIONER', 'BENEFICIARY', 'RETIRED/PENSIONER/BENEFICIARY']);
         $view = $isPensioner ? 'pdf.authority-to-deduct-pensioner' : 'pdf.authority-to-deduct-active';
-        
+
         // Updated format here
         $pdf = Pdf::loadView($view, ['loan' => $loan, 'member' => $loan->member, 'date' => now()->format('d F Y')])->setPaper('A4', 'portrait');
         return $pdf->stream('authority-to-deduct-'.$loanReference.'.pdf');
@@ -1279,7 +1345,7 @@ class LoanController extends Controller
 
     public function downloadDataPrivacy(Request $request, string $loanReference) {
         $loan = Loan::with(['member'])->where('loanReference', $loanReference)->firstOrFail();
-        
+
         // Updated format here
         $pdf = Pdf::loadView('pdf.data-privacy', ['loan' => $loan, 'member' => $loan->member, 'date' => now()->format('d F Y')])->setPaper('A4', 'portrait');
         return $pdf->stream('data-privacy-'.$loanReference.'.pdf');
@@ -1289,7 +1355,7 @@ class LoanController extends Controller
         $loan = Loan::with(['member.branchService'])->where('loanReference', $loanReference)->firstOrFail();
         $service = strtoupper(trim($loan->member->branchService->branchService ?? ''));
         if (!in_array($service, ['RETIRED MILITARY', 'RETIRED', 'PENSIONER', 'BENEFICIARY', 'RETIRED/PENSIONER/BENEFICIARY'])) abort(403, 'GHQ Declaration is only for Pensioners.');
-        
+
         // Updated format here
         $pdf = Pdf::loadView('pdf.ghq-declaration', ['loan' => $loan, 'member' => $loan->member, 'date' => now()->format('d F Y')])->setPaper('A4', 'portrait');
         return $pdf->stream('ghq-declaration-'.$loanReference.'.pdf');
@@ -1297,7 +1363,7 @@ class LoanController extends Controller
 
     public function downloadDisclosureStatement(Request $request, string $loanReference) {
         $loan = Loan::with(['member.afpInfo'])->where('loanReference', $loanReference)->firstOrFail();
-        
+
         $termMonths = (int)($loan->termYears * 12);
         $totalNonFinance = (float)$loan->advanceInterest + (float)$loan->insurance;
         $totalFinance = (float)($loan->gross - $loan->loanAmount) + (float)$loan->serviceFee;
