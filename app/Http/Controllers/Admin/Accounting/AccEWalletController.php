@@ -78,7 +78,6 @@ class AccEWalletController extends Controller
 
         return DB::transaction(function () use ($request, $id) {
             $record = AccEWallet::findOrFail($id);
-            $userBranch = $request->user()->branch ?? 'Main Office';
 
             foreach ($request->entries as $entry) {
                 $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
@@ -92,7 +91,7 @@ class AccEWalletController extends Controller
                     'referenceNo'     => $record->referenceNo ?? '-',
                     'debit'           => floatval($entry['debit'] ?? 0),
                     'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $userBranch,
+                    'branch'          => $record->branch,
                 ]);
             }
             $record->update(['is_posted' => true]);

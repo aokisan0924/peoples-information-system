@@ -86,7 +86,6 @@ class AccPettyCashController extends Controller
 
         return DB::transaction(function () use ($request, $id) {
             $record = AccPettyCashFund::findOrFail($id);
-            $userBranch = $request->user()->branch ?? 'Main Office';
 
             foreach ($request->entries as $entry) {
                 $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
@@ -100,7 +99,7 @@ class AccPettyCashController extends Controller
                     'referenceNo'     => $record->orNumber ?? '-',
                     'debit'           => floatval($entry['debit'] ?? 0),
                     'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $userBranch,
+                    'branch'          => $record->branch,
                 ]);
             }
             $record->update(['is_posted' => true]);
@@ -118,7 +117,6 @@ class AccPettyCashController extends Controller
 
         return DB::transaction(function () use ($request, $id) {
             $record = AccPettyCashFund::findOrFail($id);
-            $userBranch = $request->user()->branch ?? 'Main Office';
 
             // 1. Delete the old incorrect entries from the general ledger
             AccGeneralLedger::where('petty_cash_id', $record->id)->delete();
@@ -136,7 +134,7 @@ class AccPettyCashController extends Controller
                     'referenceNo'     => $record->orNumber ?? '-',
                     'debit'           => floatval($entry['debit'] ?? 0),
                     'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $userBranch,
+                    'branch'          => $record->branch,
                 ]);
             }
             return redirect()->back()->with('success', 'Journal Entry updated successfully.');

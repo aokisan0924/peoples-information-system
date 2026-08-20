@@ -89,11 +89,12 @@ class AccPpeDepreciationController extends Controller
             'month' => 'required',
             'year' => 'required',
             'type' => 'required|in:transport,others',
+            'branch' => 'required|string|exists:acc_ppe_depreciations,branch',
             'entries' => 'required|array|min:1'
         ]);
 
         return DB::transaction(function () use ($request) {
-            $branch = $request->user()->branch ?? 'Main Office';
+            $branch = $request->string('branch')->toString();
             $ref = $request->type === 'transport' ? "DEPR-TRANS-{$request->year}-{$request->month}" : "DEPR-OTHERS-{$request->year}-{$request->month}";
             $date = Carbon::createFromDate($request->year, $request->month, 1)->endOfMonth()->format('Y-m-d');
             

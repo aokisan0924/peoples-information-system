@@ -104,7 +104,6 @@ class AccBankRecordController extends Controller
         
         return DB::transaction(function () use ($request, $id) {
             $bankLog = AccBankRecord::findOrFail($id);
-            $userBranch = $request->user()->branch ?? 'Main Office';
 
             // 1. Simple Math Validation
             $totalUserDebit = collect($request->entries)->sum(function($entry) { return (float) ($entry['debit'] ?? 0); });
@@ -126,7 +125,7 @@ class AccBankRecordController extends Controller
                     'referenceNo'     => $bankLog->reference_no,
                     'debit'           => floatval($entry['debit'] ?? 0),
                     'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $userBranch,
+                    'branch'          => $bankLog->branch,
                 ]);
             }
 
@@ -141,7 +140,6 @@ class AccBankRecordController extends Controller
         
         return DB::transaction(function () use ($request, $id) {
             $bankLog = AccBankRecord::findOrFail($id);
-            $userBranch = $request->user()->branch ?? 'Main Office';
 
             // 1. Simple Math Validation
             $totalUserDebit = collect($request->entries)->sum(function($entry) { return (float) ($entry['debit'] ?? 0); });
@@ -166,7 +164,7 @@ class AccBankRecordController extends Controller
                     'referenceNo'     => $bankLog->reference_no,
                     'debit'           => floatval($entry['debit'] ?? 0),
                     'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $userBranch,
+                    'branch'          => $bankLog->branch,
                 ]);
             }
             

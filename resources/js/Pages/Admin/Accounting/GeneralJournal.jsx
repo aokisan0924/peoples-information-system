@@ -13,6 +13,7 @@ export default function GeneralJournal({ logs, chartOfAccounts, filters }) {
     const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0]);
     const [referenceNo, setReferenceNo] = useState(`ADJ-${Date.now().toString().slice(-6)}`);
     const [particulars, setParticulars] = useState('');
+    const [entryBranch, setEntryBranch] = useState(filters.branch || '');
     
     const emptySplit = { id: Date.now(), accountCode: '', accountName: '', debit: '', credit: '' };
     const [entries, setEntries] = useState([{ ...emptySplit }, { ...emptySplit, id: Date.now() + 1 }]);
@@ -48,9 +49,10 @@ export default function GeneralJournal({ logs, chartOfAccounts, filters }) {
     const submitJournal = (e) => {
         e.preventDefault();
         if (!isBalanced) return toast.error("Debits must equal Credits to post.");
+        if (!entryBranch.trim()) return toast.error("Branch is required to post.");
 
         setIsSaving(true);
-        router.post(route('admin.accounting.journal.store'), { transactionDate, referenceNo, particulars, entries }, {
+        router.post(route('admin.accounting.journal.store'), { branch: entryBranch.trim(), transactionDate, referenceNo, particulars, entries }, {
             onSuccess: () => {
                 setShowModal(false); setParticulars(''); setReferenceNo(`ADJ-${Date.now().toString().slice(-6)}`);
                 setEntries([{ ...emptySplit }, { ...emptySplit, id: Date.now() + 1 }]);
@@ -112,7 +114,8 @@ export default function GeneralJournal({ logs, chartOfAccounts, filters }) {
                 <div className="fixed inset-0 z-[100] bg-slate-950/95 flex flex-col p-6 overflow-hidden">
                     <div className="flex justify-between mb-8 text-white"><h2 className="font-black text-2xl uppercase">New Adjusting Entry</h2><button onClick={() => setShowModal(false)}><X size={24}/></button></div>
                     <div className="max-w-5xl mx-auto w-full flex-1 overflow-y-auto space-y-6 pb-20">
-                        <div className="bg-slate-900 p-6 rounded-2xl border border-white/5 shadow-xl grid grid-cols-3 gap-6">
+                        <div className="bg-slate-900 p-6 rounded-2xl border border-white/5 shadow-xl grid grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div><label className="text-[10px] font-black uppercase text-amber-400">Branch</label><input type="text" required value={entryBranch} onChange={e => setEntryBranch(e.target.value)} placeholder="Enter transaction branch" className="w-full bg-slate-800 border-0 rounded-xl mt-2 text-sm text-white"/></div>
                             <div><label className="text-[10px] font-black uppercase text-amber-400">Date</label><input type="date" required value={transactionDate} onChange={e => setTransactionDate(e.target.value)} className="w-full bg-slate-800 border-0 rounded-xl mt-2 text-sm text-white"/></div>
                             <div><label className="text-[10px] font-black uppercase text-amber-400">Ref No.</label><input type="text" required value={referenceNo} onChange={e => setReferenceNo(e.target.value.toUpperCase())} className="w-full bg-slate-800 border-0 rounded-xl mt-2 text-sm uppercase text-white"/></div>
                             <div><label className="text-[10px] font-black uppercase text-amber-400">Particulars</label><input type="text" required value={particulars} onChange={e => setParticulars(e.target.value)} className="w-full bg-slate-800 border-0 rounded-xl mt-2 text-sm text-white"/></div>

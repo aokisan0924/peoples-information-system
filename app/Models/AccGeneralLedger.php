@@ -14,6 +14,10 @@ class AccGeneralLedger extends Model
         'e_wallet_id', 'bank_record_id', 'is_adjustment'
     ];
 
+    protected $casts = [
+        'transactionDate' => 'datetime',
+    ];
+
     public function bankRecord(){
         return $this->belongsTo(AccBankRecord::class, 'bank_record_id');
     }

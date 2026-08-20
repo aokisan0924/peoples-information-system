@@ -49,6 +49,7 @@ class AccGeneralJournalController extends Controller
 
     public function store(Request $request) {
         $request->validate([
+            'branch' => 'required|string|max:255',
             'transactionDate' => 'required|date',
             'particulars' => 'required|string',
             'referenceNo' => 'required|string',
@@ -66,7 +67,7 @@ class AccGeneralJournalController extends Controller
         }
 
         DB::transaction(function () use ($request) {
-            $branch = $request->user()->branch ?? 'Main Office';
+            $branch = $request->string('branch')->toString();
 
             foreach ($request->entries as $entry) {
                 if (empty($entry['debit']) && empty($entry['credit'])) continue;

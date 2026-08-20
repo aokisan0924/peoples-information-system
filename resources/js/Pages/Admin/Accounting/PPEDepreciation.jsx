@@ -95,7 +95,7 @@ export default function PPEDepreciation({ data, categories, chartOfAccounts, jou
         if (Math.abs(d - journalAmount) > 0.01) { toast.error(`Total entries must equal the Target Amount (${formatCurrency(journalAmount)}).`); return; }
 
         setIsSaving(true);
-        router.post(route('admin.accounting.ppe.journalize'), { month, year, type: journalType, entries: journalEntries }, {
+        router.post(route('admin.accounting.ppe.journalize'), { month, year, branch: filters.branch, type: journalType, entries: journalEntries }, {
             onSuccess: () => { setShowJournalModal(false); toast.success("Depreciation journalized!"); setIsSaving(false); },
             onError: () => setIsSaving(false)
         });
