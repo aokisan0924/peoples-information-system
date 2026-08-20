@@ -210,10 +210,10 @@ export default function MemberView() {
             </Head>
             <AdminSidebarLayout>
 
-                <div className="min-h-screen bg-slate-50 dark:bg-[#080e0c] transition-colors duration-300">
+                <div className="min-h-screen bg-slate-50/80 dark:bg-[#080e0c] transition-colors duration-300">
 
                     {/* ── HERO BANNER ───────────────────────────────────────── */}
-                    <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 dark:from-emerald-800 dark:via-emerald-900 dark:to-teal-950 overflow-hidden">
+                    <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl border border-emerald-900/10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-800 shadow-xl shadow-emerald-950/10">
                         {/* decorative blobs */}
                         <div className="absolute inset-0 pointer-events-none overflow-hidden">
                             <div className="absolute -top-20 -right-20 w-80 h-80 bg-white/5 rounded-full blur-3xl" />

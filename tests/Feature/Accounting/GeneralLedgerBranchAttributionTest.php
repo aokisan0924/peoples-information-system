@@ -264,6 +264,81 @@ class GeneralLedgerBranchAttributionTest extends TestCase
         $this->post(route('admin.accounting.ppe.journalize'), $payload)->assertSessionHasErrors('entries');
     }
 
+    public function test_ppe_batches_with_the_same_reference_are_isolated_by_branch(): void
+    {
+        foreach (['Cubao', 'Fort Magsaysay'] as $branch) {
+            AccPpeDepreciation::create([
+                'branch' => $branch,
+                'category' => 'Transport Equipment',
+                'date_acquired' => '2026-01-01',
+                'particular' => "{$branch} vehicle",
+                'amount' => 120000,
+                'life_years' => 5,
+            ]);
+        }
+
+        $payload = [
+            'branch' => 'Cubao',
+            'month' => '08',
+            'year' => '2026',
+            'type' => 'transport',
+            'entries' => [
+                ['accountCode' => '73160', 'debit' => 2000, 'credit' => 0],
+                ['accountCode' => '11110', 'debit' => 0, 'credit' => 2000],
+            ],
+        ];
+
+        $this->actingAs($this->admin, 'admin')
+            ->post(route('admin.accounting.ppe.journalize'), $payload)
+            ->assertRedirect();
+
+        $cubaoLineIds = DB::table('acc_journal_entries')
+            ->where('source_type', 'ppe')
+            ->where('batch_reference', 'DEPR-TRANS-2026-08')
+            ->where('branch', 'Cubao')
+            ->whereNull('deleted_at')
+            ->pluck('id');
+        $this->assertCount(2, $cubaoLineIds);
+
+        $payload['branch'] = 'Fort Magsaysay';
+        $this->post(route('admin.accounting.ppe.journalize'), $payload)->assertRedirect();
+
+        foreach ($cubaoLineIds as $lineId) {
+            $this->assertDatabaseHas('acc_journal_entries', [
+                'id' => $lineId,
+                'branch' => 'Cubao',
+                'status' => 'pending_review',
+                'deleted_at' => null,
+            ]);
+        }
+        $this->assertDatabaseCount('acc_general_ledgers', 0);
+        $this->assertSame(2, DB::table('acc_journal_entries')
+            ->where('branch', 'Fort Magsaysay')->where('status', 'pending_review')->whereNull('deleted_at')->count());
+
+        $cubaoIdentity = [
+            'batchReference' => 'DEPR-TRANS-2026-08',
+            'source_type' => 'ppe',
+            'branch' => 'Cubao',
+        ];
+        $this->postJson(route('admin.accounting.journal-entries.approve', $cubaoIdentity))->assertOk();
+
+        $this->assertSame(2, DB::table('acc_general_ledgers')->where('branch', 'Cubao')->count());
+        $this->assertSame(0, DB::table('acc_general_ledgers')->where('branch', 'Fort Magsaysay')->count());
+        $this->assertSame(2, DB::table('acc_journal_entries')
+            ->where('branch', 'Fort Magsaysay')->where('status', 'pending_review')->whereNull('deleted_at')->count());
+
+        $fortIdentity = [
+            'batchReference' => 'DEPR-TRANS-2026-08',
+            'source_type' => 'ppe',
+            'branch' => 'Fort Magsaysay',
+        ];
+        $this->get(route('admin.accounting.journal-entries.show', $fortIdentity))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Accounting/JournalEntryReview')
+                ->where('branch', 'Fort Magsaysay')
+                ->where('batchStatus', 'pending_review'));
+    }
+
     public function test_manual_adjustment_requires_and_uses_an_explicit_branch(): void
     {
         $this->actingAs($this->admin, 'admin')->post(

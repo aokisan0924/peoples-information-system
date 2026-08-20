@@ -3,6 +3,7 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import axios from "axios";
 import toast, { Toaster } from "react-hot-toast";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import {
   FileText, CheckCircle2, XCircle, ExternalLink, ShieldCheck, UploadCloud,
   ArrowLeft, User, AlertCircle, Download, Loader2, Lock, Paperclip,
@@ -186,23 +187,8 @@ export default function AdminLoanDetails({ loanReference }) {
             <AdminSidebarLayout>
                 
                 {/* TOP HEADER */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-                    <div>
-                        <Link href={route('admin.loans')} className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-emerald-600 transition mb-2">
-                            <ArrowLeft size={14} className="mr-1"/> Back to Loans
-                        </Link>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <FileText className="text-emerald-600 h-7 w-7"/> Loan <span className="font-mono text-slate-500">#{loanReference}</span>
-                            </h1>
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${isApproved ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : isReleased ? 'bg-blue-100 text-blue-700 border-blue-200' : isDeclined ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
-                                {loan.status}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* ACTION BUTTONS */}
-                    <div className="flex flex-wrap items-center gap-2">
+                <div className="mb-8">
+                    <ResourceHeader icon={FileText} eyebrow="Loan Application" title={<>Loan <span className="font-mono text-emerald-100">#{loanReference}</span></>} description={<>Current status: <strong className="text-white">{loan.status}</strong></>} backHref={route('admin.loans')} backLabel="Back to Loans" actions={<div className="flex flex-wrap items-center gap-2">
                         {isPending && canManage && (
                             <>
                                 <button onClick={() => setDeclineModalOpen(true)} disabled={processing} className="px-4 py-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-sm shadow-sm">Decline</button>
@@ -236,7 +222,7 @@ export default function AdminLoanDetails({ loanReference }) {
                         {isReleased && hasRoute('admin.loan.download.ledger') && (
                             <a href={route('admin.loan.download.ledger', loanReference)} target="_blank" className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-sm shadow-sm flex items-center gap-2"><FileText size={16}/> Ledger</a>
                         )}
-                    </div>
+                    </div>} />
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

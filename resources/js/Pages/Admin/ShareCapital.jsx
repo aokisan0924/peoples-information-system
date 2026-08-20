@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Combobox } from "@headlessui/react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 import toast from "react-hot-toast";
 import axios from 'axios';
@@ -161,34 +162,21 @@ export default function ShareCapital() {
             <AdminSidebarLayout>
                 <div className="space-y-6">
                     {/* --- HEADER --- */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <Banknote className="h-8 w-8 text-emerald-600" />
-                                Share Capital
-                            </h1>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                                Monitor member capital contributions.
-                            </p>
-                        </div>
-                        
-                        {/* ACTIONS */}
-                        <div className="flex flex-wrap items-center gap-2">
+                    <ResourceHeader icon={Banknote} eyebrow="Deposits" title="Share Capital" description="Monitor member contributions, withdrawals, and posted balances." actions={<>
                             <a 
                                 href={buildExportHref({ search, dateFrom, dateTo })} 
                                 target="_blank"
-                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-sm font-medium"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15"
                             >
                                 <Download size={16} /> <span>Export</span>
                             </a>
                             <button
                                 onClick={openModal}
-                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all text-sm font-bold active:scale-95"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-emerald-900 shadow-lg transition hover:bg-emerald-50 active:scale-95"
                             >
                                 <Plus size={18} /> <span>New Transaction</span>
                             </button>
-                        </div>
-                    </div>
+                    </>} />
 
                     {/* --- STATS GRID --- */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

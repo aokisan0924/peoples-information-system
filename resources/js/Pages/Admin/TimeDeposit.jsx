@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Combobox } from "@headlessui/react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 import toast from "react-hot-toast";
 import axios from "axios";
@@ -241,27 +242,16 @@ export default function TimeDeposit() {
                 <div className="space-y-6">
                     
                     {/* HEADER */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                                <CalendarClock className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                                Time Deposit
-                            </h1>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                Manage fixed-term deposits and maturity tracking.
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button onClick={handleExport} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-white/10 transition-colors">
+                    <ResourceHeader icon={CalendarClock} eyebrow="Deposits" title="Time Deposit" description="Manage fixed-term placements, interest, and maturity tracking." actions={<>
+                            <button onClick={handleExport} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15">
                                 <Download size={18} />
                                 <span className="hidden sm:inline">Export</span>
                             </button>
-                            <button onClick={openModal} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg shadow-emerald-500/20 transition-all active:scale-95">
+                            <button onClick={openModal} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-emerald-900 shadow-lg transition hover:bg-emerald-50 active:scale-95">
                                 <Plus size={18} />
                                 <span>New <span className="hidden sm:inline">Transaction</span></span>
                             </button>
-                        </div>
-                    </div>
+                    </>} />
 
                     {/* STAT CARDS */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

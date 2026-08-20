@@ -5,6 +5,7 @@ import {
     Wallet, ArrowDownLeft 
 } from "lucide-react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -102,24 +103,14 @@ export default function TimeDepositView() {
                 <div className="space-y-6">
                     
                     {/* HEADER (Matched ShareCapitalView Style) */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <CalendarClock className="h-6 w-6 text-emerald-600" /> Time Deposit Ledger
-                            </h1>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                                Viewing deposit #{initialDeposit?.id} for <span className="font-bold text-emerald-600">{summary.memberName || "Unknown Member"}</span>
-                            </p>
-                        </div>
-                        
-                        {/* Right Side Element (Account Tag) */}
-                        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm shadow-sm">
+                    <ResourceHeader icon={CalendarClock} eyebrow="Member Ledger" title="Time Deposit Ledger" description={<>Viewing deposit #{initialDeposit?.id} for <strong className="text-white">{summary.memberName || "Unknown Member"}</strong>.</>} backHref={route("admin.time.index")} backLabel="Back to Time Deposits" actions={
+                        <div className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm text-white">
                             <div className="flex flex-col text-right">
-                                <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Account Type</span>
-                                <span className="font-semibold text-slate-700 dark:text-white">Fixed Term Deposit</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-100/60">Account Type</span>
+                                <span className="font-semibold text-white">Fixed Term Deposit</span>
                             </div>
                         </div>
-                    </div>
+                    } />
 
                     {/* STAT CARDS */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

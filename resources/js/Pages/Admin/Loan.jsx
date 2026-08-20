@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import toast from "react-hot-toast";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -133,17 +134,16 @@ function AccountComboBox({ value, onChange, options }) {
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, icon: Icon, gradient, subtext }) {
     return (
-        <div className={`relative overflow-hidden rounded-2xl sm:rounded-3xl p-5 sm:p-6 flex items-center gap-4 text-white shadow-lg hover:-translate-y-0.5 transition-all duration-300 ${gradient}`}>
-            <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-            <div className="h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-2xl bg-white/20 backdrop-blur-sm grid place-items-center shadow-inner">
+        <div className="relative flex items-center gap-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:p-5 dark:border-white/10 dark:bg-white/5">
+            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl shadow-sm ${gradient}`}>
                 <Icon className="h-6 w-6 text-white" />
             </div>
-            <div className="relative z-10 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-white/70 mb-1">{label}</p>
-                <p className="text-xl sm:text-2xl font-black font-mono drop-shadow-sm tracking-tight">
+            <div className="min-w-0">
+                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</p>
+                <p className="font-mono text-xl font-black tracking-tight text-slate-900 sm:text-2xl dark:text-white">
                     <CountUp end={toNumber(value)} duration={1.4} separator="," prefix="₱" decimals={2} preserveValue />
                 </p>
-                {subtext && <p className="text-[10px] font-semibold text-white/55 mt-1">{subtext}</p>}
+                {subtext && <p className="mt-1 text-[10px] font-semibold text-slate-400 dark:text-white/35">{subtext}</p>}
             </div>
         </div>
     );
@@ -311,27 +311,13 @@ export default function Loan() {
             <div className="space-y-5 sm:space-y-6 pb-10">
 
                 {/* ── HEADER ──────────────────────────────────────────────── */}
-                <div className="bg-white dark:bg-[#0a1510] border border-slate-200 dark:border-white/[0.07] rounded-2xl sm:rounded-3xl p-5 sm:p-7 relative overflow-hidden shadow-sm">
-                    <div className="absolute -top-16 -right-16 w-64 h-64 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-                        <div className="flex items-center gap-3 sm:gap-4">
-                            <div className="h-11 w-11 sm:h-13 sm:w-13 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 grid place-items-center shadow-lg shadow-emerald-500/25 shrink-0">
-                                <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Loan Management</h1>
-                                <p className="text-xs sm:text-sm text-slate-400 dark:text-white/40 font-medium mt-0.5">Monitor performance and process applications.</p>
-                            </div>
-                        </div>
-                        {canCreate && (
+                <ResourceHeader icon={FileText} eyebrow="Lending" title="Loan Management" description="Review applications, manage releases, and monitor the loan portfolio." actions={canCreate ? (
                             <button onClick={() => { resetForm(); setShowModal(true); }}
-                                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-500/25 transition-all active:scale-95 w-full sm:w-auto"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-emerald-900 shadow-lg transition hover:bg-emerald-50 active:scale-95"
                             >
                                 <Plus size={16} className="text-current" /> New Application
                             </button>
-                        )}
-                    </div>
-                </div>
+                        ) : null} />
 
                 {/* ── STAT CARDS ───────────────────────────────────────────── */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">

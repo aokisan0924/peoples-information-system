@@ -51,6 +51,7 @@ class AccountingJournalQueue
             $existing = AccJournalEntry::query()
                 ->where('source_type', $sourceType)
                 ->where('batch_reference', $batchReference)
+                ->where('branch', $branch)
                 ->when(
                     $sourceRecordId === null,
                     fn ($query) => $query->whereNull('source_record_id'),

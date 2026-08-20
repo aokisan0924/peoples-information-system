@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 import toast from "react-hot-toast";
 
@@ -126,32 +127,11 @@ export default function MemberShareCapital() {
             <AdminSidebarLayout>
                 <div className="space-y-6">
                     {/* Header Container */}
-                    <div className="flex flex-col gap-4">
-                        {/* Back Link */}
-                        <div>
-                            <Link
-                                href={route("admin.share-capital.index")}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-xs font-medium"
-                            >
-                                <ArrowLeft size={14} /> Back
-                            </Link>
-                        </div>
-
-                        {/* Main Title Header */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    <Wallet className="h-6 w-6 text-emerald-600" /> Share Capital Ledger
-                                </h1>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Viewing ledger for <span className="font-bold text-emerald-600">{member.name}</span>
-                                </p>
-                            </div>
-                            <button onClick={() => setModalOpen(true)} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-500 font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95">
+                    <ResourceHeader icon={Wallet} eyebrow="Member Ledger" title="Share Capital Ledger" description={<>Viewing contribution history for <strong className="text-white">{member.name}</strong>.</>} backHref={route("admin.share-capital.index")} backLabel="Back to Share Capital" actions={
+                            <button onClick={() => setModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 font-bold text-emerald-900 shadow-lg transition hover:bg-emerald-50 active:scale-95">
                                 <Plus size={18} /> <span className="hidden sm:inline">New Transaction</span><span className="sm:hidden">Add</span>
                             </button>
-                        </div>
-                    </div>
+                    } />
 
                     {/* Stat Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

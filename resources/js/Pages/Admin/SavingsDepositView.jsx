@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 import toast from "react-hot-toast";
 
@@ -171,30 +172,11 @@ export default function SavingsDepositView() {
                 <div className="space-y-6">
                     
                     {/* HEADER */}
-                    <div className="flex flex-col gap-4">
-                        <div>
-                            <Link
-                                href={route("admin.savings.index")}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors text-xs font-medium"
-                            >
-                                <ArrowLeft size={14} /> Back
-                            </Link>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    <PiggyBank className="h-6 w-6 text-emerald-600" /> Savings Deposit Ledger
-                                </h1>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Viewing ledger for <span className="font-bold text-emerald-600">{member?.fullName || member?.name}</span>
-                                </p>
-                            </div>
-                            <button onClick={openModal} className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-500 font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95">
+                    <ResourceHeader icon={PiggyBank} eyebrow="Member Ledger" title="Savings Deposit Ledger" description={<>Viewing savings history for <strong className="text-white">{member?.fullName || member?.name}</strong>.</>} backHref={route("admin.savings.index")} backLabel="Back to Savings" actions={
+                            <button onClick={openModal} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 font-bold text-emerald-900 shadow-lg transition hover:bg-emerald-50 active:scale-95">
                                 <Plus size={18} /> <span className="hidden sm:inline">New Transaction</span><span className="sm:hidden">Add</span>
                             </button>
-                        </div>
-                    </div>
+                    } />
 
                     {/* STAT CARDS */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

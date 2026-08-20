@@ -6,6 +6,7 @@ import {
     Shield, ShieldOff, UserRound, Building2, HeartHandshake, ChevronsLeft, ChevronsRight
 } from "lucide-react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
+import { ResourceHeader } from "@/Components/Admin/ResourceUI";
 import CountUp from "react-countup";
 import toast from "react-hot-toast";
 import axios from "axios";
@@ -160,30 +161,19 @@ export default function Members() {
         <>
             <Head title="Members Dashboard" />
             <AdminSidebarLayout>
-                <div className="min-h-screen p-3 sm:p-6 lg:p-8 transition-colors duration-300">
-                    <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
+                <div className="min-h-screen transition-colors duration-300">
+                    <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
 
                         {/* ── HEADER ─────────────────────────────────────────── */}
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-[#0f1f1a] p-4 sm:p-6 lg:p-8 rounded-2xl sm:rounded-[2rem] border border-slate-200/60 dark:border-white/5 shadow-sm relative overflow-hidden">
-                            <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-500/10 blur-3xl rounded-full pointer-events-none" />
-
-                            <div>
-                                <h1 className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2 sm:gap-3">
-                                    <div className="p-2 sm:p-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl">
-                                        <Users className="h-5 w-5 sm:h-6 sm:w-6" />
-                                    </div>
-                                    Member Directory
-                                </h1>
-                                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1.5 font-medium">
-                                    Manage cooperative members, view profiles, and export data.
-                                </p>
-                            </div>
-
-                            {/* MOBILE: icon-only buttons. SM+: icon + label */}
-                            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto relative z-10">
+                        <ResourceHeader
+                            icon={Users}
+                            eyebrow="Membership"
+                            title="Member Directory"
+                            description="Manage cooperative members, maintain profiles, and export member records."
+                            actions={<>
                                 <button
                                     onClick={() => { setOnboardingStep(1); setIsAddMemberOpen(true); }}
-                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl shadow-lg transition-all active:scale-95"
+                                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-emerald-900 shadow-lg transition hover:bg-emerald-50 active:scale-95 sm:flex-none"
                                 >
                                     <UserCheck className="h-4 w-4 shrink-0" />
                                     <span className="hidden xs:inline sm:inline">Add Member</span>
@@ -197,20 +187,20 @@ export default function Members() {
                                 />
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white text-sm font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
+                                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 active:scale-95 sm:flex-none"
                                 >
                                     <Upload className="h-4 w-4 shrink-0" />
                                     <span className="hidden sm:inline">Import</span>
                                 </button>
                                 <a
                                     href={route("admin.members.export")}
-                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white text-sm font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all active:scale-95"
+                                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 active:scale-95 sm:flex-none"
                                 >
                                     <Download className="h-4 w-4 shrink-0" />
                                     <span className="hidden sm:inline">Export</span>
                                 </a>
-                            </div>
-                        </div>
+                            </>}
+                        />
 
                         {/* ── STATS ──────────────────────────────────────────── */}
                         {/* Mobile: 3 cols (2 rows of 3). MD: 3 cols. LG: 6 cols. */}
