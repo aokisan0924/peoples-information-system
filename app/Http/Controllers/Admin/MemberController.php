@@ -28,6 +28,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class MemberController extends Controller
@@ -103,10 +105,18 @@ class MemberController extends Controller
             'referenceNumber' => ['required', 'string', 'max:150']
         ]);
 
+        $officeBranch = trim((string) Auth::guard('admin')->user()?->branch);
+        if ($officeBranch === '') {
+            return response()->json([
+                'message' => 'Your admin account must have an office branch before registering a member.',
+            ], 422);
+        }
+
         DB::beginTransaction();
         try {
             $plainPassword = Str::random(10);
             $validated['password'] = bcrypt($plainPassword);
+            $validated['branch'] = $officeBranch;
 
             $member = Member::create($validated);
 
@@ -119,7 +129,7 @@ class MemberController extends Controller
             $particulars = "New Member Initial Deposit: Membership Fee: " . number_format($request->membershipFee, 2) . 
                         ", Share Capital: " . number_format($request->shareCapital, 2) . 
                         ", Savings Deposit: " . number_format($request->savingsDeposit ?? 0, 2);
-            $branch = strtolower($request->user()->branch ?? 'Main Office');
+            $branch = $officeBranch;
 
             if ($request->paymentMethod === 'cash') {
                 AccPettyCashFund::create([
@@ -281,6 +291,7 @@ class MemberController extends Controller
         $basicInfoData = [
             'id' => $member->id,
             'username' => $member->username,
+            'branch' => $member->branch,
             'firstName' => $member->firstName,
             'middleName' => $member->middleName,
             'lastName' => $member->lastName,
@@ -641,6 +652,7 @@ class MemberController extends Controller
             'city' => ['nullable','string','max:100'],
             'barangay' => ['nullable','string','max:100'],
             'membershipDate' => ['nullable','date'],
+            'branch' => ['required', 'string', Rule::in(Member::OFFICE_BRANCHES)],
         ]);
 
         if ($v->fails()) {

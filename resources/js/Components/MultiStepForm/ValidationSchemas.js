@@ -6,6 +6,7 @@ export const memberInfoSchema = Yup.object({
     dob: Yup.date().required('Date of birth is required'),
     email: Yup.string().email('Invalid email').required('Email is required'),
     contact: Yup.string().required('Contact number is required'),
+    branch: Yup.string().required('Office branch is required'),
     region: Yup.string().required('Region is required'),
     province: Yup.string().required('Province is required'),
     city: Yup.string().required('City/Municipality is required'),

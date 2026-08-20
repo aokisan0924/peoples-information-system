@@ -84,9 +84,16 @@ class MemberDataController extends Controller
     public function importSpreadsheet(Request $request) {
         $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls']]);
 
+        $officeBranch = trim((string) Auth::guard('admin')->user()?->branch);
+        if ($officeBranch === '') {
+            return response()->json([
+                'message' => 'Your admin account must have an office branch before importing members.',
+            ], 422);
+        }
+
         $file = $request->file('file');
             
-        DB::transaction(function () use ($file) {
+        DB::transaction(function () use ($file, $officeBranch) {
             $spreadsheet = IOFactory::load($file->getPathname());
             $importKeyMap = [];
 
@@ -139,6 +146,7 @@ class MemberDataController extends Controller
                         'email'       => $email,
                         'contact'     => $contact,
                         'fullAddress' => $address,
+                        'branch'      => $officeBranch,
                         
                         'password'    => bcrypt(Str::random(10)),
                         'created_at'  => $joinedAt,

@@ -771,12 +771,19 @@ class LoanController extends Controller
     }
 
     public function release(Request $request, string $loanReference) {
-        $loan = Loan::with('postApprovalDocuments')
+        $loan = Loan::with(['postApprovalDocuments', 'member.branchService'])
             ->where('loanReference', $loanReference)
             ->firstOrFail();
 
         if (strtolower((string)$loan->status) !== 'approved') {
             return response()->json(['message' => 'Only approved loans can be released'], 422);
+        }
+
+        $memberBranch = trim((string) $loan->member?->branch);
+        if ($memberBranch === '') {
+            return response()->json([
+                'message' => 'Set the member\'s office branch before releasing this loan.',
+            ], 422);
         }
 
         if (!(bool)($loan->downloadsAcknowledged ?? false)) {
@@ -826,7 +833,6 @@ class LoanController extends Controller
             ]);
 
         if (!empty($loan->journal_entries)) {
-            $currentBranch = Auth::guard('admin')->user()->branch ?? 'Main Office';
             $applicationDate = $loan->created_at;
 
             // CHANGED: this no longer writes straight to AccGeneralLedger.
@@ -839,7 +845,7 @@ class LoanController extends Controller
                     'batch_reference'  => $loan->loanReference,
                     'source_type'      => 'loan',
                     'memberId'         => $loan->memberId,
-                    'branch'           => $currentBranch,
+                    'branch'           => $memberBranch,
                     'account_code'     => $entry['accountCode'],
                     'account_name'     => $entry['accountName'] ?? 'Unknown Account',
                     'debit'            => round($entry['debit'], 2),

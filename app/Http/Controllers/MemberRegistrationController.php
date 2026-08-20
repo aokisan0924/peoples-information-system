@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class MemberRegistrationController extends Controller
 {
@@ -56,6 +57,7 @@ class MemberRegistrationController extends Controller
                 'fullAddress' => 'nullable|string|max:500',
                 'profileImage' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
                 'signatureData' => 'nullable|string',
+                'branch' => ['required', 'string', Rule::in(Member::OFFICE_BRANCHES)],
 
                 // AFP Info
                 'afpsn' => 'nullable|string|max:100',

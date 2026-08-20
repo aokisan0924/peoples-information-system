@@ -20,12 +20,18 @@ class Member extends Authenticatable
 {
     use HasFactory, Notifiable;
 
+    public const OFFICE_BRANCHES = [
+        'Main Office',
+        'Cubao Satellite Office',
+        'Fort Magsaysay Satellite Office',
+    ];
+
     protected $fillable = [
         'firstName', 'lastName', 'middleName', 'suffix', 'nickname',
         'dob', 'religion', 'age', 'gender', 'civilStatus', 'nationality',
         'email', 'contact', 'region', 'regionName', 'province', 'provinceName',
         'city', 'cityName', 'barangay', 'barangayName', 'fullAddress',
-        'profileImage', 'signaturePath', 'username', 'password',
+        'profileImage', 'signaturePath', 'username', 'branch', 'password',
     ];
 
     protected function casts(): array {
@@ -78,4 +84,3 @@ class Member extends Authenticatable
         return $this->hasMany(Loan::class, 'memberId', 'id');
     }
 }
-

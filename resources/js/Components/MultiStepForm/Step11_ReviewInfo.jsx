@@ -101,6 +101,7 @@ export default function Step11_ReviewInfo({ data, onBack, onSubmit }) {
                 {renderRow("Nationality", data.nationality)}
                 {renderRow("Email Address", data.email)}
                 {renderRow("Contact Number", data.contactNumber)}
+                {renderRow("Office Branch", data.branch)}
                 {renderRow("Address", data.fullAddress)}
               </tbody>
             </table>

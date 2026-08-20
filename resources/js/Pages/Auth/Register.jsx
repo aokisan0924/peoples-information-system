@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Head } from "@inertiajs/react";
 import toast from "react-hot-toast";
 
-export default function Register({ genderOptions }) {
+export default function Register({ genderOptions, officeBranchOptions = [] }) {
     const [step, setStep] = useState("form"); // "form" | "otp"
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
@@ -22,6 +22,7 @@ export default function Register({ genderOptions }) {
         phoneNumber: "",
         gender: "",
         dateOfBirth: "",
+        branch: "",
     });
 
     // countdown timer for resend OTP
@@ -431,6 +432,24 @@ export default function Register({ genderOptions }) {
                                             </select>
                                             {renderError("gender")}
                                         </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-medium text-slate-700">
+                                            Office Branch <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            name="branch"
+                                            value={form.branch}
+                                            onChange={handleChange}
+                                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                        >
+                                            <option value="">Select office branch</option>
+                                            {officeBranchOptions.map((branch) => (
+                                                <option key={branch} value={branch}>{branch}</option>
+                                            ))}
+                                        </select>
+                                        {renderError("branch")}
                                     </div>
 
                                     <div className="pt-2 space-y-2">

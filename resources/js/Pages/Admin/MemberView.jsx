@@ -121,7 +121,7 @@ export default function MemberView() {
         religion: basicInfo.religion||"", nationality: basicInfo.nationality||"",
         email: basicInfo.email||"", accountStatus: basicInfo.accountStatus||"",
         contact: basicInfo.contact||"", fullAddress: basicInfo.fullAddress||"",
-        membershipDate: basicInfo.membershipDate||"",
+        membershipDate: basicInfo.membershipDate||"", branch: basicInfo.branch||"",
     });
     const [branchForm, setBranchForm]           = useState({ branchService: branchService?.branchService||"", subBranch: branchService?.subBranch||"" });
     const [afpForm, setAfpForm]                 = useState({ afpsn: afpInfo?.afpsn||"", rank: afpInfo?.rank||"", designation: afpInfo?.designation||"", afpId: afpInfo?.afpId||"", presentAssignment: afpInfo?.presentAssignment||"", yearsInService: afpInfo?.yearsInService||"", cadEnlistment: afpInfo?.cadEnlistment||"", retirementDate: afpInfo?.retirementDate||"", pensionDate: afpInfo?.pensionDate||"" });
@@ -744,6 +744,11 @@ export default function MemberView() {
                                                     <Field label="Birth Date" type="date" value={basicInfoForm.dob} onChange={v => setBasicInfoForm(p=>({...p,dob:v}))} />
                                                     <SelectField label="Civil Status" value={basicInfoForm.civilStatus} onChange={v => setBasicInfoForm(p=>({...p,civilStatus:v}))} options={["Single","Married","Widowed","Separated","Divorced"]} />
                                                     <Field label="Membership Date" type="date" value={basicInfoForm.membershipDate} onChange={v => setBasicInfoForm(p=>({...p,membershipDate:v}))} />
+                                                    <SelectFieldV2 label="Office Branch" value={basicInfoForm.branch} onChange={v => setBasicInfoForm(p=>({...p,branch:v}))} options={[
+                                                        {value:"Main Office",label:"Main Office"},
+                                                        {value:"Cubao Satellite Office",label:"Cubao Satellite Office"},
+                                                        {value:"Fort Magsaysay Satellite Office",label:"Fort Magsaysay Satellite Office"},
+                                                    ]} />
                                                     <Field label="Religion"    value={basicInfoForm.religion}    onChange={v => setBasicInfoForm(p=>({...p,religion:v}))} />
                                                     <Field label="Nationality" value={basicInfoForm.nationality} onChange={v => setBasicInfoForm(p=>({...p,nationality:v}))} />
                                                     <Field label="Email" type="email" value={basicInfoForm.email} onChange={v => setBasicInfoForm(p=>({...p,email:v}))} />

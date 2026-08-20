@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -34,6 +35,7 @@ class RegisterController extends Controller
 
         return Inertia::render('Auth/Register', [
             'genderOptions' => $genderOptions,
+            'officeBranchOptions' => Member::OFFICE_BRANCHES,
         ]);
     }
 
@@ -47,6 +49,7 @@ class RegisterController extends Controller
             'phoneNumber' => ['required', 'string', 'max:30', 'unique:members,contact'],
             'gender' => ['required', 'string', 'in:male,female,other'],
             'dateOfBirth' => ['required', 'date'],
+            'branch' => ['required', 'string', Rule::in(Member::OFFICE_BRANCHES)],
         ]);
 
         $normalizedPhoneNumber = preg_replace('/\D+/', '', $validated['phoneNumber']);
@@ -73,6 +76,7 @@ class RegisterController extends Controller
                 'phoneNumber' => $normalizedPhoneNumber,
                 'gender' => $validated['gender'],
                 'dob' => $validated['dateOfBirth'],
+                'branch' => $validated['branch'],
             ],
             'isVerified' => false,
             'attempts' => 0,
@@ -169,6 +173,7 @@ class RegisterController extends Controller
                 'age' => $age,
                 'password' => $hashedPassword,
                 'status' => 'pending_profile',
+                'branch' => $data['branch'],
             ]);
 
             $username         = 'PMPC-' . str_pad($member->id, 3, '0', STR_PAD_LEFT);

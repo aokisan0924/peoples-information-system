@@ -30,6 +30,7 @@ export default function Step1_MemberInfo({ data, onChange, onNext }) {
   const suffixOptions = ['JR', 'SR', 'II', 'III'];
   const genderOptions = ['MALE', 'FEMALE'];
   const civilStatusOptions = ['SINGLE', 'MARRIED', 'WIDOWED', 'SEPARATED'];
+  const officeBranchOptions = ['Main Office', 'Cubao Satellite Office', 'Fort Magsaysay Satellite Office'];
   
 
   useEffect(() => {
@@ -84,6 +85,13 @@ export default function Step1_MemberInfo({ data, onChange, onNext }) {
     setState(prev => ({
       ...prev,
       formData: { ...prev.formData, [key]: sanitize(value) },
+    }));
+  };
+
+  const updateExactForm = (key, value) => {
+    setState(prev => ({
+      ...prev,
+      formData: { ...prev.formData, [key]: value },
     }));
   };
 
@@ -165,6 +173,22 @@ export default function Step1_MemberInfo({ data, onChange, onNext }) {
               onChange={e => updateForm('nickname', e.target.value)}
               className={inputBaseClass}
             />
+          </div>
+
+          <div>
+            <InputLabel htmlFor="branch" value="Office Branch" />
+            <select
+              id="branch"
+              value={state.formData.branch || ''}
+              onChange={e => updateExactForm('branch', e.target.value)}
+              className={inputBaseClass}
+              required
+            >
+              <option value="">Select Office Branch</option>
+              {officeBranchOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
           </div>
 
           <div>

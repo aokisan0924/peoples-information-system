@@ -394,6 +394,12 @@ class PayMongoController extends Controller
 
         switch ($type) {
             case 'memcap':
+                $capitalForPosting = CapitalContribution::where('reference_number', $reference)->first();
+                if ($capitalForPosting
+                    && (!(bool) $capitalForPosting->is_paid || strtolower((string) $capitalForPosting->status) !== 'posted')) {
+                    $this->requireMemberOfficeBranch((int) $capitalForPosting->memberId);
+                }
+
                 try {
                     $memUpdated = MembershipPayment::where('reference_number', $reference)
                         ->where(fn($q) => $q->where('is_paid', false)->orWhere('status', '!=', 'Paid'))
@@ -444,6 +450,12 @@ class PayMongoController extends Controller
                 break;
 
             case 'capital':
+                $capitalForPosting = CapitalContribution::where('reference_number', $reference)->first();
+                if ($capitalForPosting
+                    && (!(bool) $capitalForPosting->is_paid || strtolower((string) $capitalForPosting->status) !== 'posted')) {
+                    $this->requireMemberOfficeBranch((int) $capitalForPosting->memberId);
+                }
+
                 $updated = CapitalContribution::where('reference_number', $reference)
                     ->where(fn($q) => $q->where('is_paid', false)->orWhere('status', '!=', 'Posted'))
                     ->update(['is_paid' => true, 'status' => 'Posted', 'paid_at' => now()]);
@@ -598,60 +610,67 @@ class PayMongoController extends Controller
      * AUTOMATED GENERAL LEDGER RECORDING
      * =============================================================== */
     private function recordShareCapitalJournalEntry(int $memberId, float $amount, string $reference): void {
-        try {
-            $member = Member::with('branchService')->find($memberId);
-            if (!$member) return;
+        $member = Member::findOrFail($memberId);
 
-            $memberName = "{$member->lastName}, {$member->firstName}";
-            $branch = $member->branchService->branchService ?? 'Main Office'; 
+        $memberName = "{$member->lastName}, {$member->firstName}";
+        $branch = $this->requireMemberOfficeBranch($memberId);
 
-            $status = strtolower($member->accountStatus ?? 'unverified');
+        $status = strtolower($member->accountStatus ?? 'unverified');
 
-            // 1. DETERMINE THE CORRECT SHARE CAPITAL ACCOUNT CODE
-            if ($status === 'regular') {
-                $entry['accountCode'] = '30010';
-            } else {
-                $entry['accountCode'] = '30020';
-            }
-
-            // 2. FETCH FROM CHART OF ACCOUNTS TABLE
-            $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-            $creditCode = $entry['accountCode'];
-            $creditName = $account ? $account->accountName : 'Subscribed Share Capital';
-
-            $paymongoAccount = AccChartOfAccount::where('accountCode', '11205')->first();
-            $debitName = $paymongoAccount ? $paymongoAccount->accountName : 'Cash in Bank - PayMongo';
-
-            // 3. DEBIT: Cash in Bank - PayMongo
-            AccGeneralLedger::create([
-                'branch'          => $branch,
-                'referenceNo'     => $reference,
-                'memberId'        => $member->id,
-                'accountCode'     => '11205',
-                'accountName'     => $debitName,
-                'debit'           => $amount,
-                'credit'          => 0.00,
-                'particulars'     => "PayMongo Deposit: Share Capital - {$memberName}",
-                'transactionDate' => Carbon::now(),
-            ]);
-
-            // 4. CREDIT: Subscribed Share Capital (Common or Preferred)
-            AccGeneralLedger::create([
-                'branch'          => $branch,
-                'referenceNo'     => $reference,
-                'memberId'        => $member->id,
-                'accountCode'     => $creditCode, 
-                'accountName'     => $creditName,
-                'debit'           => 0.00,
-                'credit'          => $amount,
-                'particulars'     => "PayMongo Deposit: {$creditName} - {$memberName}",
-                'transactionDate' => Carbon::now(),
-            ]);
-            
-            Log::info("Journal Entry successfully created for PayMongo Share Capital: {$reference}");
-
-        } catch (\Throwable $e) {
-            Log::error("Failed to create Journal Entry for Share Capital: " . $e->getMessage());
+        // 1. DETERMINE THE CORRECT SHARE CAPITAL ACCOUNT CODE
+        if ($status === 'regular') {
+            $entry['accountCode'] = '30010';
+        } else {
+            $entry['accountCode'] = '30020';
         }
+
+        // 2. FETCH FROM CHART OF ACCOUNTS TABLE
+        $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
+        $creditCode = $entry['accountCode'];
+        $creditName = $account ? $account->accountName : 'Subscribed Share Capital';
+
+        $paymongoAccount = AccChartOfAccount::where('accountCode', '11205')->first();
+        $debitName = $paymongoAccount ? $paymongoAccount->accountName : 'Cash in Bank - PayMongo';
+
+        // 3. DEBIT: Cash in Bank - PayMongo
+        AccGeneralLedger::create([
+            'branch'          => $branch,
+            'referenceNo'     => $reference,
+            'memberId'        => $member->id,
+            'accountCode'     => '11205',
+            'accountName'     => $debitName,
+            'debit'           => $amount,
+            'credit'          => 0.00,
+            'particulars'     => "PayMongo Deposit: Share Capital - {$memberName}",
+            'transactionDate' => Carbon::now(),
+        ]);
+
+        // 4. CREDIT: Subscribed Share Capital (Common or Preferred)
+        AccGeneralLedger::create([
+            'branch'          => $branch,
+            'referenceNo'     => $reference,
+            'memberId'        => $member->id,
+            'accountCode'     => $creditCode,
+            'accountName'     => $creditName,
+            'debit'           => 0.00,
+            'credit'          => $amount,
+            'particulars'     => "PayMongo Deposit: {$creditName} - {$memberName}",
+            'transactionDate' => Carbon::now(),
+        ]);
+            
+        Log::info("Journal Entry successfully created for PayMongo Share Capital: {$reference}");
+    }
+
+    private function requireMemberOfficeBranch(int $memberId): string {
+        $member = Member::findOrFail($memberId);
+        $branch = trim((string) $member->branch);
+
+        if ($branch === '') {
+            throw new \RuntimeException(
+                "Member {$memberId} must have an office branch before PayMongo share-capital posting."
+            );
+        }
+
+        return $branch;
     }
 }
