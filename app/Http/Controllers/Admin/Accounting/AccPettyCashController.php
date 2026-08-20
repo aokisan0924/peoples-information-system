@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin\Accounting;
 use App\Http\Controllers\Controller;
 use App\Models\AccChartOfAccount;
 use App\Models\AccGeneralLedger;
+use App\Models\AccJournalEntry;
 use App\Models\AccPettyCashFund;
+use App\Services\AccountingJournalQueue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -26,8 +28,16 @@ class AccPettyCashController extends Controller
 
         $recordIds = $records->pluck('id');
         $ledgers = AccGeneralLedger::whereIn('petty_cash_id', $recordIds)->get()->groupBy('petty_cash_id');
+        $queued = AccJournalEntry::where('source_type', 'petty_cash')
+            ->whereIn('source_record_id', $recordIds)
+            ->latest('id')
+            ->get()
+            ->groupBy('source_record_id');
         foreach ($records as $record) {
             $record->ledger_entries = $ledgers->get($record->id, collect());
+            $queueLine = $queued->get($record->id)?->first();
+            $record->journal_status = $queueLine?->status;
+            $record->journal_batch_reference = $queueLine?->batch_reference;
         }
 
         // Compute Ending Balance for the day
@@ -76,7 +86,7 @@ class AccPettyCashController extends Controller
         return redirect()->back()->with('success', 'Transactions logged successfully.');
     }
 
-    public function journalize(Request $request, $id) {
+    public function journalize(Request $request, $id, AccountingJournalQueue $queue) {
         $request->validate([
             'entries' => 'required|array|min:1',
             'entries.*.accountCode' => 'required|string',
@@ -84,30 +94,21 @@ class AccPettyCashController extends Controller
             'entries.*.credit' => 'numeric',
         ]);
 
-        return DB::transaction(function () use ($request, $id) {
-            $record = AccPettyCashFund::findOrFail($id);
+        $record = AccPettyCashFund::findOrFail($id);
+        $queue->enqueue(
+            'petty_cash',
+            $this->batchReference($record),
+            $record->id,
+            $record->branch,
+            (string) $record->transactionDate,
+            $record->particulars,
+            $request->entries,
+        );
 
-            foreach ($request->entries as $entry) {
-                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-
-                AccGeneralLedger::create([
-                    'petty_cash_id'   => $record->id,
-                    'transactionDate' => $record->transactionDate,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $account->accountName ?? 'Manual Entry',
-                    'particulars'     => $record->particulars,
-                    'referenceNo'     => $record->orNumber ?? '-',
-                    'debit'           => floatval($entry['debit'] ?? 0),
-                    'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $record->branch,
-                ]);
-            }
-            $record->update(['is_posted' => true]);
-            return redirect()->back()->with('success', 'Journal Entry created.');
-        });
+        return redirect()->back()->with('success', 'Journal entry submitted for review.');
     }
 
-    public function updateJournal(Request $request, $id) {
+    public function updateJournal(Request $request, $id, AccountingJournalQueue $queue) {
         $request->validate([
             'entries' => 'required|array|min:1',
             'entries.*.accountCode' => 'required|string',
@@ -115,30 +116,19 @@ class AccPettyCashController extends Controller
             'entries.*.credit' => 'numeric',
         ]);
 
-        return DB::transaction(function () use ($request, $id) {
-            $record = AccPettyCashFund::findOrFail($id);
+        $record = AccPettyCashFund::findOrFail($id);
+        $queue->enqueue(
+            'petty_cash',
+            $this->batchReference($record),
+            $record->id,
+            $record->branch,
+            (string) $record->transactionDate,
+            $record->particulars,
+            $request->entries,
+            true,
+        );
 
-            // 1. Delete the old incorrect entries from the general ledger
-            AccGeneralLedger::where('petty_cash_id', $record->id)->delete();
-
-            // 2. Re-create them with the new edited mapping
-            foreach ($request->entries as $entry) {
-                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-
-                AccGeneralLedger::create([
-                    'petty_cash_id'   => $record->id,
-                    'transactionDate' => $record->transactionDate,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $account->accountName ?? 'Manual Entry',
-                    'particulars'     => $record->particulars,
-                    'referenceNo'     => $record->orNumber ?? '-',
-                    'debit'           => floatval($entry['debit'] ?? 0),
-                    'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $record->branch,
-                ]);
-            }
-            return redirect()->back()->with('success', 'Journal Entry updated successfully.');
-        });
+        return redirect()->back()->with('success', 'Pending journal entry updated.');
     }
 
     public function update(Request $request, $id) {
@@ -179,5 +169,11 @@ class AccPettyCashController extends Controller
             'vouchers' => $vouchers,
             'perPage'  => $request->input('perPage', 3)
         ]);
+    }
+
+    private function batchReference(AccPettyCashFund $record): string
+    {
+        $reference = trim((string) $record->orNumber);
+        return $reference !== '' && $reference !== '-' ? $reference : "PETTY-{$record->id}";
     }
 }

@@ -84,15 +84,15 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
             return;
         }
         setIsSaving(true);
-        const routeName = recordToJournalize.is_posted
+        const routeName = recordToJournalize.journal_status === 'pending_review'
             ? 'admin.accounting.petty.update-journal'
             : 'admin.accounting.petty.journalize';
         router.post(route(routeName, recordToJournalize.id), { entries: journalEntries }, {
             onSuccess: () => {
-                const wasPosted = recordToJournalize.is_posted;
+                const wasPosted = recordToJournalize.journal_status === 'pending_review';
                 setRecordToJournalize(null);
                 setJournalEntries([{ ...emptySplit }, { ...emptySplit }]);
-                toast.success(wasPosted ? 'Journal Entry updated successfully!' : 'Journal Entry created! Voucher ready.');
+                toast.success(wasPosted ? 'Pending journal updated.' : 'Journal submitted for review.');
                 setIsSaving(false);
             },
             onError: () => setIsSaving(false)
@@ -321,9 +321,6 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
                                                                 </button>
                                                             ) : (
                                                                 <>
-                                                                    <button onClick={() => handleEditJournal(record)} className="p-1.5 text-amber-500 hover:text-amber-400" title="Edit Journal Entry">
-                                                                        <BookOpen size={17} />
-                                                                    </button>
                                                                     <button onClick={() => window.open(route('admin.accounting.petty.print', { ids: record.id, perPage: 1 }))} className="p-1.5 text-emerald-500 hover:text-emerald-400" title="Print Voucher">
                                                                         <Printer size={17} />
                                                                     </button>
@@ -585,7 +582,7 @@ export default function PettyCash({ records, chartOfAccounts, beginningBalance, 
                                     disabled={isSaving}
                                     className="w-full sm:w-auto px-8 sm:px-16 py-4 sm:py-5 bg-amber-500 text-amber-950 font-black rounded-2xl uppercase tracking-widest shadow-2xl active:scale-95 transition-all disabled:opacity-60 text-sm"
                                 >
-                                    {isSaving ? 'Processing...' : (recordToJournalize.is_posted ? 'Update General Ledger' : 'Post to General Ledger')}
+                                    {isSaving ? 'Processing...' : (recordToJournalize.journal_status === 'pending_review' ? 'Update Pending Journal' : 'Submit for Review')}
                                 </button>
                             </div>
                         </div>

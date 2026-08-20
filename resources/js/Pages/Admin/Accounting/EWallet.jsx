@@ -202,7 +202,9 @@ export default function EWallet({ records, chartOfAccounts, beginningBalance, en
                                                 <button onClick={handleSaveEdit} className="text-emerald-500 hover:text-emerald-400" title="Save"><Check size={18}/></button>
                                             ) : (
                                                 <>
-                                                    {!record.is_posted ? (
+                                                    {record.journal_status === 'pending_review' ? (
+                                                        <span className="text-amber-400/70" title="Pending central journal review"><BookOpen size={18}/></span>
+                                                    ) : !record.is_posted ? (
                                                         <button onClick={() => setRecordToJournalize(record)} className="text-amber-500 hover:text-amber-400" title="Create Journal Entry">
                                                             <BookOpen size={18}/>
                                                         </button>

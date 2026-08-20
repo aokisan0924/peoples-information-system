@@ -14,6 +14,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
+use Inertia\Testing\AssertableInertia as Assert;
 
 class GeneralLedgerBranchAttributionTest extends TestCase
 {
@@ -64,12 +65,17 @@ class GeneralLedgerBranchAttributionTest extends TestCase
 
         $this->actingAs($this->admin, 'admin')->post(
             route('admin.accounting.petty.journalize', $record->id),
-            ['entries' => [['accountCode' => '73160', 'debit' => 100, 'credit' => 0]]]
+            ['entries' => [
+                ['accountCode' => '73160', 'debit' => 100, 'credit' => 0],
+                ['accountCode' => '11110', 'debit' => 0, 'credit' => 100],
+            ]]
         )->assertRedirect();
 
-        $this->assertDatabaseHas('acc_general_ledgers', [
-            'petty_cash_id' => $record->id,
+        $this->assertDatabaseHas('acc_journal_entries', [
+            'source_record_id' => $record->id,
+            'source_type' => 'petty_cash',
             'branch' => 'Cubao',
+            'status' => 'pending_review',
         ]);
     }
 
@@ -88,11 +94,15 @@ class GeneralLedgerBranchAttributionTest extends TestCase
 
         $this->actingAs($this->admin, 'admin')->post(
             route('admin.accounting.ewallet.journalize', $record->id),
-            ['entries' => [['accountCode' => '11110', 'debit' => 100, 'credit' => 0]]]
+            ['entries' => [
+                ['accountCode' => '11110', 'debit' => 100, 'credit' => 0],
+                ['accountCode' => '73160', 'debit' => 0, 'credit' => 100],
+            ]]
         )->assertRedirect();
 
-        $this->assertDatabaseHas('acc_general_ledgers', [
-            'e_wallet_id' => $record->id,
+        $this->assertDatabaseHas('acc_journal_entries', [
+            'source_record_id' => $record->id,
+            'source_type' => 'ewallet',
             'branch' => 'Cubao',
         ]);
     }
@@ -118,8 +128,9 @@ class GeneralLedgerBranchAttributionTest extends TestCase
             ]]
         )->assertOk();
 
-        $this->assertDatabaseHas('acc_general_ledgers', [
-            'bank_record_id' => $record->id,
+        $this->assertDatabaseHas('acc_journal_entries', [
+            'source_record_id' => $record->id,
+            'source_type' => 'bank',
             'branch' => 'Cubao',
         ]);
     }
@@ -142,14 +153,115 @@ class GeneralLedgerBranchAttributionTest extends TestCase
                 'month' => '08',
                 'year' => '2026',
                 'type' => 'transport',
-                'entries' => [['accountCode' => '73160', 'debit' => 2000, 'credit' => 0]],
+                'entries' => [
+                    ['accountCode' => '73160', 'debit' => 2000, 'credit' => 0],
+                    ['accountCode' => '11110', 'debit' => 0, 'credit' => 2000],
+                ],
             ]
         )->assertRedirect();
 
-        $this->assertDatabaseHas('acc_general_ledgers', [
-            'referenceNo' => 'DEPR-TRANS-2026-08',
+        $this->assertDatabaseHas('acc_journal_entries', [
+            'batch_reference' => 'DEPR-TRANS-2026-08',
+            'source_type' => 'ppe',
             'branch' => 'Cubao',
         ]);
+    }
+
+    public function test_generalized_queue_lists_shows_edits_and_approves_petty_cash(): void
+    {
+        $record = AccPettyCashFund::create([
+            'branch' => 'Cubao', 'transactionDate' => '2026-08-20', 'orNumber' => 'PC-REVIEW',
+            'particulars' => 'Petty review', 'debit' => 100, 'credit' => 0, 'is_posted' => false,
+        ]);
+        $entries = [
+            ['accountCode' => '73160', 'accountName' => 'Operating Expense', 'debit' => 100, 'credit' => 0],
+            ['accountCode' => '11110', 'accountName' => 'Cash on Hand', 'debit' => 0, 'credit' => 100],
+        ];
+        $this->actingAs($this->admin, 'admin')->post(route('admin.accounting.petty.journalize', $record), compact('entries'))->assertRedirect();
+        $this->assertDatabaseCount('acc_general_ledgers', 0);
+
+        $this->get(route('admin.accounting.journal-entries.index'))
+            ->assertInertia(fn (Assert $page) => $page->component('Admin/Accounting/JournalEntryIndex')->has('batches.data', 1));
+        $identity = ['batchReference' => 'PC-REVIEW', 'source_type' => 'petty_cash', 'source_record_id' => $record->id, 'branch' => 'Cubao'];
+        $this->get(route('admin.accounting.journal-entries.show', $identity))
+            ->assertInertia(fn (Assert $page) => $page->component('Admin/Accounting/JournalEntryReview')->where('sourceType', 'petty_cash'));
+
+        $line = DB::table('acc_journal_entries')->where('source_record_id', $record->id)->first();
+        $this->postJson(route('admin.accounting.journal-entries.update-line', $identity), [
+            'line_id' => $line->id, 'source_type' => 'petty_cash', 'account_code' => '73160',
+            'account_name' => 'Operating Expense', 'debit' => 100, 'credit' => 0, 'particulars' => 'Edited petty review',
+        ])->assertOk();
+        $this->postJson(route('admin.accounting.journal-entries.approve', $identity), ['source_type' => 'petty_cash'])->assertOk();
+        $this->assertDatabaseHas('acc_general_ledgers', ['petty_cash_id' => $record->id, 'branch' => 'Cubao', 'particulars' => 'Edited petty review']);
+        $this->assertDatabaseHas('acc_petty_cash_funds', ['id' => $record->id, 'is_posted' => true]);
+    }
+
+    public function test_ewallet_rejection_requires_notes_and_never_posts(): void
+    {
+        $record = AccEWallet::create([
+            'branch' => 'Fort Magsaysay', 'transactionDate' => '2026-08-20', 'referenceNo' => 'EW-REJECT',
+            'particulars' => 'Wallet review', 'walletType' => 'GCash', 'debit' => 100, 'credit' => 0, 'is_posted' => false,
+        ]);
+        $entries = [
+            ['accountCode' => '11110', 'debit' => 100, 'credit' => 0],
+            ['accountCode' => '73160', 'debit' => 0, 'credit' => 100],
+        ];
+        $this->actingAs($this->admin, 'admin')->post(route('admin.accounting.ewallet.journalize', $record), compact('entries'))->assertRedirect();
+        $identity = ['batchReference' => 'EW-REJECT', 'source_type' => 'ewallet', 'source_record_id' => $record->id, 'branch' => 'Fort Magsaysay'];
+        $this->postJson(route('admin.accounting.journal-entries.reject', $identity), [])->assertUnprocessable();
+        $this->postJson(route('admin.accounting.journal-entries.reject', $identity), ['notes' => 'Wrong account mapping'])->assertOk();
+        $this->assertDatabaseCount('acc_general_ledgers', 0);
+        $this->assertDatabaseHas('acc_e_wallets', ['id' => $record->id, 'is_posted' => false]);
+    }
+
+    public function test_ewallet_approval_posts_with_its_source_link_and_branch(): void
+    {
+        $record = AccEWallet::create([
+            'branch' => 'Fort Magsaysay', 'transactionDate' => '2026-08-20', 'referenceNo' => 'EW-APPROVE',
+            'particulars' => 'Wallet approval', 'walletType' => 'Maya', 'debit' => 100, 'credit' => 0, 'is_posted' => false,
+        ]);
+        $entries = [
+            ['accountCode' => '11110', 'debit' => 100, 'credit' => 0],
+            ['accountCode' => '73160', 'debit' => 0, 'credit' => 100],
+        ];
+        $this->actingAs($this->admin, 'admin')->post(route('admin.accounting.ewallet.journalize', $record), compact('entries'))->assertRedirect();
+        $identity = ['batchReference' => 'EW-APPROVE', 'source_type' => 'ewallet', 'source_record_id' => $record->id, 'branch' => 'Fort Magsaysay'];
+        $this->postJson(route('admin.accounting.journal-entries.approve', $identity))->assertOk();
+        $this->assertDatabaseHas('acc_general_ledgers', ['e_wallet_id' => $record->id, 'branch' => 'Fort Magsaysay']);
+        $this->assertDatabaseHas('acc_e_wallets', ['id' => $record->id, 'is_posted' => true]);
+    }
+
+    public function test_bank_rejects_unbalanced_before_enqueue_and_approval_sets_source_flag(): void
+    {
+        $record = AccBankRecord::create([
+            'branch' => 'Cubao', 'bank_account_code' => '11110', 'transaction_date' => '2026-08-20',
+            'reference_no' => 'BK-REVIEW', 'particulars' => 'Bank review', 'debit' => 100, 'credit' => 0, 'is_journalized' => false,
+        ]);
+        $bad = [['accountCode' => '11110', 'debit' => 100, 'credit' => 0], ['accountCode' => '73160', 'debit' => 0, 'credit' => 90]];
+        $this->actingAs($this->admin, 'admin')->postJson(route('admin.accounting.bank.journalize', $record), ['entries' => $bad])->assertUnprocessable();
+        $this->assertDatabaseCount('acc_journal_entries', 0);
+        $good = [['accountCode' => '11110', 'debit' => 100, 'credit' => 0], ['accountCode' => '73160', 'debit' => 0, 'credit' => 100]];
+        $this->postJson(route('admin.accounting.bank.journalize', $record), ['entries' => $good])->assertOk();
+        $identity = ['batchReference' => 'BK-REVIEW', 'source_type' => 'bank', 'source_record_id' => $record->id, 'branch' => 'Cubao'];
+        $this->postJson(route('admin.accounting.journal-entries.approve', $identity))->assertOk();
+        $this->assertDatabaseHas('acc_general_ledgers', ['bank_record_id' => $record->id, 'branch' => 'Cubao']);
+        $this->assertDatabaseHas('acc_bank_records', ['id' => $record->id, 'is_journalized' => true]);
+    }
+
+    public function test_ppe_pending_batch_can_be_replaced_but_approved_batch_is_immutable(): void
+    {
+        AccPpeDepreciation::create(['branch' => 'Cubao', 'category' => 'Transport Equipment', 'date_acquired' => '2026-01-01', 'particular' => 'Vehicle', 'amount' => 120000, 'life_years' => 5]);
+        $payload = ['branch' => 'Cubao', 'month' => '08', 'year' => '2026', 'type' => 'transport', 'entries' => [
+            ['accountCode' => '73160', 'debit' => 2000, 'credit' => 0], ['accountCode' => '11110', 'debit' => 0, 'credit' => 2000],
+        ]];
+        $this->actingAs($this->admin, 'admin')->post(route('admin.accounting.ppe.journalize'), $payload)->assertRedirect();
+        $payload['entries'][0]['debit'] = 2100; $payload['entries'][1]['credit'] = 2100;
+        $this->post(route('admin.accounting.ppe.journalize'), $payload)->assertRedirect();
+        $this->assertEquals(2100.0, (float) DB::table('acc_journal_entries')->whereNull('deleted_at')->sum('debit'));
+        $identity = ['batchReference' => 'DEPR-TRANS-2026-08', 'source_type' => 'ppe', 'branch' => 'Cubao'];
+        $this->postJson(route('admin.accounting.journal-entries.approve', $identity))->assertOk();
+        $this->assertDatabaseHas('acc_general_ledgers', ['referenceNo' => 'DEPR-TRANS-2026-08', 'branch' => 'Cubao', 'debit' => 2100]);
+        $this->post(route('admin.accounting.ppe.journalize'), $payload)->assertSessionHasErrors('entries');
     }
 
     public function test_manual_adjustment_requires_and_uses_an_explicit_branch(): void
@@ -426,6 +538,7 @@ class GeneralLedgerBranchAttributionTest extends TestCase
             $table->id();
             $table->string('batch_reference');
             $table->string('source_type');
+            $table->unsignedBigInteger('source_record_id')->nullable();
             $table->unsignedBigInteger('memberId')->nullable();
             $table->string('branch');
             $table->string('account_code');

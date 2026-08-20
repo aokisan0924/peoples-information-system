@@ -352,6 +352,7 @@ class LoanJournalReviewTest extends TestCase
             $table->id();
             $table->string('batch_reference');
             $table->string('source_type');
+            $table->unsignedBigInteger('source_record_id')->nullable();
             $table->unsignedBigInteger('memberId')->nullable();
             $table->string('branch')->nullable();
             $table->string('account_code');

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AccPpeDepreciation;
 use App\Models\AccGeneralLedger;
 use App\Models\AccChartOfAccount;
+use App\Models\AccJournalEntry;
+use App\Services\AccountingJournalQueue;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -65,10 +67,12 @@ class AccPpeDepreciationController extends Controller
         $transportRef = "DEPR-TRANS-{$year}-{$month}";
         $othersRef = "DEPR-OTHERS-{$year}-{$month}";
 
-        $journalStatus = [
-            'transport' => AccGeneralLedger::where('referenceNo', $transportRef)->where('branch', $currentBranch)->exists(),
-            'others' => AccGeneralLedger::where('referenceNo', $othersRef)->where('branch', $currentBranch)->exists(),
-        ];
+        $statusFor = function (string $reference) use ($currentBranch): ?string {
+            $queued = AccJournalEntry::where('source_type', 'ppe')->where('batch_reference', $reference)
+                ->where('branch', $currentBranch)->latest('id')->value('status');
+            return $queued ?: (AccGeneralLedger::where('referenceNo', $reference)->where('branch', $currentBranch)->exists() ? 'approved' : null);
+        };
+        $journalStatus = ['transport' => $statusFor($transportRef), 'others' => $statusFor($othersRef)];
 
         return Inertia::render('Admin/Accounting/PPEDepreciation', [
             'data' => $processedData,
@@ -84,7 +88,7 @@ class AccPpeDepreciationController extends Controller
         ]);
     }
 
-    public function journalize(Request $request) {
+    public function journalize(Request $request, AccountingJournalQueue $queue) {
         $request->validate([
             'month' => 'required',
             'year' => 'required',
@@ -93,33 +97,16 @@ class AccPpeDepreciationController extends Controller
             'entries' => 'required|array|min:1'
         ]);
 
-        return DB::transaction(function () use ($request) {
-            $branch = $request->string('branch')->toString();
-            $ref = $request->type === 'transport' ? "DEPR-TRANS-{$request->year}-{$request->month}" : "DEPR-OTHERS-{$request->year}-{$request->month}";
-            $date = Carbon::createFromDate($request->year, $request->month, 1)->endOfMonth()->format('Y-m-d');
+        $branch = $request->string('branch')->toString();
+        $ref = $request->type === 'transport' ? "DEPR-TRANS-{$request->year}-{$request->month}" : "DEPR-OTHERS-{$request->year}-{$request->month}";
+        $date = Carbon::createFromDate($request->year, $request->month, 1)->endOfMonth()->format('Y-m-d');
             
-            $particulars = $request->type === 'transport' 
+        $particulars = $request->type === 'transport'
                 ? "Monthly Depreciation - Transport Equipment ({$request->month}/{$request->year})" 
                 : "Monthly Depreciation - Other PPE ({$request->month}/{$request->year})";
 
-            // Delete old entries if this is an update
-            AccGeneralLedger::where('referenceNo', $ref)->where('branch', $branch)->delete();
-
-            foreach ($request->entries as $entry) {
-                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-                AccGeneralLedger::create([
-                    'transactionDate' => $date,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $account->accountName ?? 'Manual Entry',
-                    'particulars'     => $particulars,
-                    'referenceNo'     => $ref,
-                    'debit'           => floatval($entry['debit'] ?? 0),
-                    'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $branch,
-                ]);
-            }
-            return redirect()->back()->with('success', 'Depreciation journalized successfully.');
-        });
+        $queue->enqueue('ppe', $ref, null, $branch, $date, $particulars, $request->entries, true);
+        return redirect()->back()->with('success', 'Depreciation journal submitted for review.');
     }
 
     public function storeBulk(Request $request) {

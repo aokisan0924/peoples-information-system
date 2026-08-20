@@ -48,7 +48,7 @@ const buildNavGroups = ({ isSuperAdmin, isAccountingClerk, isBookkeeper, canAcce
             accItems.push({ name: "admin.accounting.ppe.index",     label: "PPE Depreciation",  icon: Briefcase });
             accItems.push({ name: "admin.accounting.chart.index",   label: "Chart of Accounts", icon: Layers    });
             accItems.push({ name: "admin.accounting.journal.index", label: "General Journal",   icon: PenTool   });
-            accItems.push({ name: "admin.accounting.journal-entries.index", label: "Loan Journal Review", icon: ShieldCheck });
+            accItems.push({ name: "admin.accounting.journal-entries.index", label: "Journal Review Queue", icon: ShieldCheck });
         }
         const accGroup = { id: "accounting", label: "Accounting", items: accItems };
         if (canAccess("accounting")) {

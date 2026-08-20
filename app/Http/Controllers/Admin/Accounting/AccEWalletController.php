@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AccEWallet;
 use App\Models\AccGeneralLedger;
 use App\Models\AccChartOfAccount;
+use App\Models\AccJournalEntry;
+use App\Services\AccountingJournalQueue;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -22,6 +24,13 @@ class AccEWalletController extends Controller
 
         $recordsQuery = AccEWallet::where('branch', $currentBranch)->whereDate('transactionDate', $date);
         $records = (clone $recordsQuery)->orderBy('created_at', 'asc')->get();
+        $queued = AccJournalEntry::where('source_type', 'ewallet')
+            ->whereIn('source_record_id', $records->pluck('id'))->latest('id')->get()->groupBy('source_record_id');
+        foreach ($records as $record) {
+            $line = $queued->get($record->id)?->first();
+            $record->journal_status = $line?->status;
+            $record->journal_batch_reference = $line?->batch_reference;
+        }
 
         $endingBalance = $beginningBalance + (clone $recordsQuery)->sum('credit') - (clone $recordsQuery)->sum('debit');
 
@@ -68,7 +77,7 @@ class AccEWalletController extends Controller
         return redirect()->back()->with('success', 'Transactions logged successfully.');
     }
 
-    public function journalize(Request $request, $id) {
+    public function journalize(Request $request, $id, AccountingJournalQueue $queue) {
         $request->validate([
             'entries' => 'required|array|min:1',
             'entries.*.accountCode' => 'required|string',
@@ -76,27 +85,12 @@ class AccEWalletController extends Controller
             'entries.*.credit' => 'numeric',
         ]);
 
-        return DB::transaction(function () use ($request, $id) {
-            $record = AccEWallet::findOrFail($id);
+        $record = AccEWallet::findOrFail($id);
+        $reference = trim((string) $record->referenceNo);
+        $queue->enqueue('ewallet', $reference !== '' && $reference !== '-' ? $reference : "EWALLET-{$record->id}",
+            $record->id, $record->branch, (string) $record->transactionDate, $record->particulars, $request->entries);
 
-            foreach ($request->entries as $entry) {
-                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-
-                AccGeneralLedger::create([
-                    'e_wallet_id'     => $record->id,
-                    'transactionDate' => $record->transactionDate,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $account->accountName ?? 'Manual Entry',
-                    'particulars'     => $record->particulars,
-                    'referenceNo'     => $record->referenceNo ?? '-',
-                    'debit'           => floatval($entry['debit'] ?? 0),
-                    'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $record->branch,
-                ]);
-            }
-            $record->update(['is_posted' => true]);
-            return redirect()->back()->with('success', 'Journal Entry created.');
-        });
+        return redirect()->back()->with('success', 'Journal entry submitted for review.');
     }
 
     public function update(Request $request, $id) {

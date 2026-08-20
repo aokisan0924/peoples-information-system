@@ -14,6 +14,7 @@ class AccJournalEntry extends Model
     protected $fillable = [
         'batch_reference',
         'source_type',
+        'source_record_id',
         'memberId',
         'branch',
         'account_code',

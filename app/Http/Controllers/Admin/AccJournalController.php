@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AccGeneralLedger;
+use App\Models\AccBankRecord;
+use App\Models\AccEWallet;
 use App\Models\AccJournalEntry;
+use App\Models\AccPettyCashFund;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -16,15 +19,21 @@ use Inertia\Response;
 
 class AccJournalController extends Controller
 {
+    private const SOURCE_TYPES = [
+        'membership', 'capital', 'savings', 'memcap', 'loan',
+        'petty_cash', 'ewallet', 'bank', 'ppe',
+    ];
+
     public function index(Request $request): Response
     {
         $status = trim((string) $request->input('status', 'pending_review'));
         $search = trim((string) $request->input('search', ''));
+        $sourceType = $this->validatedSourceType($request);
         $perPage = max(1, min(50, (int) $request->input('perPage', 15)));
 
         $lines = AccJournalEntry::query()
             ->with(['member:id,firstName,lastName,username', 'reviewer:id,name'])
-            ->where('source_type', 'loan')
+            ->when($sourceType !== '', fn ($query) => $query->where('source_type', $sourceType))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($nested) use ($search) {
@@ -41,13 +50,14 @@ class AccJournalController extends Controller
             ->get();
 
         $batches = $lines
-            ->groupBy('batch_reference')
+            ->groupBy(fn (AccJournalEntry $line) => "{$line->source_type}|{$line->source_record_id}|{$line->branch}|{$line->batch_reference}")
             ->map(function (Collection $batchLines): array {
                 $first = $batchLines->first();
 
                 return [
                     'batch_reference' => $first->batch_reference,
                     'source_type' => $first->source_type,
+                    'source_record_id' => $first->source_record_id,
                     'member' => $first->member,
                     'branch' => $first->branch,
                     'amount' => round((float) $batchLines->sum('debit'), 2),
@@ -70,20 +80,27 @@ class AccJournalController extends Controller
 
         return Inertia::render('Admin/Accounting/JournalEntryIndex', [
             'batches' => $paginator,
-            'filters' => compact('status', 'search', 'perPage'),
+            'filters' => compact('status', 'search', 'sourceType', 'perPage'),
+            'sourceTypes' => self::SOURCE_TYPES,
         ]);
     }
 
-    public function show(string $batchReference): Response
+    public function show(Request $request, string $batchReference): Response
     {
+        $sourceType = $this->validatedSourceType($request);
+        $sourceRecordId = $request->integer('source_record_id') ?: null;
+        $branch = trim((string) $request->input('branch', ''));
         $lines = AccJournalEntry::query()
             ->with(['member:id,firstName,lastName,username,accountStatus', 'reviewer:id,name'])
-            ->where('source_type', 'loan')
             ->where('batch_reference', $batchReference)
+            ->when($sourceType !== '', fn ($query) => $query->where('source_type', $sourceType))
+            ->when($sourceRecordId !== null, fn ($query) => $query->where('source_record_id', $sourceRecordId))
+            ->when($branch !== '', fn ($query) => $query->where('branch', $branch))
             ->orderBy('id')
             ->get();
 
         abort_if($lines->isEmpty(), 404, 'Journal batch not found.');
+        abort_if($lines->map(fn ($line) => [$line->source_type, $line->source_record_id, $line->branch])->unique()->count() > 1, 409, 'Specify the source identity for this batch reference.');
 
         $totalDebit = round((float) $lines->sum('debit'), 2);
         $totalCredit = round((float) $lines->sum('credit'), 2);
@@ -96,6 +113,9 @@ class AccJournalController extends Controller
             'totalCredit' => $totalCredit,
             'isBalanced' => abs($totalDebit - $totalCredit) < 0.005,
             'batchStatus' => $lines->first()->status,
+            'sourceType' => $lines->first()->source_type,
+            'sourceRecordId' => $lines->first()->source_record_id,
+            'branch' => $lines->first()->branch,
         ]);
     }
 
@@ -119,10 +139,11 @@ class AccJournalController extends Controller
             ], 422);
         }
 
+        $sourceType = $this->validatedSourceType($request);
         $line = AccJournalEntry::query()
-            ->where('source_type', 'loan')
             ->where('batch_reference', $batchReference)
             ->where('status', 'pending_review')
+            ->when($sourceType !== '', fn ($query) => $query->where('source_type', $sourceType))
             ->find($validated['line_id']);
 
         if (!$line) {
@@ -141,8 +162,10 @@ class AccJournalController extends Controller
         ]);
 
         $batchLines = AccJournalEntry::query()
-            ->where('source_type', 'loan')
             ->where('batch_reference', $batchReference)
+            ->where('source_type', $line->source_type)
+            ->where('branch', $line->branch)
+            ->when($line->source_record_id === null, fn ($query) => $query->whereNull('source_record_id'), fn ($query) => $query->where('source_record_id', $line->source_record_id))
             ->get();
         $totalDebit = round((float) $batchLines->sum('debit'), 2);
         $totalCredit = round((float) $batchLines->sum('credit'), 2);
@@ -159,20 +182,26 @@ class AccJournalController extends Controller
 
     public function approve(Request $request, string $batchReference): JsonResponse
     {
+        $sourceType = $this->validatedSourceType($request);
+        $sourceRecordId = $request->integer('source_record_id') ?: null;
+        $branch = trim((string) $request->input('branch', ''));
         $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        DB::transaction(function () use ($batchReference, $validated): void {
+        DB::transaction(function () use ($batchReference, $validated, $sourceType, $sourceRecordId, $branch): void {
             $lines = AccJournalEntry::query()
-                ->where('source_type', 'loan')
                 ->where('batch_reference', $batchReference)
                 ->where('status', 'pending_review')
+                ->when($sourceType !== '', fn ($query) => $query->where('source_type', $sourceType))
+                ->when($sourceRecordId !== null, fn ($query) => $query->where('source_record_id', $sourceRecordId))
+                ->when($branch !== '', fn ($query) => $query->where('branch', $branch))
                 ->lockForUpdate()
                 ->orderBy('id')
                 ->get();
 
             abort_if($lines->isEmpty(), 404, 'Journal batch not found or already reviewed.');
+            abort_if($lines->map(fn ($line) => [$line->source_type, $line->source_record_id, $line->branch])->unique()->count() > 1, 409, 'Specify the source identity for this batch reference.');
 
             $totalDebit = round((float) $lines->sum('debit'), 2);
             $totalCredit = round((float) $lines->sum('credit'), 2);
@@ -184,7 +213,7 @@ class AccJournalController extends Controller
             foreach ($lines as $line) {
                 abort_if(blank($line->branch), 422, 'Journal line is missing an office branch.');
 
-                AccGeneralLedger::create([
+                $ledgerData = [
                     'branch' => $line->branch,
                     'referenceNo' => $line->batch_reference,
                     'memberId' => $line->memberId,
@@ -194,7 +223,17 @@ class AccJournalController extends Controller
                     'credit' => $line->credit,
                     'particulars' => $line->particulars,
                     'transactionDate' => $line->transaction_date,
-                ]);
+                ];
+
+                if ($line->source_type === 'petty_cash') {
+                    $ledgerData['petty_cash_id'] = $line->source_record_id;
+                } elseif ($line->source_type === 'ewallet') {
+                    $ledgerData['e_wallet_id'] = $line->source_record_id;
+                } elseif ($line->source_type === 'bank') {
+                    $ledgerData['bank_record_id'] = $line->source_record_id;
+                }
+
+                AccGeneralLedger::create($ledgerData);
 
                 $line->update([
                     'status' => 'approved',
@@ -203,29 +242,37 @@ class AccJournalController extends Controller
                     'reviewer_notes' => $validated['notes'] ?? null,
                 ]);
             }
+
+            $this->markSourceRecordsPosted($lines, true);
         });
 
         return response()->json([
             'ok' => true,
-            'message' => 'Loan journal batch approved and posted to the general ledger.',
+            'message' => 'Journal batch approved and posted to the general ledger.',
         ]);
     }
 
     public function reject(Request $request, string $batchReference): JsonResponse
     {
+        $sourceType = $this->validatedSourceType($request);
+        $sourceRecordId = $request->integer('source_record_id') ?: null;
+        $branch = trim((string) $request->input('branch', ''));
         $validated = $request->validate([
             'notes' => ['required', 'string', 'max:500'],
         ]);
 
-        DB::transaction(function () use ($batchReference, $validated): void {
+        DB::transaction(function () use ($batchReference, $validated, $sourceType, $sourceRecordId, $branch): void {
             $lines = AccJournalEntry::query()
-                ->where('source_type', 'loan')
                 ->where('batch_reference', $batchReference)
                 ->where('status', 'pending_review')
+                ->when($sourceType !== '', fn ($query) => $query->where('source_type', $sourceType))
+                ->when($sourceRecordId !== null, fn ($query) => $query->where('source_record_id', $sourceRecordId))
+                ->when($branch !== '', fn ($query) => $query->where('branch', $branch))
                 ->lockForUpdate()
                 ->get();
 
             abort_if($lines->isEmpty(), 404, 'Journal batch not found or already reviewed.');
+            abort_if($lines->map(fn ($line) => [$line->source_type, $line->source_record_id, $line->branch])->unique()->count() > 1, 409, 'Specify the source identity for this batch reference.');
 
             $reviewedAt = now();
             $adminId = Auth::guard('admin')->id();
@@ -237,11 +284,38 @@ class AccJournalController extends Controller
                     'reviewer_notes' => $validated['notes'],
                 ]);
             }
+
+            $this->markSourceRecordsPosted($lines, false);
         });
 
         return response()->json([
             'ok' => true,
-            'message' => 'Loan journal batch rejected.',
+            'message' => 'Journal batch rejected.',
         ]);
+    }
+
+    private function validatedSourceType(Request $request): string
+    {
+        $sourceType = trim((string) $request->input('source_type', ''));
+        abort_if($sourceType !== '' && !in_array($sourceType, self::SOURCE_TYPES, true), 422, 'Invalid journal source type.');
+
+        return $sourceType;
+    }
+
+    private function markSourceRecordsPosted(Collection $lines, bool $posted): void
+    {
+        $sourceType = $lines->first()->source_type;
+        $sourceIds = $lines->pluck('source_record_id')->filter()->unique()->values();
+        if ($sourceIds->isEmpty()) {
+            return;
+        }
+
+        if ($sourceType === 'petty_cash') {
+            AccPettyCashFund::whereIn('id', $sourceIds)->update(['is_posted' => $posted]);
+        } elseif ($sourceType === 'ewallet') {
+            AccEWallet::whereIn('id', $sourceIds)->update(['is_posted' => $posted]);
+        } elseif ($sourceType === 'bank') {
+            AccBankRecord::whereIn('id', $sourceIds)->update(['is_journalized' => $posted]);
+        }
     }
 }

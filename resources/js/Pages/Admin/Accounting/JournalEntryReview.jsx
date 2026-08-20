@@ -21,6 +21,10 @@ const SOURCE_LABELS = {
     capital:    "Share Capital",
     savings:    "Savings Deposit",
     memcap:     "Onboarding (Membership + Share Capital)",
+    petty_cash: "Petty Cash",
+    ewallet:    "E-Wallet",
+    bank:       "Bank Record",
+    ppe:        "PPE Depreciation",
 };
 
 const STATUS_COLORS = {
@@ -35,7 +39,7 @@ export default function JournalEntryReview() {
     const {
         batchReference, lines: initialLines, member,
         totalDebit: initDebit, totalCredit: initCredit,
-        isBalanced: initBalanced, batchStatus,
+        isBalanced: initBalanced, batchStatus, sourceType, sourceRecordId, branch,
     } = usePage().props;
 
     const [lines, setLines]         = useState(initialLines);
@@ -73,8 +77,8 @@ export default function JournalEntryReview() {
         setSaving(true);
         try {
             const { data } = await axios.post(
-                route("admin.accounting.journal-entries.update-line", batchReference),
-                { ...editForm, line_id: lineId }
+                route("admin.accounting.journal-entries.update-line", { batchReference, source_type: sourceType, source_record_id: sourceRecordId, branch }),
+                { ...editForm, line_id: lineId, source_type: sourceType }
             );
             if (!data.ok) { toast.error(data.message); return; }
 
@@ -104,8 +108,8 @@ export default function JournalEntryReview() {
         setActioning(true);
         try {
             const { data } = await axios.post(
-                route("admin.accounting.journal-entries.approve", batchReference),
-                { notes }
+                route("admin.accounting.journal-entries.approve", { batchReference, source_type: sourceType, source_record_id: sourceRecordId, branch }),
+                { notes, source_type: sourceType, source_record_id: sourceRecordId, branch }
             );
             if (!data.ok) { toast.error(data.message); return; }
             toast.success(data.message);
@@ -125,8 +129,8 @@ export default function JournalEntryReview() {
         setActioning(true);
         try {
             const { data } = await axios.post(
-                route("admin.accounting.journal-entries.reject", batchReference),
-                { notes }
+                route("admin.accounting.journal-entries.reject", { batchReference, source_type: sourceType, source_record_id: sourceRecordId, branch }),
+                { notes, source_type: sourceType, source_record_id: sourceRecordId, branch }
             );
             if (!data.ok) { toast.error(data.message); return; }
             toast.success(data.message);

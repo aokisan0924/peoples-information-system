@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AccGeneralLedger;
 use App\Models\AccChartOfAccount;
 use App\Models\AccBankRecord;
+use App\Models\AccJournalEntry;
+use App\Services\AccountingJournalQueue;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -48,10 +50,15 @@ class AccBankRecordController extends Controller
         $ledgers = AccGeneralLedger::whereIn('bank_record_id', $recordIds)
             ->get()
             ->groupBy('bank_record_id');
+        $queued = AccJournalEntry::where('source_type', 'bank')
+            ->whereIn('source_record_id', $recordIds)->latest('id')->get()->groupBy('source_record_id');
 
         foreach ($records as $record) {
             $record->is_posted = $record->is_journalized;
             $record->ledger_entries = $ledgers->get($record->id, collect());
+            $line = $queued->get($record->id)?->first();
+            $record->journal_status = $line?->status;
+            $record->journal_batch_reference = $line?->batch_reference;
         }
 
         $dayCredit = (clone $recordsQuery)->sum('credit');
@@ -99,77 +106,22 @@ class AccBankRecordController extends Controller
         return redirect()->back()->with('success', 'Bank logs saved to source table.');
     }
 
-    public function journalize(Request $request, $id) {
+    public function journalize(Request $request, $id, AccountingJournalQueue $queue) {
         $request->validate(['entries' => 'required|array|min:2']); // Must have at least 2 lines for double-entry
         
-        return DB::transaction(function () use ($request, $id) {
-            $bankLog = AccBankRecord::findOrFail($id);
-
-            // 1. Simple Math Validation
-            $totalUserDebit = collect($request->entries)->sum(function($entry) { return (float) ($entry['debit'] ?? 0); });
-            $totalUserCredit = collect($request->entries)->sum(function($entry) { return (float) ($entry['credit'] ?? 0); });
-
-            if (round($totalUserDebit, 2) !== round($totalUserCredit, 2)) {
-                return response()->json(['error' => "Journal entries do not balance."], 422);
-            }
-
-            // 2. Save EXACTLY the User's Entries (No auto-generated lines)
-            foreach ($request->entries as $entry) {
-                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-                AccGeneralLedger::create([
-                    'bank_record_id'  => $bankLog->id,
-                    'transactionDate' => $bankLog->transaction_date,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $account->accountName ?? 'Manual Entry',
-                    'particulars'     => $bankLog->particulars,
-                    'referenceNo'     => $bankLog->reference_no,
-                    'debit'           => floatval($entry['debit'] ?? 0),
-                    'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $bankLog->branch,
-                ]);
-            }
-
-            $bankLog->update(['is_journalized' => true]);
-            
-            return response()->json(['message' => 'Posted to General Ledger successfully.']);
-        });
+        $bankLog = AccBankRecord::findOrFail($id);
+        $queue->enqueue('bank', $bankLog->reference_no, $bankLog->id, $bankLog->branch,
+            (string) $bankLog->transaction_date, $bankLog->particulars, $request->entries);
+        return response()->json(['message' => 'Journal entry submitted for review.']);
     }
 
-    public function updateJournal(Request $request, $id) {
+    public function updateJournal(Request $request, $id, AccountingJournalQueue $queue) {
         $request->validate(['entries' => 'required|array|min:2']);
         
-        return DB::transaction(function () use ($request, $id) {
-            $bankLog = AccBankRecord::findOrFail($id);
-
-            // 1. Simple Math Validation
-            $totalUserDebit = collect($request->entries)->sum(function($entry) { return (float) ($entry['debit'] ?? 0); });
-            $totalUserCredit = collect($request->entries)->sum(function($entry) { return (float) ($entry['credit'] ?? 0); });
-
-            if (round($totalUserDebit, 2) !== round($totalUserCredit, 2)) {
-                return response()->json(['error' => "Journal entries do not balance."], 422);
-            }
-
-            // 2. Wipe the old ledger entries for this record
-            AccGeneralLedger::where('bank_record_id', $bankLog->id)->delete();
-
-            // 3. Save exactly the NEW User Entries
-            foreach ($request->entries as $entry) {
-                $account = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-                AccGeneralLedger::create([
-                    'bank_record_id'  => $bankLog->id,
-                    'transactionDate' => $bankLog->transaction_date,
-                    'accountCode'     => $entry['accountCode'],
-                    'accountName'     => $account->accountName ?? 'Manual Entry',
-                    'particulars'     => $bankLog->particulars,
-                    'referenceNo'     => $bankLog->reference_no,
-                    'debit'           => floatval($entry['debit'] ?? 0),
-                    'credit'          => floatval($entry['credit'] ?? 0),
-                    'branch'          => $bankLog->branch,
-                ]);
-            }
-            
-            return response()->json(['message' => 'Journal Entry updated successfully.']);
-        });
+        $bankLog = AccBankRecord::findOrFail($id);
+        $queue->enqueue('bank', $bankLog->reference_no, $bankLog->id, $bankLog->branch,
+            (string) $bankLog->transaction_date, $bankLog->particulars, $request->entries, true);
+        return response()->json(['message' => 'Pending journal entry updated.']);
     }
 
     public function update(Request $request, $id) {

@@ -159,8 +159,8 @@ export default function PPEDepreciation({ data, categories, chartOfAccounts, jou
                             <p className="text-2xl font-mono font-black text-indigo-400 mt-1">{formatCurrency(transportDeprn)}</p>
                         </div>
                         <div>
-                            <button onClick={() => openJournalModal('transport', transportDeprn)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${journalStatus.transport ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500 text-amber-950 shadow-xl shadow-amber-500/10 hover:bg-amber-400'}`}>
-                                {journalStatus.transport ? <><CheckCircle2 size={16}/> Edit Journal</> : <><BookOpen size={16}/> Post Journal</>}
+                            <button disabled={journalStatus.transport === 'approved'} onClick={() => openJournalModal('transport', transportDeprn)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${journalStatus.transport ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500 text-amber-950 shadow-xl shadow-amber-500/10 hover:bg-amber-400'}`}>
+                                {journalStatus.transport === 'approved' ? <><CheckCircle2 size={16}/> Approved</> : journalStatus.transport === 'pending_review' ? <><BookOpen size={16}/> Edit Pending</> : <><BookOpen size={16}/> Submit Journal</>}
                             </button>
                         </div>
                     </div>
@@ -171,8 +171,8 @@ export default function PPEDepreciation({ data, categories, chartOfAccounts, jou
                             <p className="text-2xl font-mono font-black text-fuchsia-400 mt-1">{formatCurrency(othersDeprn)}</p>
                         </div>
                         <div>
-                            <button onClick={() => openJournalModal('others', othersDeprn)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${journalStatus.others ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500 text-amber-950 shadow-xl shadow-amber-500/10 hover:bg-amber-400'}`}>
-                                {journalStatus.others ? <><CheckCircle2 size={16}/> Edit Journal</> : <><BookOpen size={16}/> Post Journal</>}
+                            <button disabled={journalStatus.others === 'approved'} onClick={() => openJournalModal('others', othersDeprn)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${journalStatus.others ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500 text-amber-950 shadow-xl shadow-amber-500/10 hover:bg-amber-400'}`}>
+                                {journalStatus.others === 'approved' ? <><CheckCircle2 size={16}/> Approved</> : journalStatus.others === 'pending_review' ? <><BookOpen size={16}/> Edit Pending</> : <><BookOpen size={16}/> Submit Journal</>}
                             </button>
                         </div>
                     </div>
@@ -334,7 +334,7 @@ export default function PPEDepreciation({ data, categories, chartOfAccounts, jou
                                 </div>
                             ))}
                         </div>
-                        <div className="flex justify-end pt-4"><button onClick={submitJournal} disabled={isSaving} className="w-full md:w-auto px-16 py-5 bg-amber-500 text-amber-950 font-black rounded-2xl uppercase tracking-widest">{isSaving ? 'Processing...' : (journalStatus[journalType] ? 'Update General Ledger' : 'Post to General Ledger')}</button></div>
+                        <div className="flex justify-end pt-4"><button onClick={submitJournal} disabled={isSaving} className="w-full md:w-auto px-16 py-5 bg-amber-500 text-amber-950 font-black rounded-2xl uppercase tracking-widest">{isSaving ? 'Processing...' : (journalStatus[journalType] === 'pending_review' ? 'Update Pending Journal' : 'Submit for Review')}</button></div>
                     </div>
                 </div>
             )}

@@ -92,19 +92,19 @@ export default function BankRecords({ records, currentBank, chartOfAccounts, beg
             return;
         }
 
-        const endpoint = recordToJournalize.is_posted
+        const endpoint = recordToJournalize.journal_status === 'pending_review'
             ? route('admin.accounting.bank.update-journal', recordToJournalize.id)
             : route('admin.accounting.bank.journalize', recordToJournalize.id);
 
         toast.promise(
             axios.post(endpoint, { entries: journalEntries }),
             {
-                loading: recordToJournalize.is_posted ? 'Updating General Ledger...' : 'Posting to General Ledger...',
+                loading: recordToJournalize.journal_status === 'pending_review' ? 'Updating pending journal...' : 'Submitting for review...',
                 success: () => {
                     setShowModal(false);
                     setRecordToJournalize(null);
                     router.reload();
-                    return recordToJournalize.is_posted ? 'Journal updated successfully!' : 'Journalized successfully!';
+                    return recordToJournalize.journal_status === 'pending_review' ? 'Pending journal updated!' : 'Journal submitted for review!';
                 },
                 error: (err) => {
                     return err.response?.data?.error || 'Failed to post journal entries.';
@@ -194,7 +194,9 @@ export default function BankRecords({ records, currentBank, chartOfAccounts, beg
                                                 <button onClick={handleSaveEdit} className="text-emerald-500 hover:text-emerald-400" title="Save"><Check size={18}/></button>
                                             ) : (
                                                 <>
-                                                    <button onClick={() => handleOpenJournal(record)} className={record.is_posted ? "text-emerald-500" : "text-amber-500"} title={record.is_posted ? "Edit Journal" : "Create Journal"}><BookOpen size={18}/></button>
+                                                    {record.is_posted
+                                                        ? <span className="text-emerald-500/60" title="Approved and posted"><BookOpen size={18}/></span>
+                                                        : <button onClick={() => handleOpenJournal(record)} className="text-amber-500" title={record.journal_status === 'pending_review' ? "Edit Pending Journal" : "Create Journal"}><BookOpen size={18}/></button>}
                                                     <button onClick={() => { setEditingId(record.id); setEditForm({...record}); }} className="text-slate-400 hover:text-indigo-400" title="Edit"><Edit2 size={18}/></button>
                                                 </>
                                             )}
