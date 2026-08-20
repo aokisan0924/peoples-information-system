@@ -3,183 +3,245 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccGeneralLedger;
 use App\Models\AccJournalEntry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AccJournalController extends Controller
 {
-    /**
-     * Unified journal index — all source types, filterable.
-     */
     public function index(Request $request): Response
     {
-        $status     = $request->input('status', 'pending_review');
-        $sourceType = $request->input('source_type', '');
-        $search     = $request->input('search', '');
-        $perPage    = (int) $request->input('perPage', 15);
+        $status = trim((string) $request->input('status', 'pending_review'));
+        $search = trim((string) $request->input('search', ''));
+        $perPage = max(1, min(50, (int) $request->input('perPage', 15)));
 
-        $query = AccJournalEntry::with(['member', 'reviewer'])
-            ->when($status,     fn($q) => $q->where('status', $status))
-            ->when($sourceType, fn($q) => $q->where('source_type', $sourceType))
-            ->when($search,     fn($q) => $q->where(function ($q) use ($search) {
-                $q->where('batch_reference', 'like', "%{$search}%")
-                  ->orWhere('particulars', 'like', "%{$search}%");
-            }))
-            ->orderBy('created_at', 'desc');
+        $lines = AccJournalEntry::query()
+            ->with(['member:id,firstName,lastName,username', 'reviewer:id,name'])
+            ->where('source_type', 'loan')
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($nested) use ($search) {
+                    $nested->where('batch_reference', 'like', "%{$search}%")
+                        ->orWhere('particulars', 'like', "%{$search}%")
+                        ->orWhereHas('member', function ($memberQuery) use ($search) {
+                            $memberQuery->where('firstName', 'like', "%{$search}%")
+                                ->orWhere('lastName', 'like', "%{$search}%")
+                                ->orWhere('username', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->latest('created_at')
+            ->get();
 
-        // Group by batch_reference so each batch shows as one row
-        $batches = $query->get()
+        $batches = $lines
             ->groupBy('batch_reference')
-            ->map(function ($lines) {
-                $first = $lines->first();
-                $dr    = $lines->firstWhere('debit', '>', 0);
-                $cr    = $lines->firstWhere('credit', '>', 0);
+            ->map(function (Collection $batchLines): array {
+                $first = $batchLines->first();
+
                 return [
-                    'batch_reference'  => $first->batch_reference,
-                    'source_type'      => $first->source_type,
-                    'memberId'         => $first->memberId,
-                    'member'           => $first->member,
-                    'branch'           => $first->branch,
-                    'transaction_date' => optional($first->transaction_date)->toDateString(),
-                    'status'           => $first->status,
-                    'particulars'      => $first->particulars,
-                    'amount'           => $dr?->debit ?? 0,
-                    'debit_line'       => $dr,
-                    'credit_line'      => $cr,
-                    'reviewed_by'      => $first->reviewer,
-                    'reviewed_at'      => optional($first->reviewed_at)->toDateTimeString(),
-                    'reviewer_notes'   => $first->reviewer_notes,
-                    'created_at'       => optional($first->created_at)->toDateTimeString(),
+                    'batch_reference' => $first->batch_reference,
+                    'source_type' => $first->source_type,
+                    'member' => $first->member,
+                    'branch' => $first->branch,
+                    'amount' => round((float) $batchLines->sum('debit'), 2),
+                    'status' => $first->status,
+                    'submitted_date' => optional($batchLines->min('created_at'))->toDateTimeString(),
+                    'reviewer' => $first->reviewer,
+                    'reviewed_at' => optional($first->reviewed_at)->toDateTimeString(),
                 ];
             })
             ->values();
 
-        // Manual pagination
-        $page      = (int) $request->input('page', 1);
-        $paged     = $batches->forPage($page, $perPage);
+        $page = max(1, (int) $request->input('page', 1));
         $paginator = new LengthAwarePaginator(
-            $paged, $batches->count(), $perPage, $page,
+            $batches->forPage($page, $perPage)->values(),
+            $batches->count(),
+            $perPage,
+            $page,
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
-        return Inertia::render('Admin/AccJournalIndex', [
-            'entries'  => $paginator,
-            'filters'  => compact('status', 'sourceType', 'search', 'perPage'),
-            'accounts' => AccJournalEntry::allAssetAccounts(),
-            'liabilities' => AccJournalEntry::allLiabilityAccounts(),
+        return Inertia::render('Admin/Accounting/JournalEntryIndex', [
+            'batches' => $paginator,
+            'filters' => compact('status', 'search', 'perPage'),
         ]);
     }
 
-    /**
-     * Edit a journal batch (clerk corrects accounts/amounts before approving).
-     */
-    public function update(Request $request, string $batchReference): JsonResponse
+    public function show(string $batchReference): Response
     {
-        $request->validate([
-            'debit_account_code'  => ['required', 'string', 'max:20'],
-            'debit_account_name'  => ['required', 'string', 'max:200'],
-            'credit_account_code' => ['required', 'string', 'max:20'],
-            'credit_account_name' => ['required', 'string', 'max:200'],
-            'amount'              => ['required', 'numeric', 'min:0.01'],
-            'particulars'         => ['nullable', 'string', 'max:500'],
-        ]);
-
-        $lines = AccJournalEntry::where('batch_reference', $batchReference)
-            ->where('status', 'pending_review')
+        $lines = AccJournalEntry::query()
+            ->with(['member:id,firstName,lastName,username,accountStatus', 'reviewer:id,name'])
+            ->where('source_type', 'loan')
+            ->where('batch_reference', $batchReference)
+            ->orderBy('id')
             ->get();
 
-        if ($lines->isEmpty()) {
-            return response()->json(['error' => true, 'message' => 'Entry not found or already reviewed.'], 404);
-        }
+        abort_if($lines->isEmpty(), 404, 'Journal batch not found.');
 
-        $amount = (float) $request->amount;
+        $totalDebit = round((float) $lines->sum('debit'), 2);
+        $totalCredit = round((float) $lines->sum('credit'), 2);
 
-        foreach ($lines as $line) {
-            if ($line->debit > 0) {
-                $line->update([
-                    'account_code' => $request->debit_account_code,
-                    'account_name' => $request->debit_account_name,
-                    'debit'        => $amount,
-                    'credit'       => 0,
-                    'particulars'  => $request->particulars ?? $line->particulars,
-                ]);
-            } else {
-                $line->update([
-                    'account_code' => $request->credit_account_code,
-                    'account_name' => $request->credit_account_name,
-                    'debit'        => 0,
-                    'credit'       => $amount,
-                    'particulars'  => $request->particulars ?? $line->particulars,
-                ]);
-            }
-        }
-
-        return response()->json(['error' => false, 'message' => 'Journal entry updated.']);
+        return Inertia::render('Admin/Accounting/JournalEntryReview', [
+            'batchReference' => $batchReference,
+            'lines' => $lines,
+            'member' => $lines->first()->member,
+            'totalDebit' => $totalDebit,
+            'totalCredit' => $totalCredit,
+            'isBalanced' => abs($totalDebit - $totalCredit) < 0.005,
+            'batchStatus' => $lines->first()->status,
+        ]);
     }
 
-    /**
-     * Approve & post to general ledger.
-     */
-    public function approve(Request $request, string $batchReference): JsonResponse
+    public function updateLine(Request $request, string $batchReference): JsonResponse
     {
-        $lines = AccJournalEntry::where('batch_reference', $batchReference)
+        $validated = $request->validate([
+            'line_id' => ['required', 'integer'],
+            'account_code' => ['required', 'string', 'max:20'],
+            'account_name' => ['required', 'string', 'max:200'],
+            'debit' => ['required', 'numeric', 'min:0'],
+            'credit' => ['required', 'numeric', 'min:0'],
+            'particulars' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $debit = round((float) $validated['debit'], 2);
+        $credit = round((float) $validated['credit'], 2);
+        if (($debit > 0 && $credit > 0) || ($debit <= 0 && $credit <= 0)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'A journal line must contain either a debit or a credit amount, but not both.',
+            ], 422);
+        }
+
+        $line = AccJournalEntry::query()
+            ->where('source_type', 'loan')
+            ->where('batch_reference', $batchReference)
             ->where('status', 'pending_review')
+            ->find($validated['line_id']);
+
+        if (!$line) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Journal line not found in this pending loan batch.',
+            ], 404);
+        }
+
+        $line->update([
+            'account_code' => $validated['account_code'],
+            'account_name' => $validated['account_name'],
+            'debit' => $debit,
+            'credit' => $credit,
+            'particulars' => $validated['particulars'] ?? null,
+        ]);
+
+        $batchLines = AccJournalEntry::query()
+            ->where('source_type', 'loan')
+            ->where('batch_reference', $batchReference)
             ->get();
-
-        if ($lines->isEmpty()) {
-            return response()->json(['error' => true, 'message' => 'Entry not found or already reviewed.'], 404);
-        }
-
-        $adminId = Auth::guard('admin')->id();
-
-        foreach ($lines as $line) {
-            $line->update([
-                'status'         => 'approved',
-                'reviewed_by'    => $adminId,
-                'reviewed_at'    => now(),
-                'reviewer_notes' => $request->input('notes'),
-            ]);
-        }
+        $totalDebit = round((float) $batchLines->sum('debit'), 2);
+        $totalCredit = round((float) $batchLines->sum('credit'), 2);
 
         return response()->json([
-            'error'   => false,
-            'message' => 'Entry approved and posted to general ledger.',
+            'ok' => true,
+            'message' => 'Journal line updated.',
+            'line' => $line->fresh(),
+            'totalDebit' => $totalDebit,
+            'totalCredit' => $totalCredit,
+            'isBalanced' => abs($totalDebit - $totalCredit) < 0.005,
         ]);
     }
 
-    /**
-     * Reject — requires a reason.
-     */
+    public function approve(Request $request, string $batchReference): JsonResponse
+    {
+        $validated = $request->validate([
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        DB::transaction(function () use ($batchReference, $validated): void {
+            $lines = AccJournalEntry::query()
+                ->where('source_type', 'loan')
+                ->where('batch_reference', $batchReference)
+                ->where('status', 'pending_review')
+                ->lockForUpdate()
+                ->orderBy('id')
+                ->get();
+
+            abort_if($lines->isEmpty(), 404, 'Journal batch not found or already reviewed.');
+
+            $totalDebit = round((float) $lines->sum('debit'), 2);
+            $totalCredit = round((float) $lines->sum('credit'), 2);
+            abort_if(abs($totalDebit - $totalCredit) >= 0.005, 422, 'Journal batch is not balanced.');
+
+            $reviewedAt = now();
+            $adminId = Auth::guard('admin')->id();
+
+            foreach ($lines as $line) {
+                abort_if(blank($line->branch), 422, 'Journal line is missing an office branch.');
+
+                AccGeneralLedger::create([
+                    'branch' => $line->branch,
+                    'referenceNo' => $line->batch_reference,
+                    'memberId' => $line->memberId,
+                    'accountCode' => $line->account_code,
+                    'accountName' => $line->account_name,
+                    'debit' => $line->debit,
+                    'credit' => $line->credit,
+                    'particulars' => $line->particulars,
+                    'transactionDate' => $line->transaction_date,
+                ]);
+
+                $line->update([
+                    'status' => 'approved',
+                    'reviewed_by' => $adminId,
+                    'reviewed_at' => $reviewedAt,
+                    'reviewer_notes' => $validated['notes'] ?? null,
+                ]);
+            }
+        });
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Loan journal batch approved and posted to the general ledger.',
+        ]);
+    }
+
     public function reject(Request $request, string $batchReference): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'notes' => ['required', 'string', 'max:500'],
         ]);
 
-        $lines = AccJournalEntry::where('batch_reference', $batchReference)
-            ->where('status', 'pending_review')
-            ->get();
+        DB::transaction(function () use ($batchReference, $validated): void {
+            $lines = AccJournalEntry::query()
+                ->where('source_type', 'loan')
+                ->where('batch_reference', $batchReference)
+                ->where('status', 'pending_review')
+                ->lockForUpdate()
+                ->get();
 
-        if ($lines->isEmpty()) {
-            return response()->json(['error' => true, 'message' => 'Entry not found or already reviewed.'], 404);
-        }
+            abort_if($lines->isEmpty(), 404, 'Journal batch not found or already reviewed.');
 
-        $adminId = Auth::guard('admin')->id();
+            $reviewedAt = now();
+            $adminId = Auth::guard('admin')->id();
+            foreach ($lines as $line) {
+                $line->update([
+                    'status' => 'rejected',
+                    'reviewed_by' => $adminId,
+                    'reviewed_at' => $reviewedAt,
+                    'reviewer_notes' => $validated['notes'],
+                ]);
+            }
+        });
 
-        foreach ($lines as $line) {
-            $line->update([
-                'status'         => 'rejected',
-                'reviewed_by'    => $adminId,
-                'reviewed_at'    => now(),
-                'reviewer_notes' => $request->notes,
-            ]);
-        }
-
-        return response()->json(['error' => false, 'message' => 'Entry rejected.']);
+        return response()->json([
+            'ok' => true,
+            'message' => 'Loan journal batch rejected.',
+        ]);
     }
 }

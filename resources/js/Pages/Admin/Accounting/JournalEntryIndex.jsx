@@ -1,498 +1,163 @@
-import React, { useState, useCallback } from "react";
-import { Head, usePage, router, Link } from "@inertiajs/react";
-import {
-    ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Pencil,
-    Save, X, BookOpen, User, Building2, Calendar, Info,
-    ShieldCheck, RotateCcw,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "react-hot-toast";
-import axios from "axios";
+import React, { useState } from "react";
+import { Head, Link, router } from "@inertiajs/react";
+import { BookOpenCheck, Building2, CalendarDays, Search, User, WalletCards } from "lucide-react";
 import AdminSidebarLayout from "@/Layouts/AdminSidebarLayout";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const currency = (value) =>
+    `₱${Number(value ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const fmt = (v) =>
-    `₱${Number(v ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
-
-const SOURCE_LABELS = {
-    membership: "Membership Fee",
-    capital:    "Share Capital",
-    savings:    "Savings Deposit",
-    memcap:     "Onboarding (Membership + Share Capital)",
+const statusClasses = {
+    pending_review: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+    approved: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+    rejected: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300",
 };
 
-const STATUS_COLORS = {
-    pending_review: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30",
-    approved:       "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30",
-    rejected:       "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30",
-};
+export default function JournalEntryIndex({ batches, filters }) {
+    const [search, setSearch] = useState(filters?.search ?? "");
+    const [status, setStatus] = useState(filters?.status ?? "pending_review");
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function JournalEntryReview() {
-    const {
-        batchReference, lines: initialLines, member,
-        totalDebit: initDebit, totalCredit: initCredit,
-        isBalanced: initBalanced, batchStatus,
-    } = usePage().props;
-
-    const [lines, setLines]         = useState(initialLines);
-    const [totalDebit, setTotalDebit]   = useState(initDebit);
-    const [totalCredit, setTotalCredit] = useState(initCredit);
-    const [isBalanced, setIsBalanced]   = useState(initBalanced);
-
-    const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm]   = useState({});
-    const [saving, setSaving]       = useState(false);
-
-    const [showApproveModal, setShowApproveModal] = useState(false);
-    const [showRejectModal, setShowRejectModal]   = useState(false);
-    const [notes, setNotes]         = useState("");
-    const [actioning, setActioning] = useState(false);
-
-    const isPending = batchStatus === "pending_review";
-
-    // ── Inline edit ──────────────────────────────────────────────────────────
-
-    const startEdit = (line) => {
-        setEditingId(line.id);
-        setEditForm({
-            account_code: line.account_code,
-            account_name: line.account_name,
-            debit:        line.debit,
-            credit:       line.credit,
-            particulars:  line.particulars ?? "",
-        });
-    };
-
-    const cancelEdit = () => { setEditingId(null); setEditForm({}); };
-
-    const saveLine = async (lineId) => {
-        setSaving(true);
-        try {
-            const { data } = await axios.patch(
-                route("admin.accounting.journal-entries.update-line", lineId),
-                editForm
-            );
-            if (!data.ok) { toast.error(data.message); return; }
-
-            // Patch local state
-            setLines((prev) =>
-                prev.map((l) => l.id === lineId ? { ...l, ...data.line } : l)
-            );
-            setTotalDebit(data.totalDebit);
-            setTotalCredit(data.totalCredit);
-            setIsBalanced(data.isBalanced);
-            setEditingId(null);
-            toast.success("Line updated.");
-        } catch (err) {
-            toast.error(err.response?.data?.message ?? "Failed to save.");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    // ── Approve ──────────────────────────────────────────────────────────────
-
-    const handleApprove = async () => {
-        if (!isBalanced) {
-            toast.error("Entry is not balanced. Fix debits/credits before approving.");
-            return;
-        }
-        setActioning(true);
-        try {
-            const { data } = await axios.post(
-                route("admin.accounting.journal-entries.approve", batchReference),
-                { notes }
-            );
-            if (!data.ok) { toast.error(data.message); return; }
-            toast.success(data.message);
-            setShowApproveModal(false);
-            router.visit(route("admin.accounting.journal-entries.index"));
-        } catch (err) {
-            toast.error(err.response?.data?.message ?? "Approval failed.");
-        } finally {
-            setActioning(false);
-        }
-    };
-
-    // ── Reject ───────────────────────────────────────────────────────────────
-
-    const handleReject = async () => {
-        if (!notes.trim()) { toast.error("Please provide a reason for rejection."); return; }
-        setActioning(true);
-        try {
-            const { data } = await axios.post(
-                route("admin.accounting.journal-entries.reject", batchReference),
-                { notes }
-            );
-            if (!data.ok) { toast.error(data.message); return; }
-            toast.success(data.message);
-            setShowRejectModal(false);
-            router.visit(route("admin.accounting.journal-entries.index"));
-        } catch (err) {
-            toast.error(err.response?.data?.message ?? "Rejection failed.");
-        } finally {
-            setActioning(false);
-        }
+    const applyFilters = (event) => {
+        event.preventDefault();
+        router.get(
+            route("admin.accounting.journal-entries.index"),
+            { search: search.trim(), status },
+            { preserveState: true, replace: true }
+        );
     };
 
     return (
         <AdminSidebarLayout>
-            <Head title={`Review — ${batchReference}`} />
+            <Head title="Loan Journal Review" />
 
-            <div className="max-w-5xl mx-auto space-y-6">
-                {/* ── Back + title ───────────────────────────────────────── */}
-                <div className="flex items-center gap-3">
-                    <Link
-                        href={route("admin.accounting.journal-entries.index")}
-                        className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-500 dark:text-white/50 hover:bg-slate-200 dark:hover:bg-white/10 transition"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                    </Link>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-                            Journal Entry Review
-                        </h1>
-                        <p className="text-xs text-slate-500 dark:text-white/50 font-mono mt-0.5">{batchReference}</p>
-                    </div>
-                    <span className={`ml-auto px-3 py-1 rounded-xl border text-xs font-semibold capitalize ${STATUS_COLORS[batchStatus] ?? ""}`}>
-                        {batchStatus?.replace("_", " ")}
-                    </span>
-                </div>
-
-                {/* ── Meta card ──────────────────────────────────────────── */}
-                <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-5 sm:p-6 grid grid-cols-2 sm:grid-cols-4 gap-4 shadow-sm transition-colors">
-                    <MetaItem icon={User} label="Member">
-                        {member ? `${member.lastName}, ${member.firstName}` : "—"}
-                        {member?.accountStatus && (
-                            <span className="block text-xs text-slate-400 dark:text-white/40 capitalize mt-0.5">{member.accountStatus}</span>
-                        )}
-                    </MetaItem>
-                    <MetaItem icon={BookOpen} label="Type">
-                        {SOURCE_LABELS[lines[0]?.source_type] ?? lines[0]?.source_type ?? "—"}
-                    </MetaItem>
-                    <MetaItem icon={Building2} label="Branch">
-                        {lines[0]?.branch ?? "—"}
-                    </MetaItem>
-                    <MetaItem icon={Calendar} label="Date">
-                        {lines[0]?.transaction_date ?? "—"}
-                    </MetaItem>
-                </div>
-
-                {/* ── Balance indicator ───────────────────────────────────── */}
-                <div className={`rounded-2xl border px-5 py-3.5 flex items-center justify-between gap-4 transition-colors ${
-                    isBalanced
-                        ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-                        : "border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10"
-                }`}>
-                    <div className="flex items-center gap-2">
-                        {isBalanced
-                            ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            : <AlertTriangle className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-                        }
-                        <span className={`text-sm font-semibold ${isBalanced ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"}`}>
-                            {isBalanced ? "Entry is balanced" : "Entry is NOT balanced — fix before approving"}
-                        </span>
-                    </div>
-                    <div className="flex gap-6 text-sm font-mono">
-                        <div className="text-right">
-                            <div className="text-xs text-slate-500 dark:text-white/40 uppercase tracking-wide">Total Dr.</div>
-                            <div className="font-bold text-slate-900 dark:text-white">{fmt(totalDebit)}</div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-xs text-slate-500 dark:text-white/40 uppercase tracking-wide">Total Cr.</div>
-                            <div className="font-bold text-slate-900 dark:text-white">{fmt(totalCredit)}</div>
-                        </div>
-                        {!isBalanced && (
-                            <div className="text-right">
-                                <div className="text-xs text-rose-400 uppercase tracking-wide">Difference</div>
-                                <div className="font-bold text-rose-600 dark:text-rose-400">{fmt(Math.abs(totalDebit - totalCredit))}</div>
+            <div className="mx-auto w-full max-w-[100rem] space-y-5 px-3 pb-24 sm:px-5">
+                <section className="rounded-[2rem] border border-white/5 bg-slate-900 p-5 shadow-2xl sm:p-8">
+                    <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+                        <div>
+                            <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-emerald-400">
+                                <BookOpenCheck className="h-4 w-4" /> Accounting Review Queue
                             </div>
-                        )}
-                    </div>
-                </div>
+                            <h1 className="text-2xl font-black uppercase tracking-tight text-white sm:text-3xl">
+                                Loan Journal Batches
+                            </h1>
+                            <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                                Review balanced loan-release entries before they are posted to the General Ledger.
+                            </p>
+                        </div>
 
-                {/* ── Journal lines ───────────────────────────────────────── */}
-                <div className="rounded-3xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 overflow-hidden shadow-xl transition-colors">
-                    <div className="px-5 py-4 border-b border-slate-200 dark:border-white/10 flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                            Journal Lines — {lines.length} entries
-                        </span>
-                        {isPending && (
-                            <span className="ml-auto text-xs text-slate-400 dark:text-white/30 flex items-center gap-1">
-                                <Pencil className="h-3 w-3" /> Click row to edit
-                            </span>
-                        )}
+                        <form onSubmit={applyFilters} className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] lg:max-w-2xl">
+                            <label className="relative">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                                <input
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                    placeholder="Reference or member"
+                                    className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:ring-emerald-500"
+                                />
+                            </label>
+                            <select
+                                value={status}
+                                onChange={(event) => setStatus(event.target.value)}
+                                className="rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-white focus:border-emerald-500 focus:ring-emerald-500"
+                            >
+                                <option value="pending_review">Pending review</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                                <option value="">All statuses</option>
+                            </select>
+                            <button className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500">
+                                Apply
+                            </button>
+                        </form>
                     </div>
+                </section>
 
-                    {/* Desktop */}
-                    <div className="hidden sm:block overflow-x-auto">
+                <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900/70">
+                    <div className="overflow-x-auto">
                         <table className="min-w-full text-left text-sm">
-                            <thead className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10 text-xs uppercase tracking-wider text-slate-500 dark:text-white/40">
+                            <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                                 <tr>
-                                    <th className="px-5 py-3 font-medium w-28">Code</th>
-                                    <th className="px-5 py-3 font-medium">Account Name</th>
-                                    <th className="px-5 py-3 font-medium">Particulars</th>
-                                    <th className="px-5 py-3 font-medium text-right w-36">Debit</th>
-                                    <th className="px-5 py-3 font-medium text-right w-36">Credit</th>
-                                    {isPending && <th className="px-5 py-3 font-medium w-20"></th>}
+                                    <th className="px-5 py-4">Batch reference</th>
+                                    <th className="px-5 py-4">Source</th>
+                                    <th className="px-5 py-4">Member</th>
+                                    <th className="px-5 py-4">Branch</th>
+                                    <th className="px-5 py-4 text-right">Amount</th>
+                                    <th className="px-5 py-4">Status</th>
+                                    <th className="px-5 py-4">Submitted</th>
+                                    <th className="px-5 py-4 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {lines.map((line) => {
-                                    const isEditing = editingId === line.id;
-                                    return (
-                                        <tr
-                                            key={line.id}
-                                            className={`transition-colors ${isEditing ? "bg-emerald-50/60 dark:bg-emerald-500/5" : "hover:bg-slate-50 dark:hover:bg-white/5"}`}
-                                        >
-                                            {isEditing ? (
-                                                <>
-                                                    <td className="px-4 py-3">
-                                                        <input value={editForm.account_code} onChange={(e) => setEditForm(f => ({ ...f, account_code: e.target.value }))}
-                                                            className={inputCls} />
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <input value={editForm.account_name} onChange={(e) => setEditForm(f => ({ ...f, account_name: e.target.value }))}
-                                                            className={inputCls} />
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <input value={editForm.particulars} onChange={(e) => setEditForm(f => ({ ...f, particulars: e.target.value }))}
-                                                            className={inputCls} />
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <input type="number" min="0" step="0.01" value={editForm.debit}
-                                                            onChange={(e) => setEditForm(f => ({ ...f, debit: e.target.value }))}
-                                                            className={`${inputCls} text-right`} />
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right">
-                                                        <input type="number" min="0" step="0.01" value={editForm.credit}
-                                                            onChange={(e) => setEditForm(f => ({ ...f, credit: e.target.value }))}
-                                                            className={`${inputCls} text-right`} />
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex gap-1.5 justify-end">
-                                                            <button onClick={() => saveLine(line.id)} disabled={saving}
-                                                                className="h-8 w-8 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center disabled:opacity-50 transition">
-                                                                <Save className="h-3.5 w-3.5" />
-                                                            </button>
-                                                            <button onClick={cancelEdit}
-                                                                className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-white/50 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/20 transition">
-                                                                <X className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <td className="px-5 py-4 font-mono text-xs text-slate-500 dark:text-white/50 whitespace-nowrap">
-                                                        {line.account_code}
-                                                    </td>
-                                                    <td className="px-5 py-4 text-slate-900 dark:text-white font-medium whitespace-nowrap">
-                                                        {line.account_name}
-                                                    </td>
-                                                    <td className="px-5 py-4 text-slate-500 dark:text-white/50 text-xs max-w-xs truncate">
-                                                        {line.particulars ?? "—"}
-                                                    </td>
-                                                    <td className="px-5 py-4 text-right font-mono text-slate-900 dark:text-white">
-                                                        {line.debit > 0 ? fmt(line.debit) : <span className="text-slate-300 dark:text-white/20">—</span>}
-                                                    </td>
-                                                    <td className="px-5 py-4 text-right font-mono text-slate-900 dark:text-white">
-                                                        {line.credit > 0 ? fmt(line.credit) : <span className="text-slate-300 dark:text-white/20">—</span>}
-                                                    </td>
-                                                    {isPending && (
-                                                        <td className="px-5 py-4 text-right">
-                                                            <button onClick={() => startEdit(line)}
-                                                                className="h-8 w-8 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-500 dark:text-white/50 flex items-center justify-center transition ml-auto">
-                                                                <Pencil className="h-3.5 w-3.5" />
-                                                            </button>
-                                                        </td>
-                                                    )}
-                                                </>
-                                            )}
-                                        </tr>
-                                    );
-                                })}
+                                {batches.data.map((batch) => (
+                                    <tr key={batch.batch_reference} className="transition hover:bg-slate-50 dark:hover:bg-white/[0.03]">
+                                        <td className="whitespace-nowrap px-5 py-4 font-mono text-xs font-bold text-slate-900 dark:text-white">
+                                            {batch.batch_reference}
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                                                <WalletCards className="h-3.5 w-3.5 text-emerald-500" /> Loan release
+                                            </span>
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <span className="flex items-center gap-2 whitespace-nowrap text-slate-700 dark:text-slate-200">
+                                                <User className="h-3.5 w-3.5 text-slate-400" />
+                                                {batch.member ? `${batch.member.lastName}, ${batch.member.firstName}` : "—"}
+                                            </span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-5 py-4 text-slate-600 dark:text-slate-300">
+                                            <span className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5 text-slate-400" />{batch.branch || "—"}</span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-5 py-4 text-right font-mono font-bold text-slate-900 dark:text-white">
+                                            {currency(batch.amount)}
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <span className={`inline-flex rounded-lg border px-2.5 py-1 text-[11px] font-bold capitalize ${statusClasses[batch.status] ?? ""}`}>
+                                                {batch.status?.replace("_", " ")}
+                                            </span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500 dark:text-slate-400">
+                                            <span className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5" />{batch.submitted_date ? new Date(batch.submitted_date).toLocaleString() : "—"}</span>
+                                        </td>
+                                        <td className="px-5 py-4 text-right">
+                                            <Link
+                                                href={route("admin.accounting.journal-entries.show", batch.batch_reference)}
+                                                className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-600 dark:bg-white/10 dark:hover:bg-emerald-600"
+                                            >
+                                                Review
+                                            </Link>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
-                            {/* Totals footer */}
-                            <tfoot className="bg-slate-50 dark:bg-white/5 border-t border-slate-200 dark:border-white/10 text-sm font-bold">
-                                <tr>
-                                    <td colSpan={3} className="px-5 py-3 text-slate-500 dark:text-white/50 uppercase text-xs tracking-wide">Totals</td>
-                                    <td className="px-5 py-3 text-right font-mono text-slate-900 dark:text-white">{fmt(totalDebit)}</td>
-                                    <td className="px-5 py-3 text-right font-mono text-slate-900 dark:text-white">{fmt(totalCredit)}</td>
-                                    {isPending && <td />}
-                                </tr>
-                            </tfoot>
                         </table>
                     </div>
 
-                    {/* Mobile lines */}
-                    <div className="block sm:hidden divide-y divide-slate-100 dark:divide-white/10">
-                        {lines.map((line) => (
-                            <div key={line.id} className="p-4 space-y-2">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <div className="font-mono text-xs text-slate-400 dark:text-white/30">{line.account_code}</div>
-                                        <div className="text-slate-900 dark:text-white font-semibold text-sm">{line.account_name}</div>
-                                        {line.particulars && <div className="text-xs text-slate-400 dark:text-white/40 mt-0.5">{line.particulars}</div>}
-                                    </div>
-                                    {isPending && editingId !== line.id && (
-                                        <button onClick={() => startEdit(line)}
-                                            className="h-8 w-8 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-500 dark:text-white/50 flex items-center justify-center transition">
-                                            <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-slate-400 dark:text-white/40">Dr <span className="font-mono font-bold text-slate-700 dark:text-white/80">{line.debit > 0 ? fmt(line.debit) : "—"}</span></span>
-                                    <span className="text-slate-400 dark:text-white/40">Cr <span className="font-mono font-bold text-slate-700 dark:text-white/80">{line.credit > 0 ? fmt(line.credit) : "—"}</span></span>
-                                </div>
-                            </div>
-                        ))}
-                        <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 flex justify-between text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-white/40">
-                            <span>Total Dr: <span className="font-mono text-slate-900 dark:text-white">{fmt(totalDebit)}</span></span>
-                            <span>Total Cr: <span className="font-mono text-slate-900 dark:text-white">{fmt(totalCredit)}</span></span>
+                    {batches.data.length === 0 && (
+                        <div className="px-6 py-16 text-center">
+                            <BookOpenCheck className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+                            <p className="mt-3 font-bold text-slate-700 dark:text-slate-200">No loan journal batches found.</p>
+                            <p className="mt-1 text-sm text-slate-400">Try another status or search term.</p>
                         </div>
-                    </div>
-                </div>
+                    )}
 
-                {/* ── Reviewer notes (read-only if already reviewed) ───────── */}
-                {!isPending && lines[0]?.reviewer_notes && (
-                    <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-5 py-4">
-                        <div className="flex items-center gap-2 mb-1.5">
-                            <Info className="h-4 w-4 text-slate-400" />
-                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-white/40">Reviewer Notes</span>
+                    {batches.links?.length > 3 && (
+                        <div className="flex flex-wrap justify-center gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10">
+                            {batches.links.map((link, index) => (
+                                link.url ? (
+                                    <Link
+                                        key={`${link.label}-${index}`}
+                                        href={link.url}
+                                        preserveScroll
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-bold ${link.active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"}`}
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                ) : (
+                                    <span key={`${link.label}-${index}`} className="rounded-lg px-3 py-1.5 text-xs text-slate-300 dark:text-slate-600" dangerouslySetInnerHTML={{ __html: link.label }} />
+                                )
+                            ))}
                         </div>
-                        <p className="text-sm text-slate-700 dark:text-white/70">{lines[0].reviewer_notes}</p>
-                    </div>
-                )}
-
-                {/* ── Action buttons ──────────────────────────────────────── */}
-                {isPending && (
-                    <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
-                        <button
-                            onClick={() => { setNotes(""); setShowRejectModal(true); }}
-                            className="px-6 py-3 rounded-2xl border border-rose-200 bg-rose-50 dark:border-rose-500/30 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 font-bold text-sm hover:bg-rose-100 dark:hover:bg-rose-500/20 transition flex items-center justify-center gap-2 shadow-sm"
-                        >
-                            <XCircle className="h-4 w-4" /> Reject Entry
-                        </button>
-                        <button
-                            onClick={() => { setNotes(""); setShowApproveModal(true); }}
-                            disabled={!isBalanced}
-                            className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
-                        >
-                            <ShieldCheck className="h-4 w-4" /> Approve & Post to GL
-                        </button>
-                    </div>
-                )}
+                    )}
+                </section>
             </div>
-
-            {/* ── Approve modal ─────────────────────────────────────────────── */}
-            <AnimatePresence>
-                {showApproveModal && (
-                    <ConfirmModal
-                        title="Approve & Post to General Ledger"
-                        description={`This will permanently post all ${lines.length} lines for batch ${batchReference} to the General Ledger. This action cannot be undone.`}
-                        confirmLabel="Approve & Post"
-                        confirmClass="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20"
-                        notes={notes}
-                        onNotesChange={setNotes}
-                        notesPlaceholder="Optional notes for audit trail..."
-                        onConfirm={handleApprove}
-                        onClose={() => setShowApproveModal(false)}
-                        loading={actioning}
-                        icon={<ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />}
-                        iconBg="bg-emerald-100 dark:bg-emerald-500/20 border-emerald-200 dark:border-emerald-500/30"
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* ── Reject modal ──────────────────────────────────────────────── */}
-            <AnimatePresence>
-                {showRejectModal && (
-                    <ConfirmModal
-                        title="Reject Journal Entry"
-                        description="The entry will be marked as rejected and will not be posted to the General Ledger. A reason is required."
-                        confirmLabel="Reject Entry"
-                        confirmClass="bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/20"
-                        notes={notes}
-                        onNotesChange={setNotes}
-                        notesPlaceholder="Reason for rejection (required)..."
-                        onConfirm={handleReject}
-                        onClose={() => setShowRejectModal(false)}
-                        loading={actioning}
-                        icon={<XCircle className="h-6 w-6 text-rose-600 dark:text-rose-400" />}
-                        iconBg="bg-rose-100 dark:bg-rose-500/20 border-rose-200 dark:border-rose-500/30"
-                    />
-                )}
-            </AnimatePresence>
         </AdminSidebarLayout>
-    );
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const inputCls = "w-full rounded-lg bg-white dark:bg-white/10 border border-slate-200 dark:border-white/20 text-slate-900 dark:text-white px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition";
-
-function MetaItem({ icon: Icon, label, children }) {
-    return (
-        <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-white/40 uppercase tracking-wide font-medium">
-                <Icon className="h-3.5 w-3.5" /> {label}
-            </div>
-            <div className="text-sm text-slate-900 dark:text-white font-medium">{children}</div>
-        </div>
-    );
-}
-
-function ConfirmModal({ title, description, confirmLabel, confirmClass, notes, onNotesChange, notesPlaceholder, onConfirm, onClose, loading, icon, iconBg }) {
-    return (
-        <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4">
-            <motion.div
-                className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onClick={onClose}
-            />
-            <motion.div
-                className="relative w-full max-w-md bg-white dark:bg-[#0f1f1a] rounded-3xl shadow-2xl overflow-hidden"
-                initial={{ scale: 0.97, y: -14 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, y: -14 }}
-                transition={{ type: "spring", damping: 28, stiffness: 320 }}
-            >
-                <div className="p-6 sm:p-8 space-y-5">
-                    <div className="flex items-center gap-4">
-                        <div className={`h-12 w-12 rounded-2xl border flex items-center justify-center shrink-0 ${iconBg}`}>
-                            {icon}
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
-                            <p className="text-xs text-slate-500 dark:text-white/50 mt-0.5">{description}</p>
-                        </div>
-                    </div>
-
-                    <textarea
-                        className="w-full rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm px-4 py-3 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition placeholder:text-slate-400 dark:placeholder:text-white/20 resize-none"
-                        rows={3}
-                        value={notes}
-                        onChange={(e) => onNotesChange(e.target.value)}
-                        placeholder={notesPlaceholder}
-                    />
-
-                    <div className="flex gap-3 justify-end">
-                        <button onClick={onClose} disabled={loading}
-                            className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-white/70 font-semibold text-sm hover:bg-slate-200 dark:hover:bg-white/10 transition disabled:opacity-50">
-                            Cancel
-                        </button>
-                        <button onClick={onConfirm} disabled={loading}
-                            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition disabled:opacity-50 flex items-center gap-2 ${confirmClass}`}>
-                            {loading && <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-                            {confirmLabel}
-                        </button>
-                    </div>
-                </div>
-            </motion.div>
-        </div>
     );
 }

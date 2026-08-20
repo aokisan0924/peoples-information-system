@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\AdminComputationController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AdminProfileController;
+use App\Http\Controllers\Admin\AccJournalController;
 use App\Http\Controllers\Admin\LoanController;
 use App\Http\Controllers\Admin\MemberController;
 use App\Http\Controllers\Admin\MemberDataController;
@@ -279,6 +280,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 Route::prefix('general-journal')->name('journal.')->group(function () {
                     Route::get('/', [AccGeneralJournalController::class, 'index'])->name('index');
                     Route::post('/store', [AccGeneralJournalController::class, 'store'])->name('store');
+                });
+
+                Route::prefix('journal-entries')->name('journal-entries.')->group(function () {
+                    Route::get('/', [AccJournalController::class, 'index'])->name('index');
+                    Route::get('/{batchReference}', [AccJournalController::class, 'show'])->name('show');
+                    Route::post('/{batchReference}/update-line', [AccJournalController::class, 'updateLine'])->name('update-line');
+                    Route::post('/{batchReference}/approve', [AccJournalController::class, 'approve'])->name('approve');
+                    Route::post('/{batchReference}/reject', [AccJournalController::class, 'reject'])->name('reject');
                 });
 
                 Route::prefix('reports')->name('reports.')->group(function () {

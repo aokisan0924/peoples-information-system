@@ -16,6 +16,7 @@ const fmt = (v) =>
     `₱${Number(v ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
 
 const SOURCE_LABELS = {
+    loan:       "Loan Release",
     membership: "Membership Fee",
     capital:    "Share Capital",
     savings:    "Savings Deposit",
@@ -71,9 +72,9 @@ export default function JournalEntryReview() {
     const saveLine = async (lineId) => {
         setSaving(true);
         try {
-            const { data } = await axios.patch(
-                route("admin.accounting.journal-entries.update-line", lineId),
-                editForm
+            const { data } = await axios.post(
+                route("admin.accounting.journal-entries.update-line", batchReference),
+                { ...editForm, line_id: lineId }
             );
             if (!data.ok) { toast.error(data.message); return; }
 

@@ -4,7 +4,7 @@ import {
     PiggyBank, Banknote, Hourglass, CreditCard, ChevronDown, Sun, Moon,
     User, UserPlus, Megaphone, Image, BookOpen, Layers, Landmark,
     Wallet2, Smartphone, Briefcase, Scale, PenTool, ChevronRight, Receipt,
-    FileArchive, PieChart, Bell
+    FileArchive, PieChart, Bell, ShieldCheck
 } from "lucide-react";
 import { Link, usePage, router } from "@inertiajs/react";
 import axios from "axios";
@@ -48,6 +48,7 @@ const buildNavGroups = ({ isSuperAdmin, isAccountingClerk, isBookkeeper, canAcce
             accItems.push({ name: "admin.accounting.ppe.index",     label: "PPE Depreciation",  icon: Briefcase });
             accItems.push({ name: "admin.accounting.chart.index",   label: "Chart of Accounts", icon: Layers    });
             accItems.push({ name: "admin.accounting.journal.index", label: "General Journal",   icon: PenTool   });
+            accItems.push({ name: "admin.accounting.journal-entries.index", label: "Loan Journal Review", icon: ShieldCheck });
         }
         const accGroup = { id: "accounting", label: "Accounting", items: accItems };
         if (canAccess("accounting")) {
