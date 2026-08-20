@@ -18,6 +18,7 @@ class AccountingJournalQueue
         string $particulars,
         array $entries,
         bool $replacePending = false,
+        ?int $memberId = null,
     ): void {
         $totalDebit = round((float) collect($entries)->sum(fn ($entry) => (float) ($entry['debit'] ?? 0)), 2);
         $totalCredit = round((float) collect($entries)->sum(fn ($entry) => (float) ($entry['credit'] ?? 0)), 2);
@@ -47,6 +48,7 @@ class AccountingJournalQueue
             $particulars,
             $entries,
             $replacePending,
+            $memberId,
         ): void {
             $existing = AccJournalEntry::query()
                 ->where('source_type', $sourceType)
@@ -82,6 +84,7 @@ class AccountingJournalQueue
                     'batch_reference' => $batchReference,
                     'source_type' => $sourceType,
                     'source_record_id' => $sourceRecordId,
+                    'memberId' => $memberId,
                     'branch' => $branch,
                     'account_code' => $entry['accountCode'],
                     'account_name' => $account?->accountName ?? ($entry['accountName'] ?? 'Manual Entry'),

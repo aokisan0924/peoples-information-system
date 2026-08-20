@@ -324,7 +324,7 @@ export default function AdminLoanDocuments({ loan, requiredType = [], existingDo
                                                     </div>
                                                 </div>
                                                 <a
-                                                    href={route('admin.loans.documents.preview', {
+                                                    href={route('admin.loans.preDocuments.preview', {
                                                         loanReference: loan.loanReference,
                                                         documentId: d.id
                                                     })}

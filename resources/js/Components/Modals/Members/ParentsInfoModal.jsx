@@ -49,7 +49,7 @@ export const ParentsModal = ({ member, onClose }) => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-parents-info', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-parents-info', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('Parents info updated successfully.');

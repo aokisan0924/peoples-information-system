@@ -2,23 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Member;
-use App\Models\SpouseInfo;
-use App\Models\ParentsInfo;
 use App\Models\AFPInfo;
 use App\Models\BranchService;
-use App\Models\CapitalContribution;
-use App\Models\IdentificationInfo;
-use App\Models\EmergencyContact;
 use App\Models\Dependent;
-use App\Models\MembershipPayment;
+use App\Models\EmergencyContact;
+use App\Models\IdentificationInfo;
+use App\Models\Member;
+use App\Models\ParentsInfo;
+use App\Models\SpouseInfo;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -29,7 +28,10 @@ class MemberRegistrationController extends Controller
         try {
             DB::beginTransaction();
 
-            Log::info('Incoming Registration Request', $request->all());
+            Log::info('Incoming member registration request', [
+                'email' => $request->input('email'),
+                'branch' => $request->input('branch'),
+            ]);
 
             $validated = $request->validate([
                 // Member Info
@@ -38,12 +40,12 @@ class MemberRegistrationController extends Controller
                 'middleName' => 'nullable|string|max:255',
                 'suffix' => 'nullable|string|max:10',
                 'nickname' => 'nullable|string|max:255',
-                'dob' => 'required|date',
+                'dob' => 'required|date|before_or_equal:today',
                 'religion' => 'nullable|string|max:255',
                 'age' => 'nullable|numeric|min:0|max:120',
                 'gender' => 'required|string|max:20',
                 'civilStatus' => 'required|string|max:50',
-                'nationality' => 'nullable|string|max:100',
+                'nationality' => 'required|string|max:100',
                 'email' => 'required|email|unique:members,email',
                 'contact' => 'required|string|max:20',
                 'region' => 'nullable|string',
@@ -54,7 +56,7 @@ class MemberRegistrationController extends Controller
                 'cityName' => 'nullable|string',
                 'barangay' => 'nullable|string',
                 'barangayName' => 'nullable|string',
-                'fullAddress' => 'nullable|string|max:500',
+                'fullAddress' => 'required|string|max:500',
                 'profileImage' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
                 'signatureData' => 'nullable|string',
                 'branch' => ['required', 'string', Rule::in(Member::OFFICE_BRANCHES)],
@@ -114,7 +116,7 @@ class MemberRegistrationController extends Controller
                 $signature = explode(',', $request->input('signatureData'))[1] ?? null;
                 if ($signature) {
                     $signatureBinary = base64_decode($signature);
-                    $signaturePath = 'signatures/' . uniqid() . '.png';
+                    $signaturePath = 'signatures/'.uniqid().'.png';
                     Storage::disk('public')->put($signaturePath, $signatureBinary);
                     $validated['signaturePath'] = $signaturePath;
                 }
@@ -122,6 +124,9 @@ class MemberRegistrationController extends Controller
 
             // Generate credentials
             $generatedPassword = Str::random(10);
+
+            // Age is persisted by the schema and must never depend on a client-computed value.
+            $validated['age'] = Carbon::parse($validated['dob'])->age;
 
             // Create member
             $member = Member::create([
@@ -132,13 +137,13 @@ class MemberRegistrationController extends Controller
 
             // Update username with formatted ID
             $member->update([
-                'username' => 'PMPC-' . str_pad($member->id, 3, '0', STR_PAD_LEFT),
+                'username' => 'PMPC-'.str_pad($member->id, 3, '0', STR_PAD_LEFT),
             ]);
 
             // Related info
             AFPInfo::create(['memberId' => $member->id] + $request->only([
                 'afpsn', 'rank', 'designation', 'afpId', 'presentAssignment',
-                'controlNo', 'yearsInService', 'cadEnlistment', 'retirementDate', 'pensionDate'
+                'controlNo', 'yearsInService', 'cadEnlistment', 'retirementDate', 'pensionDate',
             ]));
 
             BranchService::create(['memberId' => $member->id] + $request->only(['branchService', 'subBranch']));
@@ -157,46 +162,54 @@ class MemberRegistrationController extends Controller
                 ]);
             }
 
-            // Email Notification
-            Mail::raw("Welcome to PMPC!\nUsername: {$member->username}\nPassword: $generatedPassword", function ($message) use ($member) {
-                $message->to($member->email)->subject('Your PMPC Login Credentials');
-            });
+            DB::commit();
+
+            // Notifications are best-effort and must not undo a completed registration.
+            try {
+                Mail::raw("Welcome to PMPC!\nUsername: {$member->username}\nPassword: $generatedPassword", function ($message) use ($member) {
+                    $message->to($member->email)->subject('Your PMPC Login Credentials');
+                });
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
 
             // SMS Notification
             try {
-                $response = Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
-                    'apikey'     => config('services.semaphore.api_key'),
-                    'number'     => preg_replace('/^0/', '63', $member->contact),
-                    'message'    => "Welcome to PMPC, {$member->firstName}! Username: {$member->username} | Password: $generatedPassword",
-                    'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'), 
-                ]);
+                if (filled(config('services.semaphore.api_key'))) {
+                    $response = Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
+                        'apikey' => config('services.semaphore.api_key'),
+                        'number' => preg_replace('/^0/', '63', $member->contact),
+                        'message' => "Welcome to PMPC, {$member->firstName}! Username: {$member->username} | Password: $generatedPassword",
+                        'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
+                    ]);
 
-                if ($response->successful()) {
-                    Log::info('Semaphore SMS sent successfully', [
-                        'status' => $response->status(),
-                        'body'   => $response->body(),
-                    ]);
-                } else {
-                    Log::error('Semaphore SMS failed', [
-                        'status' => $response->status(),
-                        'body'   => $response->body(),
-                    ]);
+                    if ($response->successful()) {
+                        Log::info('Semaphore SMS sent successfully', [
+                            'status' => $response->status(),
+                            'body' => $response->body(),
+                        ]);
+                    } else {
+                        Log::error('Semaphore SMS failed', [
+                            'status' => $response->status(),
+                            'body' => $response->body(),
+                        ]);
+                    }
                 }
             } catch (\Exception $e) {
-                Log::error('SMS sending exception: ' . $e->getMessage());
+                Log::error('SMS sending exception: '.$e->getMessage());
             }
-            
-
-            DB::commit();
 
             return redirect()->route('login')->with('message', 'Registration successful!');
 
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Registration failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            Log::error('Registration failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+
             return redirect()->back()->withErrors([
                 'form' => 'Registration failed. Please try again.',
-                'exception' => $e->getMessage()
+                'exception' => $e->getMessage(),
             ])->withInput();
         }
     }

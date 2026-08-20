@@ -57,7 +57,7 @@ export const BasicInfoModal = ({ member, onClose }) => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-basic-info', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-basic-info', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('Basic Info updated successfully.');

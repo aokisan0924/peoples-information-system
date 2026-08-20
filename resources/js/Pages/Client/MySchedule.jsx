@@ -28,6 +28,12 @@ const STATUS_CONFIG = {
         pill: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:border-rose-500/30',
         icon_cls: 'text-rose-500 dark:text-rose-400',
     },
+    partial: {
+        label: 'Partial', icon: Clock, row: 'bg-sky-50 dark:bg-sky-500/[0.04]',
+        text: 'text-sky-800 dark:text-sky-300',
+        pill: 'bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-500/20 dark:text-sky-400 dark:border-sky-500/30',
+        icon_cls: 'text-sky-500 dark:text-sky-400',
+    },
     pending: {
         label: 'Pending',
         icon: Clock,
@@ -287,13 +293,16 @@ export default function MySchedule(props) {
                                             <th className="px-5 py-3.5">#</th>
                                             <th className="px-5 py-3.5">Due Date</th>
                                             <th className="px-5 py-3.5 text-right">Amount Due</th>
+                                            <th className="px-5 py-3.5 text-right">Principal</th>
+                                            <th className="px-5 py-3.5 text-right">Interest</th>
+                                            <th className="px-5 py-3.5 text-right">Balance</th>
                                             <th className="px-5 py-3.5 text-center">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] text-xs">
                                         {schedule.length === 0 ? (
                                             <tr>
-                                                <td colSpan={4} className="px-5 py-14 text-center text-sm text-slate-400 dark:text-white/20">
+                                                <td colSpan={7} className="px-5 py-14 text-center text-sm text-slate-400 dark:text-white/20">
                                                     No schedule records found for this loan.
                                                 </td>
                                             </tr>
@@ -320,6 +329,9 @@ export default function MySchedule(props) {
                                                         <td className={`px-5 py-3.5 text-right font-black font-mono tracking-tight ${cfg.text}`}>
                                                             {formatCurrency(row.amountDue)}
                                                         </td>
+                                                        <td className="px-5 py-3.5 text-right font-mono text-emerald-600 dark:text-emerald-400">{formatCurrency(row.principalDue)}</td>
+                                                        <td className="px-5 py-3.5 text-right font-mono text-amber-600 dark:text-amber-400">{formatCurrency(row.interestDue)}</td>
+                                                        <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-700 dark:text-white/70">{formatCurrency(row.closingBalance)}</td>
                                                         <td className="px-5 py-3.5 text-center font-sans">
                                                             <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-black uppercase tracking-wide ${cfg.pill}`}>
                                                                 <StatusIcon size={10} className={cfg.icon_cls} />

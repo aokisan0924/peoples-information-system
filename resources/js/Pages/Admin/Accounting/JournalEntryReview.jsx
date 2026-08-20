@@ -17,6 +17,7 @@ const fmt = (v) =>
 
 const SOURCE_LABELS = {
     loan:       "Loan Release",
+    loan_payment: "Loan Payment",
     membership: "Membership Fee",
     capital:    "Share Capital",
     savings:    "Savings Deposit",

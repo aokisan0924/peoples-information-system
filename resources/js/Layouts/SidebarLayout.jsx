@@ -86,9 +86,11 @@ export default function SidebarLayout({ children }) {
     }, []);
 
     // ── DARK MODE ─────────────────────────────────────────────────────────────
-    const [isDark, setIsDark] = useState(() =>
-        typeof window !== "undefined" ? localStorage.getItem("theme") !== "light" : true
-    );
+    const [isDark, setIsDark] = useState(() => {
+        if (typeof window === "undefined") return false;
+        const saved = localStorage.getItem("theme");
+        return saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    });
     useEffect(() => {
         document.documentElement.classList.toggle("dark",  isDark);
         document.documentElement.classList.toggle("light", !isDark);
@@ -235,6 +237,9 @@ export default function SidebarLayout({ children }) {
                             <button
                                 onClick={() => setIsDark(p => !p)}
                                 className="h-8 w-8 grid place-items-center rounded-lg border border-slate-200 dark:border-[#374151] bg-white dark:bg-[#1f2937] text-slate-500 dark:text-[#9ca3af] hover:bg-slate-50 dark:hover:bg-[#374151] transition"
+                                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                                aria-pressed={isDark}
+                                title={isDark ? "Switch to light mode" : "Switch to dark mode"}
                             >
                                 {isDark ? <Sun size={14} /> : <Moon size={14} />}
                             </button>
@@ -548,7 +553,7 @@ function PasswordModal({ onClose }) {
         setSaving(true);
         try {
             // This route calls 'sendOtp' in MemberChangePasswordController
-            const { data } = await axios.post(route("update-password"), {
+            const { data } = await axios.post(route("member.update-password"), {
                 current_password: form.current,
             });
             
@@ -579,7 +584,7 @@ function PasswordModal({ onClose }) {
         setSaving(true);
         try {
             // This route calls 'verifyAndChange' in MemberChangePasswordController
-            const { data } = await axios.post(route("settings.change-password.verify"), {
+            const { data } = await axios.post(route("member.settings.change-password.verify"), {
                 otpToken: otpContext.token,
                 otpCode: form.otpCode,
                 password: form.password,

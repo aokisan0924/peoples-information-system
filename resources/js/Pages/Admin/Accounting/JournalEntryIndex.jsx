@@ -14,6 +14,7 @@ const statusClasses = {
 
 const sourceMeta = {
     loan: { label: "Loan release", icon: CreditCard },
+    loan_payment: { label: "Loan payment", icon: CreditCard },
     petty_cash: { label: "Petty cash", icon: Banknote },
     ewallet: { label: "E-Wallet", icon: Smartphone },
     bank: { label: "Bank record", icon: Landmark },

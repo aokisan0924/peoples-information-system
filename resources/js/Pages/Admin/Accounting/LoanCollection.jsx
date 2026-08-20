@@ -22,6 +22,7 @@ function StatusBadge({ status }) {
     let cls  = 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-white/50';
     let Icon = Clock;
     if (s === 'paid')    { cls = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'; Icon = CheckCircle2; }
+    if (s === 'partial') { cls = 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400'; Icon = Clock; }
     if (s === 'overdue') { cls = 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400';             Icon = AlertCircle;  }
     return (
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${cls}`}>
@@ -114,6 +115,8 @@ function IndividualTerminal() {
     const [isLoading,        setIsLoading]        = useState(false);
     const [targetInstallment,setTargetInstallment]= useState(null);
     const [referenceNumber,  setReferenceNumber]  = useState('');
+    const [paymentAmount,    setPaymentAmount]    = useState('');
+    const [legacyWarning,    setLegacyWarning]    = useState(null);
     const [isSubmitting,     setIsSubmitting]     = useState(false);
     const searchRef = useRef(null);
 
@@ -144,7 +147,10 @@ function IndividualTerminal() {
             setLoans(data.loans);
             setActiveLoan(data.activeLoan);
             setSchedule(data.schedule);
-            setTargetInstallment(data.schedule.find(i => i.status !== 'paid') || null);
+            const next = data.schedule.find(i => i.status !== 'paid') || null;
+            setTargetInstallment(next);
+            setPaymentAmount(next ? Math.max(0, Number(next.amountDue) - Number(next.amountPaid || 0)).toFixed(2) : '');
+            setLegacyWarning(data.legacyWarning || null);
             setReferenceNumber('');
         } catch { toast.error("Failed to load member's loan schedule."); }
         finally { setIsLoading(false); }
@@ -157,7 +163,10 @@ function IndividualTerminal() {
             setLoans(data.loans);
             setActiveLoan(data.activeLoan);
             setSchedule(data.schedule);
-            setTargetInstallment(data.schedule.find(i => i.status !== 'paid') || null);
+            const next = data.schedule.find(i => i.status !== 'paid') || null;
+            setTargetInstallment(next);
+            setPaymentAmount(next ? Math.max(0, Number(next.amountDue) - Number(next.amountPaid || 0)).toFixed(2) : '');
+            setLegacyWarning(data.legacyWarning || null);
             setReferenceNumber('');
         } catch { toast.error('Failed to switch loan.'); }
         finally { setIsLoading(false); }
@@ -170,20 +179,16 @@ function IndividualTerminal() {
             const { data } = await axios.post(route('admin.accounting.loans.post-amortization'), {
                 loanId: activeLoan.id,
                 installmentNumber: targetInstallment.installmentNumber,
-                amountPaid: targetInstallment.amountDue,
+                amountPaid: Number(paymentAmount),
                 referenceNumber,
             });
             if (data.success) {
                 toast.success(data.message);
-                setSchedule(prev => {
-                    const updated = prev.map(item =>
-                        item.installmentNumber === targetInstallment.installmentNumber
-                            ? { ...item, status: 'paid', amountPaid: targetInstallment.amountDue, referenceNumber }
-                            : item
-                    );
-                    setTargetInstallment(updated.find(i => i.status !== 'paid') || null);
-                    return updated;
-                });
+                const refreshed = await axios.get(route('admin.accounting.loans.member-details', { id: selectedMember.id, loanId: activeLoan.id }));
+                setSchedule(refreshed.data.schedule);
+                const next = refreshed.data.schedule.find(i => i.status !== 'paid') || null;
+                setTargetInstallment(next);
+                setPaymentAmount(next ? Math.max(0, Number(next.amountDue) - Number(next.amountPaid || 0)).toFixed(2) : '');
                 setReferenceNumber('');
             }
         } catch (err) { toast.error(err.response?.data?.message || 'Error posting payment.'); }
@@ -328,7 +333,7 @@ function IndividualTerminal() {
                                         return (
                                             <tr
                                                 key={row.installmentNumber}
-                                                onClick={() => !isPaid && setTargetInstallment(row)}
+                                                onClick={() => { if (!isPaid) { setTargetInstallment(row); setPaymentAmount(Math.max(0, Number(row.amountDue) - Number(row.amountPaid || 0)).toFixed(2)); } }}
                                                 className={`transition-colors cursor-pointer ${
                                                     isSelected   ? 'ring-2 ring-inset ring-emerald-500 bg-emerald-50/70 dark:bg-emerald-500/[0.08]' :
                                                     isPaid       ? 'bg-emerald-500/[0.03] dark:bg-emerald-500/[0.02] hover:bg-emerald-50/50 dark:hover:bg-emerald-500/[0.04]' :
@@ -396,17 +401,14 @@ function IndividualTerminal() {
                                             </div>
                                         </div>
 
-                                        {/* Amount — read only */}
+                                        {legacyWarning && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">{legacyWarning}</div>}
+                                        {/* Partial or full payment amount */}
                                         <div className="space-y-1.5">
                                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 flex items-center gap-1.5">
-                                                Exact Amount Payable <Lock size={9} className="text-slate-300 dark:text-white/20" />
+                                                Payment Amount
                                             </label>
-                                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] cursor-not-allowed select-none">
-                                                <Banknote size={16} className="text-slate-400 dark:text-white/30 shrink-0" />
-                                                <span className="font-mono font-black text-slate-700 dark:text-white/70 text-sm">
-                                                    {parseFloat(targetInstallment.amountDue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </span>
-                                            </div>
+                                            <input type="number" min="0.01" step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className={inputCls} />
+                                            <p className="text-[10px] text-slate-400">Outstanding for this period: {fmt(Number(targetInstallment.amountDue) - Number(targetInstallment.amountPaid || 0))}. Excess is applied to succeeding periods.</p>
                                         </div>
 
                                         {/* Reference input */}
@@ -424,7 +426,7 @@ function IndividualTerminal() {
                                             />
                                         </div>
 
-                                        <button type="submit" disabled={isSubmitting || !referenceNumber}
+                                        <button type="submit" disabled={isSubmitting || !referenceNumber || Number(paymentAmount) <= 0 || !!legacyWarning}
                                             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all active:scale-95"
                                         >
                                             {isSubmitting

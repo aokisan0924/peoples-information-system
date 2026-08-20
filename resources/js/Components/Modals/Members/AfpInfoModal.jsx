@@ -54,7 +54,7 @@ export const AfpInfoModal = ({ member, onClose }) => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-afp-info', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-afp-info', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('AFP Info updated successfully.');

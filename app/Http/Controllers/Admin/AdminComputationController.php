@@ -10,11 +10,13 @@ use Inertia\Inertia;
 
 class AdminComputationController extends Controller
 {
-    public function showLoanSettings () {
+    public function showLoanSettings()
+    {
         return Inertia::render('Admin/AdminLoanSettings');
     }
 
-    public function computationList( Request $request ) {
+    public function computationList(Request $request)
+    {
         $category = (string) $request->query('category', '');
         $query = Computations::query()->orderByDesc('isActive')->orderBy('termMonths');
 
@@ -28,10 +30,11 @@ class AdminComputationController extends Controller
         ]);
     }
 
-    public function storeComputation( Request $request ) {
+    public function storeComputation(Request $request)
+    {
         $validated = $this->validatePayload($request);
 
-        if (!empty($validated['category'])) {
+        if (! empty($validated['category'])) {
             $validated['category'] = strtoupper($validated['category']);
         }
 
@@ -40,27 +43,29 @@ class AdminComputationController extends Controller
         return response()->json(['message' => 'Computation created successfully', 'data' => $comp]);
     }
 
-    public function updateComputation( Request $request, $id ) {
+    public function updateComputation(Request $request, $id)
+    {
         $comp = Computations::findOrFail($id);
 
         $validated = $this->validatePayload($request, true);
 
-        if (!empty($validated['category'])) {
+        if (! empty($validated['category'])) {
             $validated['category'] = strtoupper($validated['category']);
         }
 
         $comp->fill($validated)->save();
 
-        return response()->json(['mesasge' => 'Computation updated successfully', 'data' => $comp]);
+        return response()->json(['message' => 'Computation updated successfully', 'data' => $comp]);
     }
 
-    public function setActive($id) {
-        $comp = Computations::findOrFailt($id);
+    public function setActive($id)
+    {
+        $comp = Computations::findOrFail($id);
 
         DB::transaction(function () use ($comp) {
             Computations::where('category', $comp->category)
                 ->where('isActive', true)
-                ->update(['isActive => false']);
+                ->update(['isActive' => false]);
 
             $comp->isActive = true;
             $comp->save();
@@ -69,7 +74,8 @@ class AdminComputationController extends Controller
         return response()->json(['message' => 'Computation activated', 'data' => $comp]);
     }
 
-    public function destroyComputation($id) {
+    public function destroyComputation($id)
+    {
         $comp = Computations::findOrFail($id);
 
         if ($comp->isActive) {
@@ -80,7 +86,8 @@ class AdminComputationController extends Controller
         return response()->json(['message' => 'Computation deleted']);
     }
 
-    private function validatePayload(Request $request, bool $isUpdate = false): array{
+    private function validatePayload(Request $request, bool $isUpdate = false): array
+    {
         $rules = [
             'title' => 'required|string|max:255',
             'category' => 'nullable|string|max:100',

@@ -11,6 +11,7 @@ class CapitalContribution extends Model
 
     protected $fillable = [
         'memberId',
+        'transactionType',
         'amount',
         'reference_number',
         'is_paid',
@@ -22,39 +23,45 @@ class CapitalContribution extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'is_paid' => 'boolean',
-        'paid_at' => 'datetime'
+        'paid_at' => 'datetime',
     ];
 
     protected $attributes = [
         'status' => 'Pending',
     ];
-    
-    public function member() {
+
+    public function member()
+    {
         return $this->belongsTo(Member::class, 'memberId');
     }
 
     // --- NEW: Relationship to Admin ---
-    public function processor() {
+    public function processor()
+    {
         return $this->belongsTo(Admin::class, 'processed_by');
     }
 
-    public function scopePosted($q) {
+    public function scopePosted($q)
+    {
         return $q->where(function ($qq) {
             $qq->where('is_paid', true)->orWhereRaw('LOWER(status) = ?', ['posted']);
         });
     }
 
-    public function scopeSearch($q, ?string $term) {
-        if (!$term)
+    public function scopeSearch($q, ?string $term)
+    {
+        if (! $term) {
             return $q;
+        }
 
         $term = trim($term);
+
         return $q->where(function ($w) use ($term) {
             $w->where('reference_number', 'like', "%{$term}%")
-                ->orWhereHas('member', function($mq) use ($term) {
+                ->orWhereHas('member', function ($mq) use ($term) {
                     $mq->where('firstName', 'like', "%{$term}%")
-                    ->orWhere('lastName', 'like', "%{$term}%")
-                    ->orWhere('username', 'like', "%{$term}%");
+                        ->orWhere('lastName', 'like', "%{$term}%")
+                        ->orWhere('username', 'like', "%{$term}%");
                 });
         });
     }

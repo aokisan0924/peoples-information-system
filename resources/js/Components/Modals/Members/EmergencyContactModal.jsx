@@ -48,7 +48,7 @@ export const EmergencyContactModal = ({ member, onClose }) => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-emergency-info', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-emergency-info', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('Emergency info updated successfully.');

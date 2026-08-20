@@ -1,3 +1,54 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    html {
+        color-scheme: light;
+    }
+
+    html.dark {
+        color-scheme: dark;
+    }
+
+    body {
+        @apply bg-slate-100 text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
+    }
+
+    button,
+    [role="button"],
+    a,
+    input,
+    select,
+    textarea {
+        @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900;
+    }
+}
+
+/* Compatibility layer for legacy screens that predate component-level dark variants.
+   Explicit `dark:*` utilities remain more specific and take precedence. */
+@layer utilities {
+    .dark :where(.bg-white) {
+        @apply bg-slate-900;
+    }
+
+    .dark :where(.bg-gray-50, .bg-slate-50, .bg-gray-100, .bg-slate-100) {
+        @apply bg-slate-800;
+    }
+
+    .dark :where(.text-gray-900, .text-slate-900, .text-gray-800, .text-slate-800) {
+        @apply text-slate-100;
+    }
+
+    .dark :where(.text-gray-700, .text-slate-700, .text-gray-600, .text-slate-600) {
+        @apply text-slate-300;
+    }
+
+    .dark :where(.border-gray-100, .border-gray-200, .border-slate-100, .border-slate-200, .border-slate-300) {
+        @apply border-slate-700;
+    }
+
+    .dark :where(input, select, textarea) {
+        @apply border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-400;
+    }
+}

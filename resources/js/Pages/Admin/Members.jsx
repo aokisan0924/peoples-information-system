@@ -51,7 +51,8 @@ export default function Members() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [profileForm, setProfileForm] = useState({
-        lastName: "", firstName: "", dob: "", email: "", gender: "Male", contact: ""
+        lastName: "", firstName: "", dob: "", email: "", gender: "Male", contact: "",
+        civilStatus: "Single", nationality: "Filipino", fullAddress: ""
     });
     const [paymentForm, setPaymentForm] = useState({
         membershipFee: 300, shareCapital: 5000, savingsDeposit: 0,
@@ -79,18 +80,28 @@ export default function Members() {
         if (hasData && !window.confirm("You have unsaved data. Close anyway?")) return;
         setIsAddMemberOpen(false);
         setOnboardingStep(1);
-        setProfileForm({ lastName: "", firstName: "", dob: "", email: "", gender: "Male", contact: "" });
+        setProfileForm({ lastName: "", firstName: "", dob: "", email: "", gender: "Male", contact: "", civilStatus: "Single", nationality: "Filipino", fullAddress: "" });
         setPaymentForm({ membershipFee: 300, shareCapital: 5000, savingsDeposit: 0, paymentMethod: "cash", referenceNumber: "" });
     }, [profileForm]);
 
     const handleNextStep = () => {
-        if (!profileForm.firstName || !profileForm.lastName || !profileForm.dob || !profileForm.email || !profileForm.gender) {
+        if (!profileForm.firstName || !profileForm.lastName || !profileForm.dob || !profileForm.email || !profileForm.gender || !profileForm.contact || !profileForm.civilStatus || !profileForm.nationality || !profileForm.fullAddress) {
             return toast.error("Please fill in all required fields.");
         }
         setOnboardingStep(2);
     };
 
     const handleCompleteOnboarding = async () => {
+        if (!paymentForm.referenceNumber.trim()) {
+            toast.error("Enter the receipt or transaction reference number.");
+            return;
+        }
+
+        if ([paymentForm.membershipFee, paymentForm.shareCapital, paymentForm.savingsDeposit].some(value => Number(value) < 0)) {
+            toast.error("Deposit amounts cannot be negative.");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const payload = {
@@ -100,6 +111,9 @@ export default function Members() {
                 email: profileForm.email,
                 gender: profileForm.gender,
                 contact: profileForm.contact,
+                civilStatus: profileForm.civilStatus,
+                nationality: profileForm.nationality,
+                fullAddress: profileForm.fullAddress,
                 membershipFee: Number(paymentForm.membershipFee),
                 shareCapital: Number(paymentForm.shareCapital),
                 savingsDeposit: Number(paymentForm.savingsDeposit) || 0,
@@ -110,12 +124,14 @@ export default function Members() {
             toast.success("Member successfully onboarded!");
             setIsAddMemberOpen(false);
             setOnboardingStep(1);
-            setProfileForm({ lastName: "", firstName: "", dob: "", email: "", gender: "Male", contact: "" });
+            setProfileForm({ lastName: "", firstName: "", dob: "", email: "", gender: "Male", contact: "", civilStatus: "Single", nationality: "Filipino", fullAddress: "" });
             setPaymentForm({ membershipFee: 300, shareCapital: 5000, savingsDeposit: 0, paymentMethod: "cash", referenceNumber: "" });
             router.reload();
         } catch (error) {
             console.error(error.response?.data);
-            toast.error(error.response?.data?.message || "Failed to complete onboarding. Check inputs.");
+            const validationErrors = error.response?.data?.errors;
+            const firstValidationError = validationErrors ? Object.values(validationErrors).flat()[0] : null;
+            toast.error(firstValidationError || error.response?.data?.message || "Failed to complete onboarding. Check inputs.");
         } finally {
             setIsSubmitting(false);
         }
@@ -462,7 +478,7 @@ export default function Members() {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <Field label="Last Name *"      value={profileForm.lastName}  onChange={(v) => setProfileForm({ ...profileForm, lastName: v })} />
                                         <Field label="First Name *"     value={profileForm.firstName} onChange={(v) => setProfileForm({ ...profileForm, firstName: v })} />
-                                        <Field label="Date of Birth *"  type="date"  value={profileForm.dob}   onChange={(v) => setProfileForm({ ...profileForm, dob: v })} />
+                                        <Field label="Date of Birth *"  type="date" max={new Date().toISOString().slice(0, 10)} value={profileForm.dob} onChange={(v) => setProfileForm({ ...profileForm, dob: v })} />
                                         <Field label="Email Address *"  type="email" value={profileForm.email}  onChange={(v) => setProfileForm({ ...profileForm, email: v })} />
                                         <SelectField
                                             label="Gender *"
@@ -473,7 +489,17 @@ export default function Members() {
                                                 { label: "Female", value: "Female" }
                                             ]}
                                         />
-                                        <Field label="Mobile Number" value={profileForm.contact} onChange={(v) => setProfileForm({ ...profileForm, contact: v })} />
+                                        <Field label="Mobile Number *" type="tel" inputMode="numeric" value={profileForm.contact} onChange={(v) => setProfileForm({ ...profileForm, contact: v })} />
+                                        <SelectField
+                                            label="Civil Status *"
+                                            value={profileForm.civilStatus}
+                                            onChange={(v) => setProfileForm({ ...profileForm, civilStatus: v })}
+                                            options={["Single", "Married", "Widowed", "Separated"].map(value => ({ label: value, value }))}
+                                        />
+                                        <Field label="Nationality *" value={profileForm.nationality} onChange={(v) => setProfileForm({ ...profileForm, nationality: v })} />
+                                        <div className="sm:col-span-2">
+                                            <TextAreaField label="Complete Address *" value={profileForm.fullAddress} onChange={(v) => setProfileForm({ ...profileForm, fullAddress: v })} />
+                                        </div>
                                     </div>
                                 )}
 
@@ -593,7 +619,7 @@ function SummaryCard({ label, value, color, icon: Icon }) {
 }
 
 // ─── Field ────────────────────────────────────────────────────────────────────
-function Field({ label, value, onChange, type = "text" }) {
+function Field({ label, value, onChange, type = "text", ...inputProps }) {
     return (
         <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-500 dark:text-white/60 ml-1">{label}</label>
@@ -601,6 +627,7 @@ function Field({ label, value, onChange, type = "text" }) {
                 type={type}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
+                {...inputProps}
                 className="w-full rounded-xl bg-slate-50 border border-slate-200 text-slate-900 dark:bg-white/5 dark:border-white/10 dark:text-white px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
             />
         </div>
@@ -704,5 +731,15 @@ function ModalShell({ title, subtitle, onClose, step, totalSteps, children }) {
             </motion.div>
         </motion.div>,
         document.body
+    );
+}
+
+function TextAreaField({ label, value, onChange }) {
+    return (
+        <div className="space-y-1.5">
+            <label className="ml-1 text-xs font-medium text-slate-500 dark:text-white/60">{label}</label>
+            <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)}
+                className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-white/10 dark:bg-white/5 dark:text-white" />
+        </div>
     );
 }

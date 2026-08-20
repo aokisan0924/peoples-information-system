@@ -74,7 +74,7 @@ const formatLongId = (value) => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-identification-info', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-identification-info', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('Parents info updated successfully.');

@@ -20,21 +20,22 @@ use App\Models\ParentsInfo;
 use App\Models\SavingsDeposit;
 use App\Models\SpouseInfo;
 use App\Models\TimeDeposit;
-use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class MemberController extends Controller
 {
-    public function showMemberPage() {
+    public function showMemberPage()
+    {
         $totalActiveMembers = BranchService::whereIn('branchService', ['ACTIVE MILITARY', 'Active Military', 'active military'])->count();
         $totalRetiredMembers = BranchService::whereIn('branchService', ['RETIRED MILITARY', 'Retired Military', 'retired military'])->count();
         $totalPmpcMembers = BranchService::whereIn('branchService', ['PMPC', 'Pmpc', 'pmpc'])->count();
@@ -63,46 +64,50 @@ class MemberController extends Controller
 
         $members = $rawMembers->map(function ($member) {
             return [
-                'id'            => $member->id,
-                'username'      => $member->username,
-                'firstName'     => $member->firstName,
-                'middleName'    => $member->middleName,
-                'lastName'      => $member->lastName,
-                'suffix'        => $member->suffix,
-                'afpsn'         => $member->afpsn,
+                'id' => $member->id,
+                'username' => $member->username,
+                'firstName' => $member->firstName,
+                'middleName' => $member->middleName,
+                'lastName' => $member->lastName,
+                'suffix' => $member->suffix,
+                'afpsn' => $member->afpsn,
                 'branchService' => $member->branchService,
             ];
         });
 
         return Inertia::render('Admin/Members', [
             'memberSummary' => [
-                'total'           => $totalMembersCount,
-                'activeMilitary'  => $totalActiveMembers,
+                'total' => $totalMembersCount,
+                'activeMilitary' => $totalActiveMembers,
                 'retiredMilitary' => $totalRetiredMembers,
-                'pmpc'            => $totalPmpcMembers,
-                'beneficiary'     => $totalBeneficiaryMembers,
-                'civilian'        => $totalCivilianMembers,
-                'cdea'            => $totalCdeaMembers
+                'pmpc' => $totalPmpcMembers,
+                'beneficiary' => $totalBeneficiaryMembers,
+                'civilian' => $totalCivilianMembers,
+                'cdea' => $totalCdeaMembers,
             ],
             'members' => $members,
         ]);
     }
 
-    public function store(Request $request) {
+    public function store(Request $request)
+    {
         $validated = $request->validate([
             // Profile fields
-            'lastName'      => ['required', 'string', 'max:255'],
-            'firstName'     => ['required', 'string', 'max:255'],
-            'dob'           => ['required', 'date'],
-            'email'         => ['required', 'email', 'max:255'],
-            'gender'        => ['required', 'string', 'max:20', 'in:Male,Female'],
-            'contact'       => ['required', 'string', 'max:20'],
+            'lastName' => ['required', 'string', 'max:255'],
+            'firstName' => ['required', 'string', 'max:255'],
+            'dob' => ['required', 'date', 'before_or_equal:today'],
+            'email' => ['required', 'email', 'max:255', 'unique:members,email'],
+            'gender' => ['required', 'string', 'max:20', 'in:Male,Female'],
+            'contact' => ['required', 'string', 'max:20'],
+            'civilStatus' => ['required', 'string', 'max:50', 'in:Single,Married,Widowed,Separated'],
+            'nationality' => ['required', 'string', 'max:100'],
+            'fullAddress' => ['required', 'string', 'max:500'],
             // Payment fields
-            'membershipFee'   => ['required', 'numeric', 'min:0'],
-            'shareCapital'    => ['required', 'numeric', 'min:0'],
-            'savingsDeposit'  => ['nullable', 'numeric', 'min:0'],
-            'paymentMethod'   => ['required', 'string', 'in:cash,bank,e-wallet'],
-            'referenceNumber' => ['required', 'string', 'max:150']
+            'membershipFee' => ['required', 'numeric', 'min:0'],
+            'shareCapital' => ['required', 'numeric', 'min:0'],
+            'savingsDeposit' => ['nullable', 'numeric', 'min:0'],
+            'paymentMethod' => ['required', 'string', 'in:cash,bank,e-wallet'],
+            'referenceNumber' => ['required', 'string', 'max:150'],
         ]);
 
         $officeBranch = trim((string) Auth::guard('admin')->user()?->branch);
@@ -117,18 +122,18 @@ class MemberController extends Controller
             $plainPassword = Str::random(10);
             $validated['password'] = bcrypt($plainPassword);
             $validated['branch'] = $officeBranch;
+            $validated['age'] = Carbon::parse($validated['dob'])->age;
 
             $member = Member::create($validated);
 
-            $username = 'PMPC-' . str_pad((string) $member->id, 3, '0', STR_PAD_LEFT);
+            $username = 'PMPC-'.str_pad((string) $member->id, 3, '0', STR_PAD_LEFT);
             $member->username = $username;
-            $member->age = Carbon::parse($validated['dob'])->age;
             $member->save();
 
             $totalAmount = $request->membershipFee + $request->shareCapital + ($request->savingsDeposit ?? 0);
-            $particulars = "New Member Initial Deposit: Membership Fee: " . number_format($request->membershipFee, 2) . 
-                        ", Share Capital: " . number_format($request->shareCapital, 2) . 
-                        ", Savings Deposit: " . number_format($request->savingsDeposit ?? 0, 2);
+            $particulars = 'New Member Initial Deposit: Membership Fee: '.number_format($request->membershipFee, 2).
+                        ', Share Capital: '.number_format($request->shareCapital, 2).
+                        ', Savings Deposit: '.number_format($request->savingsDeposit ?? 0, 2);
             $branch = $officeBranch;
 
             if ($request->paymentMethod === 'cash') {
@@ -137,7 +142,7 @@ class MemberController extends Controller
                     'transactionDate' => now()->toDateString(),
                     'orNumber' => $request->referenceNumber,
                     'particulars' => $particulars,
-                    'debit' => $totalAmount, 
+                    'debit' => $totalAmount,
                     'credit' => 0,
                     'is_posted' => false,
                 ]);
@@ -148,25 +153,25 @@ class MemberController extends Controller
                     'referenceNo' => $request->referenceNumber,
                     'particulars' => $particulars,
                     'walletType' => 'GCash/Maya',
-                    'debit' => $totalAmount, 
+                    'debit' => $totalAmount,
                     'credit' => 0,
                     'is_posted' => false,
                 ]);
             } else {
                 $bankAccounts = AccChartOfAccount::where('accountName', 'LIKE', '%Bank%')->get();
                 $userBranchStr = strtolower($branch);
-                
+
                 if (str_contains($userBranchStr, 'cubao')) {
-                    $selectedBank = $bankAccounts->filter(fn($b) => str_contains(strtolower($b->accountName), 'aguinaldo'))->first();
+                    $selectedBank = $bankAccounts->filter(fn ($b) => str_contains(strtolower($b->accountName), 'aguinaldo'))->first();
                 } elseif (str_contains($userBranchStr, 'magsaysay') || str_contains($userBranchStr, 'fort')) {
-                    $selectedBank = $bankAccounts->filter(fn($b) => str_contains(strtolower($b->accountName), 'fort mag'))->first();
+                    $selectedBank = $bankAccounts->filter(fn ($b) => str_contains(strtolower($b->accountName), 'fort mag'))->first();
                 } else {
-                    $selectedBank = $bankAccounts->filter(fn($b) => str_contains(strtolower($b->accountName), 'ilagan'))->first();
+                    $selectedBank = $bankAccounts->filter(fn ($b) => str_contains(strtolower($b->accountName), 'ilagan'))->first();
                 }
 
                 AccBankRecord::create([
                     'branch' => $branch,
-                    'bank_account_code' => $selectedBank ? $selectedBank->accountCode : '', 
+                    'bank_account_code' => $selectedBank ? $selectedBank->accountCode : '',
                     'transaction_date' => now()->toDateString(),
                     'reference_no' => $request->referenceNumber,
                     'particulars' => $particulars,
@@ -197,8 +202,8 @@ class MemberController extends Controller
                     'transactionType' => 'deposit',
                     'is_paid' => true,
                     'status' => 'Posted',
-                    'processed_by' => $request->user()->id,
-                    'paid_at' => now()->toDateString()
+                    'processed_by' => Auth::guard('admin')->id(),
+                    'paid_at' => now()->toDateString(),
                 ]);
             }
 
@@ -212,82 +217,96 @@ class MemberController extends Controller
                     'status' => 'Posted',
                     'isPaid' => true,
                     'paidAt' => now(),
-                    'processed_by' => $request->user()->id
+                    'processed_by' => Auth::guard('admin')->id(),
                 ]);
             }
 
             DB::commit();
 
-            if (!empty($member->email)) {
-                $emailBody =
-                    "Welcome to People's Multi-Purpose Cooperative!\n\n" .
-                    "Your PMPC Online Access credentials are ready.\n\n" .
-                    "Login Link: https://peoplesmpcoop.com/\n\n" .
-                    "USERNAME: {$member->username}\n" .
-                    "PASSWORD: {$plainPassword}\n\n" .
-                    "-----------------------------------------\n" .
-                    " DO'S AND DON'TS (IMPORTANT)\n" .
-                    "-----------------------------------------\n" .
-                    "✔ DO change your password immediately after logging in.\n" .
-                    "✔ DO keep your username and password confidential.\n" .
-                    "✔ DO report any suspicious activity to PMPC Admin.\n\n" .
-                    "✘ DON'T share your login details with anyone.\n" .
-                    "✘ DON'T use easily guessed passwords (e.g., birthdays).\n" .
-                    "✘ DON'T log in on public or untrusted devices.\n\n" .
-                    "This account is strictly for your personal use. Protect your credentials at all times.\n\n" .
-                    "Thank you for being part of PMPC!";
+            $notificationWarnings = [];
+            try {
+                if (! empty($member->email)) {
+                    $emailBody =
+                        "Welcome to People's Multi-Purpose Cooperative!\n\n".
+                        "Your PMPC Online Access credentials are ready.\n\n".
+                        "Login Link: https://peoplesmpcoop.com/\n\n".
+                        "USERNAME: {$member->username}\n".
+                        "PASSWORD: {$plainPassword}\n\n".
+                        "-----------------------------------------\n".
+                        " DO'S AND DON'TS (IMPORTANT)\n".
+                        "-----------------------------------------\n".
+                        "✔ DO change your password immediately after logging in.\n".
+                        "✔ DO keep your username and password confidential.\n".
+                        "✔ DO report any suspicious activity to PMPC Admin.\n\n".
+                        "✘ DON'T share your login details with anyone.\n".
+                        "✘ DON'T use easily guessed passwords (e.g., birthdays).\n".
+                        "✘ DON'T log in on public or untrusted devices.\n\n".
+                        "This account is strictly for your personal use. Protect your credentials at all times.\n\n".
+                        'Thank you for being part of PMPC!';
 
-                Mail::raw($emailBody, function ($message) use ($member) {
-                    $message->to($member->email)
-                        ->subject('Your PMPC Login Credentials & Important Reminders');
-                });
+                    Mail::raw($emailBody, function ($message) use ($member) {
+                        $message->to($member->email)
+                            ->subject('Your PMPC Login Credentials & Important Reminders');
+                    });
+                }
+            } catch (\Throwable $exception) {
+                report($exception);
+                $notificationWarnings[] = 'The welcome email could not be sent.';
             }
 
             $contact = $member->contactNumber ?? $member->contact;
 
-            if (!empty($contact)) {
-                $number  = trim($contact);
-                $digits  = preg_replace('/\D+/', '', $number);
-                $formattedNumber = preg_replace('/^0/', '63', $digits);
+            try {
+                if (! empty($contact) && filled(config('services.semaphore.api_key'))) {
+                    $number = trim($contact);
+                    $digits = preg_replace('/\D+/', '', $number);
+                    $formattedNumber = preg_replace('/^0/', '63', $digits);
 
-                $smsMessage =
-                    "Welcome to People's Multi-Purpose Cooperative!\n\n" .
-                    "Your PMPC Online Access credentials are ready.\n\n" .
-                    "USERNAME: {$member->username}\n" .
-                    "PASSWORD: {$plainPassword}\n\n" .
-                    "Login: peoplesmpcoop.com\n\n" .
-                    "REMINDERS:\n" .
-                    "✔ Change your password ASAP.\n" .
-                    "✔ Keep your account private.\n" .
-                    "✘ Don't share your password with anyone.\n" .
-                    "This account is strictly for your personal use. Protect your credentials at all times.\n\n" .
-                    "Thank you for being part of PMPC!";
+                    $smsMessage =
+                        "Welcome to People's Multi-Purpose Cooperative!\n\n".
+                        "Your PMPC Online Access credentials are ready.\n\n".
+                        "USERNAME: {$member->username}\n".
+                        "PASSWORD: {$plainPassword}\n\n".
+                        "Login: peoplesmpcoop.com\n\n".
+                        "REMINDERS:\n".
+                        "✔ Change your password ASAP.\n".
+                        "✔ Keep your account private.\n".
+                        "✘ Don't share your password with anyone.\n".
+                        "This account is strictly for your personal use. Protect your credentials at all times.\n\n".
+                        'Thank you for being part of PMPC!';
 
-                Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
-                    'apikey'     => config('services.semaphore.api_key'),
-                    'number'     => $formattedNumber,
-                    'message'    => $smsMessage,
-                    'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
-                ]);
+                    Http::asForm()->post('https://api.semaphore.co/api/v4/messages', [
+                        'apikey' => config('services.semaphore.api_key'),
+                        'number' => $formattedNumber,
+                        'message' => $smsMessage,
+                        'sendername' => config('services.semaphore.sender_name', 'PeoplesCoop'),
+                    ]);
+                }
+            } catch (\Throwable $exception) {
+                report($exception);
+                $notificationWarnings[] = 'The welcome SMS could not be sent.';
             }
 
             return response()->json([
-                'success' => true, 
-                'message' => 'Profile created successfully. ID: ' . $username
+                'success' => true,
+                'message' => 'Profile created successfully. ID: '.$username,
+                'warnings' => $notificationWarnings,
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
-                'success' => false, 
-                'message' => 'Failed to create member: ' . $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to create member: '.$e->getMessage(),
             ], 500);
         }
     }
 
-    public function showMemberDetail($id) {
+    public function showMemberDetail($id)
+    {
         $member = Member::findOrFail($id);
-        
+
         $basicInfoData = [
             'id' => $member->id,
             'username' => $member->username,
@@ -318,7 +337,7 @@ class MemberController extends Controller
         $branchService = BranchService::where('memberId', $id)->first();
         $branServiceData = [
             'branchService' => $branchService?->branchService,
-            'subBranch' => $branchService?->subBranch
+            'subBranch' => $branchService?->subBranch,
         ];
 
         $afpInfo = AFPInfo::where('memberId', $id)->first();
@@ -332,7 +351,7 @@ class MemberController extends Controller
             'yearsInService' => $afpInfo?->yearsInService,
             'cadEnlistment' => $afpInfo?->cadEnlistment,
             'retirementDate' => $afpInfo?->retirementDate,
-            'pensionDate' => $afpInfo?->pensionDate
+            'pensionDate' => $afpInfo?->pensionDate,
         ];
 
         $spouseInfo = SpouseInfo::where('memberId', $id)->first();
@@ -348,14 +367,14 @@ class MemberController extends Controller
             'motherName' => $parentsInfo?->motherName,
             'motherAge' => $parentsInfo?->motherAge,
             'fatherName' => $parentsInfo?->fatherName,
-            'fatherAge' => $parentsInfo?->fatherAge
+            'fatherAge' => $parentsInfo?->fatherAge,
         ];
 
         $identificationInfo = IdentificationInfo::where('memberId', $id)->first();
         $identificationData = [
             'tinNo' => $identificationInfo?->tinNo,
             'gsisNo' => $identificationInfo?->gsisNo,
-            'crnUmidNo' => $identificationInfo?->crnUmidNo
+            'crnUmidNo' => $identificationInfo?->crnUmidNo,
         ];
 
         $emergencyInfo = EmergencyContact::where('memberId', $id)->first();
@@ -363,19 +382,19 @@ class MemberController extends Controller
             'contactPersonName' => $emergencyInfo?->contactPersonName,
             'contactPersonAddress' => $emergencyInfo?->contactPersonAddress,
             'contactPersonPhone' => $emergencyInfo?->contactPersonPhone,
-            'contactPersonRelation' => $emergencyInfo?->contactPersonRelation
+            'contactPersonRelation' => $emergencyInfo?->contactPersonRelation,
         ];
 
         $dependentsInfo = Dependent::where('memberId', $id)
             ->orderBy('dob')
             ->get(['id', 'name', 'dob', 'gender']);
 
-        $dependentsData = $dependentsInfo->map(function ($dep){
+        $dependentsData = $dependentsInfo->map(function ($dep) {
             return [
                 'id' => $dep->id,
                 'name' => $dep->name,
                 'dob' => $dep->dob ? Carbon::parse($dep->dob)->toDateString() : null,
-                'gender' => $dep->gender
+                'gender' => $dep->gender,
             ];
         })->values();
 
@@ -383,16 +402,16 @@ class MemberController extends Controller
             ->whereIn('status', ['released', 'Released', 'RELEASED'])
             ->orderByDesc('created_at')
             ->get([
-                'id', 'loanReference', 'loanType', 'loanClassification', 'status', 
-                'gross', 'netProceeds', 'monthlyAmortization', 
+                'id', 'loanReference', 'loanType', 'loanClassification', 'status',
+                'gross', 'netProceeds', 'monthlyAmortization',
                 'loanAmount', 'termYears', 'created_at',
             ]);
-        
+
         $releasedLoansData = $releasedLoans->map(function (Loan $loan) {
             return [
                 'id' => $loan->id,
                 'loanReference' => $loan->loanReference,
-                'loanType'  => $loan->loanType,
+                'loanType' => $loan->loanType,
                 'loanClassification' => $loan->loanClassification,
                 'status' => $loan->status,
                 'gross' => number_format((float) $loan->gross, 2, '.', ','),
@@ -437,16 +456,16 @@ class MemberController extends Controller
                 'postedDate' => $capCon->paid_at ? Carbon::parse($capCon->paid_at)->format('d M y') : null,
                 'debit' => $debit > 0 ? number_format($debit, 2, '.', ',') : null,
                 'credit' => $credit > 0 ? number_format($credit, 2, '.', ',') : null,
-                'balance' => number_format($runningBalance, 2, '.', ',')
+                'balance' => number_format($runningBalance, 2, '.', ','),
             ];
         }
 
         $shareRows = array_reverse($shareRows);
         $shareSummary = [
-            'totalBalance'     => number_format($runningBalance, 2, '.', ','),
-            'totalDeposits'    => number_format($totalDeposits, 2, '.', ','),
+            'totalBalance' => number_format($runningBalance, 2, '.', ','),
+            'totalDeposits' => number_format($totalDeposits, 2, '.', ','),
             'totalWithdrawals' => number_format($totalWithdrawals, 2, '.', ','),
-            'paidCapital'      => number_format($runningBalance > 0 ? ($runningBalance / 500) : 0, 2, '.', ','),
+            'paidCapital' => number_format($runningBalance > 0 ? ($runningBalance / 500) : 0, 2, '.', ','),
         ];
         $shareCapitalData = ['rows' => $shareRows, 'summary' => $shareSummary];
 
@@ -481,7 +500,7 @@ class MemberController extends Controller
                 'postedDate' => $savings->paidAt ? Carbon::parse($savings->paidAt)->format('d M y') : ($savings->created_at ? $savings->created_at->format('d M y') : null),
                 'debit' => $debit > 0 ? number_format($debit, 2, '.', ',') : null,
                 'credit' => $credit > 0 ? number_format($credit, 2, '.', ',') : null,
-                'balance' => number_format($savingsRunningBalance, 2, '.', '.')
+                'balance' => number_format($savingsRunningBalance, 2, '.', '.'),
             ];
         }
 
@@ -489,19 +508,23 @@ class MemberController extends Controller
         $savingsSummary = [
             'totalBalance' => number_format($savingsRunningBalance, 2, '.', ','),
             'totalDeposits' => number_format($savingsTotalDeposits, 2, '.', ','),
-            'totalWithdrawals' => number_format($savingsTotalWithdrawals, 2, '.', ',')
+            'totalWithdrawals' => number_format($savingsTotalWithdrawals, 2, '.', ','),
         ];
         $savingsData = ['rows' => $savingsRow, 'summary' => $savingsSummary];
 
         // TIME DEPOSITS
         $timeDeposits = TimeDeposit::with([
             'member',
-            'interests' => function ($q) { $q->orderBy('yearNumber')->orderBy('creditedDate')->orderBy('id'); },
-            'withdrawals' => function ($q) { $q->orderBy('withdrawnDate')->orderBy('id'); },
+            'interests' => function ($q) {
+                $q->orderBy('yearNumber')->orderBy('creditedDate')->orderBy('id');
+            },
+            'withdrawals' => function ($q) {
+                $q->orderBy('withdrawnDate')->orderBy('id');
+            },
         ])
-        ->where('memberId', $id)
-        ->orderBy('startDate')
-        ->get();
+            ->where('memberId', $id)
+            ->orderBy('startDate')
+            ->get();
 
         $allTimeDeposits = [];
         $totalPrincipal = 0.0;
@@ -531,7 +554,9 @@ class MemberController extends Controller
 
             foreach ($td->interests as $interest) {
                 $amount = (float) $interest->interestAmount;
-                if ($amount <= 0) continue;
+                if ($amount <= 0) {
+                    continue;
+                }
                 $runningBalance += $amount;
                 $yearNumber = $interest->yearNumber ?? null;
                 $transactions[] = [
@@ -546,11 +571,15 @@ class MemberController extends Controller
 
             foreach ($td->withdrawals as $withdrawal) {
                 $amount = (float) $withdrawal->amount;
-                if ($amount <= 0) continue;
+                if ($amount <= 0) {
+                    continue;
+                }
                 $runningBalance -= $amount;
                 $remarks = trim((string) ($withdrawal->remarks ?? ''));
                 $desc = 'Interest Withdrawal';
-                if ($remarks !== '') $desc .= " - {$remarks}";
+                if ($remarks !== '') {
+                    $desc .= " - {$remarks}";
+                }
 
                 $transactions[] = [
                     'date' => optional($withdrawal->withdrawnDate)->toDateString(),
@@ -562,7 +591,7 @@ class MemberController extends Controller
                 ];
             }
 
-            usort($transactions, fn($a, $b) => strcmp($a['date'] ?? '', $b['date'] ?? ''));
+            usort($transactions, fn ($a, $b) => strcmp($a['date'] ?? '', $b['date'] ?? ''));
 
             $sumInterest = (float) $td->interests->sum('interestAmount');
             $sumWithdrawn = (float) $td->withdrawals->sum('amount');
@@ -576,7 +605,7 @@ class MemberController extends Controller
 
             $summaryDisplay = [
                 'timeDepositId' => $td->id,
-                'timeDepositCode' => 'TD-' . str_pad((string) $td->id, 4, '0', STR_PAD_LEFT),
+                'timeDepositCode' => 'TD-'.str_pad((string) $td->id, 4, '0', STR_PAD_LEFT),
                 'memberName' => $memberName,
                 'username' => $username,
                 'principal' => number_format($principal, 2, '.', ','),
@@ -584,7 +613,7 @@ class MemberController extends Controller
                 'totalInterest' => number_format($totalInterest, 2, '.', ','),
                 'availableInterest' => number_format($availInterest, 2, '.', ','),
                 'termYears' => (int) $td->termYears,
-                'interestRate' => number_format((float) $td->interestRate, 2, '.', ',') . ' %',
+                'interestRate' => number_format((float) $td->interestRate, 2, '.', ',').' %',
                 'startDate' => $td->startDate ? $td->startDate->format('d M y') : null,
                 'maturityDate' => $td->maturityDate ? $td->maturityDate->format('d M y') : null,
                 'creditedYears' => (int) $td->creditedYears,
@@ -607,7 +636,7 @@ class MemberController extends Controller
         $timeDepositSummaryAll = [
             'totalPrincipal' => number_format($totalPrincipal, 2, '.', ','),
             'totalCurrentBalance' => number_format($totalCurrBalance, 2, '.', ','),
-            'totalAvailableInterest'=> number_format($totalAvailInterest, 2, '.', ','),
+            'totalAvailableInterest' => number_format($totalAvailInterest, 2, '.', ','),
             'totalCount' => count($allTimeDeposits),
         ];
         $timeDepositData = ['summaryAll' => $timeDepositSummaryAll, 'deposits' => $allTimeDeposits];
@@ -625,43 +654,44 @@ class MemberController extends Controller
                 'releasedLoansData' => $releasedLoansData,
                 'shareCapitalData' => $shareCapitalData,
                 'savingsData' => $savingsData,
-                'timeDepositData' => $timeDepositData
-            ]
+                'timeDepositData' => $timeDepositData,
+            ],
         ]);
     }
 
-    public function updateBasicInfo(Request $request, $id) {
+    public function updateBasicInfo(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
-        
+
         $v = Validator::make($request->all(), [
-            'firstName' => ['required','string','max:100'],
-            'lastName' => ['required','string','max:100'],
-            'middleName' => ['nullable','string','max:100'],
-            'suffix' => ['nullable','string','max:10'],
-            'nickname' => ['nullable','string','max:100'],
-            'gender' => ['required','string'],
-            'dob' => ['required','date'],
-            'religion' => ['nullable','string','max:100'],
-            'civilStatus' => ['nullable','string','max:100'],
-            'nationality' => ['nullable','string','max:100'],
-            'email' => ['required','email'],
-            'contact' => ['nullable','string','max:20'],
-            'fullAddress' => ['nullable','string','max:255'],
-            'region' => ['nullable','string','max:100'],
-            'province' => ['nullable','string','max:100'],
-            'city' => ['nullable','string','max:100'],
-            'barangay' => ['nullable','string','max:100'],
-            'membershipDate' => ['nullable','date'],
+            'firstName' => ['required', 'string', 'max:100'],
+            'lastName' => ['required', 'string', 'max:100'],
+            'middleName' => ['nullable', 'string', 'max:100'],
+            'suffix' => ['nullable', 'string', 'max:10'],
+            'nickname' => ['nullable', 'string', 'max:100'],
+            'gender' => ['required', 'string'],
+            'dob' => ['required', 'date'],
+            'religion' => ['nullable', 'string', 'max:100'],
+            'civilStatus' => ['nullable', 'string', 'max:100'],
+            'nationality' => ['nullable', 'string', 'max:100'],
+            'email' => ['required', 'email'],
+            'contact' => ['nullable', 'string', 'max:20'],
+            'fullAddress' => ['nullable', 'string', 'max:255'],
+            'region' => ['nullable', 'string', 'max:100'],
+            'province' => ['nullable', 'string', 'max:100'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'barangay' => ['nullable', 'string', 'max:100'],
+            'membershipDate' => ['nullable', 'date'],
             'branch' => ['required', 'string', Rule::in(Member::OFFICE_BRANCHES)],
         ]);
 
         if ($v->fails()) {
-            return response()->json(['success' => false,'message' => 'Validation failed','errors' => $v->errors()]);
+            return response()->json(['success' => false, 'message' => 'Validation failed', 'errors' => $v->errors()]);
         }
 
         $validated = $v->validated();
         $validated['age'] = Carbon::parse($validated['dob'])->age;
-        
+
         $membershipDate = null;
         if (array_key_exists('membershipDate', $validated)) {
             $membershipDate = $validated['membershipDate'];
@@ -670,152 +700,165 @@ class MemberController extends Controller
 
         // Update standard fields
         $member->fill($validated);
-        
+
         if ($membershipDate) {
             $member->created_at = $membershipDate;
         }
 
         $member->save();
-        
+
         return response()->json(['success' => true, 'message' => 'Updated successfully']);
     }
 
-    public function updateBranchService(Request $request, $id) {
+    public function updateBranchService(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
-    
+
         $v = Validator::make($request->all(), [
             'branchService' => ['required', 'string', 'max:100'],
-            'subBranch'     => ['nullable', 'string', 'max:100'],
+            'subBranch' => ['nullable', 'string', 'max:100'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $member->branchService()->updateOrCreate(['memberId' => $member->id], $v->validated());
+
         return response()->json(['success' => true, 'message' => 'Updated successfully.']);
     }
 
-    public function updateAfpInfo(Request $request, $id) {
+    public function updateAfpInfo(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
-    
+
         $v = Validator::make($request->all(), [
-            'afpsn'             => ['nullable', 'string', 'max:100'],
-            'rank'              => ['nullable', 'string', 'max:100'],
-            'designation'       => ['nullable', 'string', 'max:150'],
-            'afpId'             => ['nullable', 'string', 'max:100'],
+            'afpsn' => ['nullable', 'string', 'max:100'],
+            'rank' => ['nullable', 'string', 'max:100'],
+            'designation' => ['nullable', 'string', 'max:150'],
+            'afpId' => ['nullable', 'string', 'max:100'],
             'presentAssignment' => ['nullable', 'string', 'max:150'],
-            'controlNo'         => ['nullable', 'string', 'max:100'],
-            'yearsInService'    => ['nullable', 'string', 'max:50'],
-            'cadEnlistment'     => ['nullable', 'date'],
-            'retirementDate'    => ['nullable', 'date'],
-            'pensionDate'       => ['nullable', 'date'],
+            'controlNo' => ['nullable', 'string', 'max:100'],
+            'yearsInService' => ['nullable', 'string', 'max:50'],
+            'cadEnlistment' => ['nullable', 'date'],
+            'retirementDate' => ['nullable', 'date'],
+            'pensionDate' => ['nullable', 'date'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $member->afpInfo()->updateOrCreate(['memberId' => $member->id], $v->validated());
+
         return response()->json(['success' => true, 'message' => 'Updated successfully.']);
     }
 
-    public function updateSpouseInfo(Request $request, $id) {
+    public function updateSpouseInfo(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
-    
+
         $v = Validator::make($request->all(), [
-            'spouseName'   => ['required', 'string', 'max:50'],
-            'spouseDob'    => ['required', 'date'],
+            'spouseName' => ['required', 'string', 'max:50'],
+            'spouseDob' => ['required', 'date'],
             'dateMarriage' => ['nullable', 'date'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $validated = $v->validated();
         $validated['spouseAge'] = Carbon::parse($validated['spouseDob'])->age;
-    
+
         $member->SpouseInfo()->updateOrCreate(['memberId' => $member->id], $validated);
+
         return response()->json(['success' => true, 'message' => 'Updated successfully.']);
     }
 
-    public function updateParentsInfo(Request $request, $id) {
+    public function updateParentsInfo(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
         $v = Validator::make($request->all(), [
             'fatherName' => ['required', 'string', 'max:50'],
             'fatherAge' => ['nullable', 'int'],
             'motherName' => ['required', 'string', 'max:50'],
-            'motherAge' => ['nullable','int'],
+            'motherAge' => ['nullable', 'int'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $member->ParentsInfo()->updateOrCreate(['memberId' => $member->id], $v->validated());
+
         return response()->json(['success' => true, 'message' => 'Updated successfully.']);
     }
 
-    public function updateIdentificationInfo(Request $request, $id) {
+    public function updateIdentificationInfo(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
         $v = Validator::make($request->all(), [
-            'tinNo' => ['required','string','max:50'],
-            'gsisNo' => ['nullable','string','max:50'],
-            'crnUmidNo' => ['nullable','string','max:50']
+            'tinNo' => ['required', 'string', 'max:50'],
+            'gsisNo' => ['nullable', 'string', 'max:50'],
+            'crnUmidNo' => ['nullable', 'string', 'max:50'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $member->IdentificationInfo()->updateOrCreate(['memberId' => $member->id], $v->validated());
+
         return response()->json(['success' => true, 'message' => 'Updated successfully.']);
     }
 
-    public function updateEmergencyInfo(Request $request, $id) {
+    public function updateEmergencyInfo(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
         $v = Validator::make($request->all(), [
-            'contactPersonName' => ['required','string','max:50'],
-            'contactPersonAddress' => ['required','string','max:50'],
-            'contactPersonPhone' => ['required','string','max:50'],
-            'contactPersonRelation' => ['nullable','string','max:50']
+            'contactPersonName' => ['required', 'string', 'max:50'],
+            'contactPersonAddress' => ['required', 'string', 'max:50'],
+            'contactPersonPhone' => ['required', 'string', 'max:50'],
+            'contactPersonRelation' => ['nullable', 'string', 'max:50'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $member->EmergencyContact()->updateOrCreate(['memberId' => $member->id], $v->validated());
+
         return response()->json(['success' => true, 'message' => 'Updated successfully.']);
     }
 
-    public function updateDependents(Request $request, $id) {
+    public function updateDependents(Request $request, $id)
+    {
         $member = Member::findOrFail($id);
-    
+
         $v = Validator::make($request->all(), [
-            'dependents'          => ['required', 'array', 'min:1'],
-            'dependents.*.id'     => ['nullable', 'integer', 'exists:dependents,id'],
-            'dependents.*.name'   => ['required', 'string', 'max:100'],
-            'dependents.*.dob'    => ['required', 'date'],
+            'dependents' => ['required', 'array', 'min:1'],
+            'dependents.*.id' => ['nullable', 'integer', 'exists:dependents,id'],
+            'dependents.*.name' => ['required', 'string', 'max:100'],
+            'dependents.*.dob' => ['required', 'date'],
             'dependents.*.gender' => ['required', 'in:Male,Female'],
         ]);
-    
+
         if ($v->fails()) {
             return response()->json(['success' => false, 'message' => 'Validation failed.', 'errors' => $v->errors()], 422);
         }
-    
+
         $validated = $v->validated();
         $submittedIds = [];
-    
+
         foreach ($validated['dependents'] as $row) {
             $payload = [
-                'name'   => $row['name'],
-                'dob'    => Carbon::parse($row['dob'])->toDateString(),
+                'name' => $row['name'],
+                'dob' => Carbon::parse($row['dob'])->toDateString(),
                 'gender' => $row['gender'],
             ];
-    
-            if (!empty($row['id'])) {
+
+            if (! empty($row['id'])) {
                 $member->dependents()->where('id', $row['id'])->update($payload);
                 $submittedIds[] = $row['id'];
             } else {
@@ -825,12 +868,14 @@ class MemberController extends Controller
         }
 
         $member->dependents()->whereNotIn('id', $submittedIds)->delete();
+
         return response()->json(['success' => true, 'message' => 'Dependents updated successfully.']);
     }
 
-    public function updatePhoto(Request $request, $id) {
+    public function updatePhoto(Request $request, $id)
+    {
         $request->validate([
-            'profile_image' => ['required', 'image', 'mimes:jpeg,png,jpg,gif', 'max:5120']
+            'profile_image' => ['required', 'image', 'mimes:jpeg,png,jpg,gif', 'max:5120'],
         ]);
 
         $member = Member::findOrFail($id);
@@ -846,9 +891,9 @@ class MemberController extends Controller
         }
 
         return response()->json([
-            'success' => true, 
+            'success' => true,
             'message' => 'Profile image updated successfully.',
-            'profileImage' => $path ?? null
+            'profileImage' => $path ?? null,
         ]);
     }
 }

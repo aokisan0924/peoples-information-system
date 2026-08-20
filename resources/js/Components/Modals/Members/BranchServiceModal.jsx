@@ -71,7 +71,7 @@ useEffect(() => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-branch-service', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-branch-service', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('Branch Service updated successfully.');

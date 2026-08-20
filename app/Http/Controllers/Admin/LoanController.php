@@ -14,12 +14,15 @@ use App\Models\PostApprovalDocuments;
 use App\Models\Member;
 use App\Models\MemberNotification;
 use App\Models\MembershipPayment;
+use App\Services\LoanAccountingService;
+use App\Services\LoanCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -254,111 +257,92 @@ class LoanController extends Controller
 
     public function compute(Request $request) {
         $data = $request->validate([
-            'category' => ['nullable','string','max:100'],
             'netProceeds' =>  ['required','numeric','min:1'],
             'capCon' => ['nullable', 'numeric','min:0'],
             'membershipFee' => ['nullable','numeric','min:0'],
+            'memberId' => ['nullable', 'exists:members,id'],
             'terms' => ['required', 'integer', 'in:12,24,36,48,60'],
-            'advanceInterestMonths' => ['nullable', 'integer', 'min:0'], // default 2 if omitted
+            'advanceInterestMonths' => ['nullable', 'integer', 'min:0', 'max:12'],
         ]);
 
-        $category = strtoupper($data['category'] ?? 'ACTIVE_PENSIONER_V1');
-        $termMonths = (int)$data['terms'];
+        $membershipFee = array_key_exists('memberId', $data)
+            ? (MembershipPayment::where('memberId', $data['memberId'])->where('is_paid', true)->exists() ? 0.0 : 300.0)
+            : (float) ($data['membershipFee'] ?? 0);
+        $result = app(LoanCalculator::class)->calculate(
+            (float) $data['netProceeds'],
+            (int) $data['terms'],
+            null,
+            $membershipFee,
+            (int) ($data['advanceInterestMonths'] ?? 2),
+        );
 
-        // 1) Active computation (by category + term)
-        $active = Computations::where('category', $category)
-            ->where('termMonths', $termMonths)
-            ->where('isActive', true)
-            ->first();
+        return response()->json($result + [
+            'grossAmount' => $result['gross'],
+            'incomePercentDisplay' => number_format($result['incomePercent'] * 100, 2) . '%',
+            'effectiveInterestRateDisplay' => number_format($result['effectiveInterestRate'] * 100, 2) . '%',
+        ]);
+    }
 
-        if (!$active) {
-            $active = $this->excelDefaultComputation($termMonths);
+    public function recompute(Request $request)
+    {
+        $data = $request->validate([
+            'loanReference' => ['required', 'exists:loans,loanReference'],
+            'netProceeds' => ['required', 'numeric', 'min:1'],
+            'termYears' => ['required', 'integer', 'min:1', 'max:5'],
+        ]);
+
+        $loan = Loan::where('loanReference', $data['loanReference'])->firstOrFail();
+        if (strtolower((string) $loan->status) !== 'pending') {
+            return response()->json(['message' => 'Only pending applications may be recomputed.'], 422);
         }
 
-        if (!$active) {
-            return response()->json(['error' => "No active computation for {$category} term {$termMonths}"], 422);
-        }
+        $membershipFee = MembershipPayment::where('memberId', $loan->memberId)
+            ->where('is_paid', true)->exists() ? 0.0 : 300.0;
+        $calculation = app(LoanCalculator::class)->calculate(
+            (float) $data['netProceeds'],
+            (int) $data['termYears'] * 12,
+            null,
+            $membershipFee,
+            2,
+        );
 
-        // 2) Variables for formula evaluation
-        $vars = [
-            'netProceeds' => (float)$data['netProceeds'],
-            'capCon' => (float)($data['capCon'] ?? 0),
-            'membershipFee' => (float)($data['membershipFee'] ?? 0),
-            'terms' => $termMonths,
-            'advanceInterestMonths' => isset($data['advanceInterestMonths'])
-                ? (int)$data['advanceInterestMonths']
-                : 2, // default 2
-        ];
-
-        // 3) Evaluate rates/components (no early rounding)
-        $annualInterestRate = $this->evaluateFormulaSafely($active->annualRateFormula, $vars);
-        $vars['annualInterestRate'] = (float)$annualInterestRate;
-
-        $monthlyInterestRate = $this->evaluateFormulaSafely($active->monthlyRateFormula, $vars);
-        $vars['monthlyInterestRate'] = (float)$monthlyInterestRate;
-
-        $serviceFee = $this->evaluateFormulaSafely($active->serviceFeeFormula, $vars);
-        $insurance = $this->evaluateFormulaSafely($active->insuranceFormula, $vars);
-        $advanceInterest = $this->evaluateFormulaSafely($active->advanceInterestFormula, $vars);
-
-        // 4) Loan amount + PMT (excel precision)
-        $loanAmount = $vars['netProceeds'] + $serviceFee + $insurance + $vars['capCon'] + $vars['membershipFee'] + $advanceInterest;
-
-        $r = (float)$monthlyInterestRate;
-        $n = (float)$termMonths;
-
-        $formula1 = pow(1 + $r, $n);
-        $formula2 = $formula1 * $r;
-        $formula3 = $formula1 - 1.0;
-        $formula4 = $formula3 != 0.0 ? ($formula2 / $formula3) : 0.0;
-
-        $monthlyAmortization = $loanAmount * $formula4;
-        $grossAmount = $monthlyAmortization * $n;
-
-        // Effective interest
-        $effectiveInterestRate = null;
-        if (!empty($active->effectiveRateFormula)) {
-            $effectiveInterestRate = $this->evaluateFormulaSafely($active->effectiveRateFormula, $vars + [
-                'formula1' => $formula1,
+        DB::transaction(function () use ($loan, $data, $calculation): void {
+            $loan->update([
+                'termYears' => $data['termYears'],
+                'numberOfPayments' => $calculation['termMonths'],
+                'netProceeds' => $calculation['netProceeds'],
+                'serviceFee' => $calculation['serviceFee'],
+                'insurance' => $calculation['insurance'],
+                'advanceInterest' => $calculation['advanceInterest'],
+                'loanAmount' => $calculation['loanAmount'],
+                'monthlyAmortization' => $calculation['monthlyAmortization'],
+                'monthlyInterestRate' => $calculation['monthlyInterestRate'],
+                'annual_interest_rate' => $calculation['annualInterestRate'],
+                'effectiveInterestRate' => $calculation['effectiveInterestRate'],
+                'gross' => $calculation['gross'],
+                'income' => $calculation['income'],
+                'percentIncome' => $calculation['incomePercent'] * 100,
+                'calculation_version' => $calculation['calculationVersion'],
+                'calculation_snapshot' => $calculation,
+                'advanceInterestMonths' => 2,
             ]);
-        }
 
-        $income = $grossAmount - (float)$vars['netProceeds'];
-        $incomePercent = $grossAmount > 0 ? ($income / $grossAmount) : 0.0;
+            CapitalContribution::updateOrCreate(
+                ['memberId' => $loan->memberId, 'reference_number' => $loan->loanReference],
+                ['transactionType' => 'deposit', 'amount' => $calculation['capCon'], 'is_paid' => false, 'status' => 'Pending']
+            );
+            if ($calculation['membershipFee'] > 0) {
+                MembershipPayment::updateOrCreate(
+                    ['memberId' => $loan->memberId, 'reference_number' => $loan->loanReference],
+                    ['amount' => $calculation['membershipFee'], 'is_paid' => false, 'status' => 'Pending']
+                );
+            } else {
+                MembershipPayment::where('memberId', $loan->memberId)
+                    ->where('reference_number', $loan->loanReference)->where('is_paid', false)->delete();
+            }
+        });
 
-        return response()->json([
-            'annualInterestRate' => round($annualInterestRate, 6),
-            'monthlyInterestRate' => round($monthlyInterestRate, 6),
-
-            'serviceFee' => round($serviceFee, 2),
-            'insurance' => round($insurance, 2),
-            'advanceInterest' => round($advanceInterest, 2),
-
-            'loanAmount' => round($loanAmount, 2),
-            'monthlyAmortization' => round($monthlyAmortization, 2),
-            'gross' => round($grossAmount, 2),
-
-            'income' => round($income, 2),
-            'incomePercent' => round($incomePercent, 6),
-            'incomePercentDisplay' => number_format($incomePercent * 100, 2) . '%',
-
-            'formula1' => $formula1,
-            'formula2' => $formula2,
-            'formula3' => $formula3,
-            'formula4' => $formula4,
-
-            'formula2Display' => number_format($formula2, 6),
-            'formula3Display' => number_format($formula3, 4),
-            'formula4Display' => number_format($formula4, 6),
-
-            'effectiveInterestRate' => $effectiveInterestRate !== null ? round($effectiveInterestRate, 6) : null,
-            'effectiveInterestRateDisplay' => $effectiveInterestRate !== null ? (number_format($effectiveInterestRate*100, 2).'%' ) : null,
-
-            'categoryUsed' => $category,
-            'termMonthsUsed' => $termMonths,
-            'computationId' => $active->id,
-            'computationTitle' => $active->title,
-        ]);
+        return response()->json(['message' => 'Pending loan recomputed.', 'calculation' => $calculation]);
     }
 
     public function storeLoan(Request $request){
@@ -370,52 +354,23 @@ class LoanController extends Controller
             'loanClassification' => ['required','string','max:50'],
             'termYears' => ['required','integer','min:1','max:5'],
 
-            // Financials (Manual)
-            'netProceeds' => ['required','numeric','min:0'],
+            'netProceeds' => ['required','numeric','min:1'],
             'capCon' => ['nullable','numeric','min:0'],
             'membershipFee' => ['nullable','numeric','min:0'],
-            'grossAmount' => ['required','numeric','min:0'],
-            'loanAmount' => ['required','numeric','min:0'],
-            'monthlyAmortization' => ['required','numeric','min:0'],
-
-            // Rates for Ledger PDF
-            'monthlyInterestRate' => ['required','numeric','min:0'],
-            'effectiveInterestRate' => ['required','numeric','min:0'],
-
-            // Deductions
-            'serviceFee' => ['required','numeric','min:0'],
-            'insurance' => ['required','numeric','min:0'],
-            'advanceInterest' => ['required','numeric','min:0'],
-
-            // Journal Entries validation
-            'journalEntries' => ['required', 'array'],
-            'journalEntries.*.accountCode' => ['required', 'string'],
-            'journalEntries.*.debit' => ['required', 'numeric', 'min:0'],
-            'journalEntries.*.credit' => ['required', 'numeric', 'min:0'],
+            'advanceInterestMonths' => ['nullable','integer','min:0','max:12'],
         ]);
 
         $months = (int)$data['termYears'] * 12;
-        $income  = $data['grossAmount'] - $data['netProceeds'];
-        $percentIncome = $data['grossAmount'] > 0 ? ($income / $data['grossAmount']) * 100 : 0;
         $appDate = Carbon::parse($data['applicationDate'])->toDateTimeString();
+        $membershipFee = MembershipPayment::where('memberId', $data['memberId'])->where('is_paid', true)->exists() ? 0.0 : 300.0;
+        $calculation = app(LoanCalculator::class)->calculate(
+            (float) $data['netProceeds'],
+            $months,
+            null,
+            $membershipFee,
+            (int) ($data['advanceInterestMonths'] ?? 2),
+        );
 
-
-        $pendingEntries = [];
-        if (!empty($data['journalEntries'])) {
-            foreach ($data['journalEntries'] as $entry) {
-                if ($entry['debit'] == 0 && $entry['credit'] == 0)
-                    continue;
-                $chartAccount = AccChartOfAccount::where('accountCode', $entry['accountCode'])->first();
-                $pendingEntries[] = [
-                    'accountCode' => $entry['accountCode'],
-                    'accountName' => $chartAccount ? $chartAccount->accountName : 'Unknown Account',
-                    'debit' => round($entry['debit'], 2),
-                    'credit' => round($entry['credit'], 2),
-                ];
-            }
-        }
-
-        // Save loan
         $loan = Loan::create([
             'memberId' => $data['memberId'],
             'deductionCode' => $data['deductionCode'],
@@ -423,34 +378,37 @@ class LoanController extends Controller
             'loanClassification' => $data['loanClassification'],
             'termYears' => $data['termYears'],
 
-            'netProceeds' => round($data['netProceeds'], 2),
-            'serviceFee' => round($data['serviceFee'], 2),
-            'insurance' => round($data['insurance'], 2),
-            'advanceInterest' => round($data['advanceInterest'], 2),
-            'loanAmount' => round($data['loanAmount'], 2), // Principal
-            'monthlyAmortization' => round($data['monthlyAmortization'], 2),
-            'monthlyInterestRate' => round($data['monthlyInterestRate'] / 100, 5),
-            'effectiveInterestRate' => round($data['effectiveInterestRate'] / 100, 5),
-            'gross' => round($data['grossAmount'], 2),
-            'income' => round($income, 2),
-            'percentIncome' => round($percentIncome, 2),
+            'netProceeds' => $calculation['netProceeds'],
+            'serviceFee' => $calculation['serviceFee'],
+            'insurance' => $calculation['insurance'],
+            'advanceInterest' => $calculation['advanceInterest'],
+            'loanAmount' => $calculation['loanAmount'],
+            'monthlyAmortization' => $calculation['monthlyAmortization'],
+            'monthlyInterestRate' => $calculation['monthlyInterestRate'],
+            'annual_interest_rate' => $calculation['annualInterestRate'],
+            'effectiveInterestRate' => $calculation['effectiveInterestRate'],
+            'gross' => $calculation['gross'],
+            'income' => $calculation['income'],
+            'percentIncome' => $calculation['incomePercent'] * 100,
+            'calculation_version' => $calculation['calculationVersion'],
+            'calculation_snapshot' => $calculation,
 
             'numberOfPayments' => $months,
             'status' => 'Pending',
             'loanReference' => $this->makeLoanReference(),
             'processed_by' => Auth::guard('admin')->id(),
 
-            'advanceInterestMonths' => 2,
-            'journal_entries' => $pendingEntries,
+            'advanceInterestMonths' => $calculation['advanceInterestMonths'],
+            'journal_entries' => null,
             'created_at' => $appDate,
             'updated_at' => $appDate,
         ]);
 
-        if ($data['capCon'] > 0) {
+        if ($calculation['capCon'] > 0) {
             CapitalContribution::create([
                 'memberId' => $data['memberId'],
                 'transactionType' => 'deposit',
-                'amount' => round($data['capCon'], 2),
+                'amount' => $calculation['capCon'],
                 'reference_number' => $loan->loanReference,
                 'is_paid' => '0',
                 'status' => 'Pending',
@@ -460,10 +418,10 @@ class LoanController extends Controller
             ]);
         }
 
-        if ($data['membershipFee'] > 0) {
+        if ($calculation['membershipFee'] > 0) {
             MembershipPayment::create([
                 'memberId' => $data['memberId'],
-                'amount' => round($data['membershipFee'], 2),
+                'amount' => $calculation['membershipFee'],
                 'reference_number' => $loan->loanReference,
                 'is_paid' => '0',
                 'status' => 'Pending',
@@ -832,7 +790,12 @@ class LoanController extends Controller
                 'paid_at' => $now,
             ]);
 
-        if (!empty($loan->journal_entries)) {
+        $hasAuthoritativeCalculation = $loan->calculation_version === LoanCalculator::VERSION
+            && is_array($loan->calculation_snapshot);
+
+        if ($hasAuthoritativeCalculation) {
+            app(LoanAccountingService::class)->enqueueRelease($loan);
+        } elseif (!empty($loan->journal_entries)) {
             $applicationDate = $loan->created_at;
 
             // CHANGED: this no longer writes straight to AccGeneralLedger.
@@ -859,29 +822,36 @@ class LoanController extends Controller
 
         $loan->status = 'released';
         $loan->processed_by = Auth::guard('admin')->id();
+        if (Schema::hasColumn('loans', 'release_date')) {
+            $loan->release_date = $now;
+        }
         $loan->save();
 
-        $scheduleData = [];
-        $baseDate = $now->copy();
-        $advanceMonths = (int) $loan->advanceInterestMonths;
-        $termMonths = (int) ($loan->termYears * 12);
-
-        $paymentDate = $baseDate->copy()->addMonths(1 + $advanceMonths);
-
-        for ($i = 1; $i <= $termMonths; $i++) {
-            $scheduleData[] = [
-                'loanId'            => $loan->id,
-                'installmentNumber' => $i,
-                'dueDate'           => $paymentDate->copy()->format('Y-m-d'),
-                'amountDue'         => $loan->monthlyAmortization,
-                'status'            => 'unpaid',
-                'createdAt'         => now(),
-                'updatedAt'         => now(),
-            ];
-
-            $paymentDate->addMonth();
+        DB::table('loan_amortization_schedules')->where('loanId', $loan->id)->delete();
+        $firstDueDate = $now->copy()->addMonthsNoOverflow(1 + (int) $loan->advanceInterestMonths);
+        if ($hasAuthoritativeCalculation) {
+            $scheduleData = collect(app(LoanCalculator::class)->buildSchedule($loan->calculation_snapshot, $firstDueDate))
+                ->map(function (array $row) use ($loan) {
+                    $row['loanId'] = $loan->id;
+                    $row['status'] = 'unpaid';
+                    $row['createdAt'] = now();
+                    $row['updatedAt'] = now();
+                    return $row;
+                })->all();
+        } else {
+            $scheduleData = [];
+            for ($i = 1; $i <= (int) ($loan->termYears * 12); $i++) {
+                $scheduleData[] = [
+                    'loanId' => $loan->id,
+                    'installmentNumber' => $i,
+                    'dueDate' => $firstDueDate->copy()->addMonthsNoOverflow($i - 1)->toDateString(),
+                    'amountDue' => $loan->monthlyAmortization,
+                    'status' => 'unpaid',
+                    'createdAt' => now(),
+                    'updatedAt' => now(),
+                ];
+            }
         }
-
         DB::table('loan_amortization_schedules')->insert($scheduleData);
 
         MemberNotification::create([

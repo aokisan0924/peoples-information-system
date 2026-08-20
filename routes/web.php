@@ -195,9 +195,9 @@ Route::middleware('auth:member')->prefix('client')->name('member.')->group(funct
 
     // Payments
     Route::get('/payment-status', [MemberPaymentStatusController::class, 'showPaymentStatus'])->name('payment-status');
-    Route::get('/payment/success', [PaymentController::class, 'success']);
-    Route::get('/payment/failure', [PaymentController::class, 'failure']);
-    Route::get('/payment/cancel', [PaymentController::class, 'cancel']);
+    Route::get('/payment/success', [PaymentController::class, 'success'])->name('payment.success');
+    Route::get('/payment/failure', [PaymentController::class, 'failure'])->name('payment.failure');
+    Route::get('/payment/cancel', [PaymentController::class, 'cancel'])->name('payment.cancel');
 
     // Change Password (OTP-verified — authenticated member only)
     // Step 1: validate current password → send OTP to member's email/mobile
@@ -328,17 +328,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 Route::post('/e-wallet/log', [AccEWalletController::class, 'storeLog'])->name('ewallet.store-log');
                 Route::put('/e-wallet/{id}', [AccEWalletController::class, 'update'])->name('ewallet.update');
                 Route::post('/e-wallet/{id}/journalize', [AccEWalletController::class, 'journalize'])->name('ewallet.journalize');
-                Route::get('/e-wallet/print/{ids}', [AccEWalletController::class, 'printVoucher'])->name('ewallet.print');
             });
         });
 
         // 1. Dashboard & Security
         Route::get('/dashboard', [AdminDashboardController::class, 'showDashboard'])->name('dashboard');
-        Route::get('/dashboard/export', [AdminDashboardController::class, 'exportDashboard'])->name('dashboard.export');
 
         
         Route::get('/2fa/setup', [AdminAuthController::class, 'show2faSetup'])->name('2fa.setup');
-        Route::post('/2fa/setup', [AdminAuthController::class, 'store2faSetup'])->name('2fa.setup.store');
 
         // 2. Profile Management
         Route::get('/profile', [AdminProfileController::class, 'edit'])->name('profile.edit');
@@ -368,7 +365,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/computations', [AdminComputationController::class, 'computationList'])->name('computations.list');
             Route::post('/computations', [AdminComputationController::class, 'storeComputation'])->name('computations.store-computation');
             Route::put('/computations/{id}', [AdminComputationController::class, 'updateComputation'])->name('computations.update-computation');
-            Route::get('/computations/{id}/set-active', [AdminComputationController::class, 'setActive'])->name('computations.set-active');
+            Route::post('/computations/{id}/set-active', [AdminComputationController::class, 'setActive'])->name('computations.set-active');
             Route::delete('/computations/{id}', [AdminComputationController::class, 'destroyComputation'])->name('computations.destroy-computation');
         });
 
@@ -401,14 +398,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         Route::middleware('can_access:process_loans')->group(function () {
-            Route::post('/compute-loan', [LoanController::class, 'compute']);
-            Route::post('/submit-loan', [LoanController::class, 'storeLoan']);
+            Route::post('/compute-loan', [LoanController::class, 'compute'])->name('loan.compute');
+            Route::post('/submit-loan', [LoanController::class, 'storeLoan'])->name('loan.store');
             Route::post('/recompute-loan', [LoanController::class, 'recompute'])->name('loan.recompute');
 
             Route::post('/loans/{loanReference}/approve', [LoanController::class, 'approve'])->name('loan.approve');
             Route::post('/loans/{loanReference}/decline', [LoanController::class, 'decline'])->name('loan.decline');
             Route::post('/loans/{loanReference}/release', [LoanController::class, 'release'])->name('loan.release');
-            Route::post('/loans/{loanReference}/complete', [LoanController::class, 'complete'])->name('loan.complete');
 
             Route::post('/loans/{loanReference}/post-approval-docs', [LoanController::class, 'storePostApprovalDocs'])->name('loans.postApprovalDocs.store');
             Route::post('/loans/{loanReference}/documents', [LoanController::class, 'storePreApprovalDocuments'])->name('loans.documents.store');
@@ -420,7 +416,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', [MemberController::class, 'showMemberPage'])->name('index');
             Route::get('/profile/{id}', [MemberController::class, 'showMemberDetail'])->name('show-member');
             
-            Route::get('/{id}/loan-details/{loanReference}', [MemberController::class, 'apiMemberLoanDetails'])->name('loan-details');
             Route::get('/api/members/search', [LoanController::class, 'apiSearchMembers'])->name('api.members.search'); 
 
             // Actions
@@ -435,7 +430,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/{id}/update-photo', [MemberController::class, 'updatePhoto'])->name('update-photo');
 
             Route::post('/store', [MemberController::class, 'store'])->name('store');
-            Route::post('/initial-deposit', [MemberController::class, 'initialDeposit'])->name('initial-deposit');
 
             Route::get('/export', [MemberDataController::class, 'exportSpreadsheet'])->name('export');
             Route::post('/import', [MemberDataController::class, 'importSpreadsheet'])->name('import');

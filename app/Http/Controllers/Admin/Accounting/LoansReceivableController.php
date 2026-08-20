@@ -21,7 +21,7 @@ class LoansReceivableController extends Controller
     // =========================================================================
     public function getReceivablesData(): JsonResponse {
         try {
-            $loans = Loan::with(['member'])
+            $loans = Loan::with(['member', 'amortizationSchedules'])
                 ->whereRaw('LOWER(billing_status) = ?', ['billed'])
                 ->orderByDesc('billed_at')
                 ->get();
@@ -79,10 +79,24 @@ class LoansReceivableController extends Controller
             'termMonths'    => $termMonths,
 
             'billedAt'      => $loan->billed_at ? Carbon::parse($loan->billed_at)->format('M d, Y') : null,
-
-            'ledger'        => ($baseDate && $termMonths > 0)
-                ? $this->buildSchedule($loan, $termMonths, $advanceMonths, $baseDate instanceof Carbon ? $baseDate : Carbon::parse($baseDate))
-                : [],
+            'calculationVersion' => $loan->calculation_version,
+            'legacy' => blank($loan->calculation_version),
+            'ledger' => $loan->amortizationSchedules->isNotEmpty()
+                ? $loan->amortizationSchedules->map(fn ($row) => [
+                    'period' => $row->installmentNumber,
+                    'dueDate' => optional($row->dueDate)->format('F Y'),
+                    'installment' => (float) $row->amountDue,
+                    'principal' => (float) $row->principalDue,
+                    'interest' => (float) $row->interestDue,
+                    'balance' => (float) $row->closingBalance,
+                    'amountPaid' => (float) ($row->amountPaid ?? 0),
+                    'principalPaid' => (float) ($row->principalPaid ?? 0),
+                    'interestPaid' => (float) ($row->interestPaid ?? 0),
+                    'status' => $row->status,
+                ])->values()->all()
+                : (($baseDate && $termMonths > 0)
+                    ? $this->buildSchedule($loan, $termMonths, $advanceMonths, $baseDate instanceof Carbon ? $baseDate : Carbon::parse($baseDate))
+                    : []),
         ];
     }
 
@@ -110,6 +124,9 @@ class LoansReceivableController extends Controller
         $installment = (float) ($loan->monthlyAmortization ?? 0);
 
         $monthlyRate = (float) ($loan->monthlyInterestRate ?? 0);
+        if ($monthlyRate <= 0 && $balance > 0 && $installment > 0) {
+            $monthlyRate = $this->inferMonthlyRate($balance, $installment, $termMonths);
+        }
 
         if ($termMonths <= 0 || $installment <= 0) {
             return [];
@@ -159,5 +176,19 @@ class LoansReceivableController extends Controller
         }
 
         return $schedule;
+    }
+
+    private function inferMonthlyRate(float $principal, float $payment, int $months): float
+    {
+        if ($payment * $months <= $principal) return 0.0;
+        $low = 0.0;
+        $high = 0.10;
+        for ($iteration = 0; $iteration < 100; $iteration++) {
+            $rate = ($low + $high) / 2;
+            $factor = pow(1 + $rate, $months);
+            $candidate = $principal * (($factor * $rate) / ($factor - 1));
+            if ($candidate > $payment) $high = $rate; else $low = $rate;
+        }
+        return ($low + $high) / 2;
     }
 }

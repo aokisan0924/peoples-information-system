@@ -333,11 +333,17 @@ export default function ClientLoanApplication() {
                                                 </h3>
                                                 {computing && <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 animate-pulse bg-emerald-100 dark:bg-emerald-500/20 px-2 py-1 rounded-md">Calculating...</span>}
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                                                 <Summary label="Net Proceeds" value={netProceeds} money />
+                                                <Summary label="Loan Amount" value={computeResults.loanAmount} money />
                                                 <Summary label="Monthly Amort." value={computeResults.monthlyAmortization} money />
                                                 <Summary label="Share Capital" value={computeResults.capCon ?? 5000} money />
+                                                <Summary label="Service Fee" value={computeResults.serviceFee} money />
+                                                <Summary label="Insurance" value={computeResults.insurance} money />
+                                                <Summary label="Advance Interest" value={computeResults.advanceInterest} money />
+                                                <Summary label="Gross Payments" value={computeResults.gross} money />
                                             </div>
+                                            <p className="mt-4 text-center text-[10px] font-black uppercase tracking-widest text-emerald-700/70 dark:text-emerald-300/60">{computeResults.calculationVersion || 'Official calculation pending'}</p>
                                         </div>
 
                                         <RequirementsList branchService={computeResults.branchService} requirements={computeResults.preLoanRequirements} />
@@ -350,7 +356,7 @@ export default function ClientLoanApplication() {
                                 </div>
                                 <div className="shrink-0 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 p-4 border-t border-slate-200/80 dark:border-white/10 bg-white dark:bg-[#0f1f1a] z-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
                                     <button onClick={closeModal} className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-white/10 transition shadow-sm">Cancel</button>
-                                    <button onClick={handleSubmit} disabled={submitting} className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold disabled:opacity-70 flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition active:scale-[0.98]">
+                                    <button onClick={handleSubmit} disabled={submitting || computing || !computeResults.calculationVersion} className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold disabled:opacity-70 flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition active:scale-[0.98]">
                                         {submitting && <Loader2 className="h-4 w-4 animate-spin" />} {submitting ? "Submitting..." : "Submit Application"}
                                     </button>
                                 </div>

@@ -225,6 +225,8 @@ export default function Loan() {
     const [membershipFee,        setMembershipFee]        = useState("");
     const [glMapping,            setGlMapping]            = useState({ principal:"", netProceeds:"", serviceFee:"", insurance:"", advanceInterest:"", capCon:"", membershipFee:"" });
     const [manualEntries,        setManualEntries]        = useState([]);
+    const [computing,            setComputing]            = useState(false);
+    const [calculationVersion,   setCalculationVersion]   = useState("");
 
     // ── GL ENTRIES ────────────────────────────────────────────────────────────
     const activeEntries = useMemo(() => {
@@ -266,6 +268,24 @@ export default function Loan() {
         finally { setLoading(false); }
     };
     useEffect(() => { const t = setTimeout(() => loadData(1), 300); return () => clearTimeout(t); }, [search, perPage]);
+    useEffect(() => {
+        if (!showModal || toNumber(netProceeds) <= 0) return;
+        const timer = setTimeout(async () => {
+            setComputing(true);
+            try {
+                const payload = { netProceeds: toNumber(netProceeds), terms: Number(termYears) * 12 };
+                if (memberId) payload.memberId = memberId;
+                const { data } = await axios.post('/admin/compute-loan', payload);
+                setGrossAmount(data.gross); setLoanAmount(data.loanAmount); setMonthlyAmortization(data.monthlyAmortization);
+                setMonthlyInterestRate((toNumber(data.monthlyInterestRate) * 100).toFixed(4));
+                setEffectiveInterestRate((toNumber(data.effectiveInterestRate) * 100).toFixed(4));
+                setServiceFee(data.serviceFee); setInsurance(data.insurance); setAdvanceInterest(data.advanceInterest);
+                setCapCon(data.capCon); setMembershipFee(data.membershipFee); setCalculationVersion(data.calculationVersion || '');
+            } catch (error) { toast.error(error?.response?.data?.message || 'Unable to calculate this loan.'); }
+            finally { setComputing(false); }
+        }, 350);
+        return () => clearTimeout(timer);
+    }, [showModal, netProceeds, termYears, memberId]);
     const handlePageChange = (p) => { if (p >= 1 && p <= meta.lastPage) loadData(p); };
 
     const resetForm = () => {
@@ -274,6 +294,7 @@ export default function Loan() {
         setServiceFee(""); setInsurance(""); setAdvanceInterest(""); setCapCon(""); setMembershipFee("");
         setGlMapping({ principal:"", netProceeds:"", serviceFee:"", insurance:"", advanceInterest:"", capCon:"", membershipFee:"" });
         setManualEntries([]);
+        setCalculationVersion("");
     };
 
     const handleSubmitLoan = () => {
@@ -282,21 +303,12 @@ export default function Loan() {
         if (!deductionCode)    return toast.error("Please select a deduction code.");
         if (!loanType)         return toast.error("Please select a loan type.");
         if (!loanClassification) return toast.error("Please select a classification.");
-        if (activeEntries.length === 0 && manualEntries.length === 0) return toast.error("Enter financial amounts to generate ledger entries.");
-        if (activeEntries.some(e => !e.accountCode) || manualEntries.some(e => !e.accountCode)) return toast.error("Please assign a Chart of Account to every ledger row.");
-        if (!isBalanced) return toast.error(`Unbalanced! Debits (${asMoney(totalDebit)}) ≠ Credits (${asMoney(totalCredit)})`);
-        const journalEntries = [
-            ...activeEntries.map(e => ({ accountCode: e.accountCode, debit: e.type==='debit' ? e.amount : 0, credit: e.type==='credit' ? e.amount : 0 })),
-            ...manualEntries.map(e => ({ accountCode: e.accountCode, debit: toNumber(e.debit), credit: toNumber(e.credit) }))
-        ];
+        if (computing || !calculationVersion) return toast.error("Wait for the official calculation preview.");
         axios.post("/admin/submit-loan", {
             applicationDate, memberId, termYears, loanType, loanClassification, deductionCode, status:"pending",
             netProceeds:toNumber(netProceeds), membershipFee:toNumber(membershipFee), capCon:toNumber(capCon),
-            grossAmount:toNumber(grossAmount), loanAmount:toNumber(loanAmount), monthlyAmortization:toNumber(monthlyAmortization),
-            monthlyInterestRate:toNumber(monthlyInterestRate), effectiveInterestRate:toNumber(effectiveInterestRate),
-            serviceFee:toNumber(serviceFee), insurance:toNumber(insurance), advanceInterest:toNumber(advanceInterest), journalEntries
         }).then(() => { toast.success("Loan saved successfully."); setShowModal(false); loadData(1); })
-            .catch(() => toast.error("Submit failed. Please verify the backend controller."));
+            .catch((error) => toast.error(error?.response?.data?.message || "Loan submission failed."));
     };
 
     const todayStr = new Date().toLocaleString("en-PH", { month: "long", year: "numeric" });
@@ -545,21 +557,25 @@ export default function Loan() {
 
                                 {/* SECTION 2: Financial Setup */}
                                 <SectionCard title="Loan Financials" icon={Calculator} iconBg="bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                    <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                                        <div><p className="text-sm font-black text-emerald-900 dark:text-emerald-300">Official workbook calculation</p><p className="text-xs text-emerald-700 dark:text-emerald-400">Enter net proceeds and term. All other figures are calculated and verified by the server.</p></div>
+                                        <span className="shrink-0 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 shadow-sm dark:bg-white/10 dark:text-emerald-300">{computing ? 'Calculating…' : calculationVersion || 'Awaiting input'}</span>
+                                    </div>
                                     {/* Core amounts */}
                                     <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/[0.06]">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-white/30 mb-3">Core Amounts</p>
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                             <Field label="Gross Loan">
-                                                <input type="number" value={grossAmount} onChange={e => setGrossAmount(e.target.value)} className={inputCls} placeholder="0.00" />
+                                                <input type="number" value={grossAmount} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} placeholder="0.00" />
                                             </Field>
                                             <Field label="Principal (DR)">
-                                                <input type="number" value={loanAmount} onChange={e => setLoanAmount(e.target.value)} className={`${inputCls} border-blue-200 dark:border-blue-500/30 focus:border-blue-500 focus:ring-blue-500/30`} placeholder="0.00" />
+                                                <input type="number" value={loanAmount} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} placeholder="0.00" />
                                             </Field>
                                             <Field label="Net Proceeds (CR)">
                                                 <input type="number" value={netProceeds} onChange={e => setNetProceeds(e.target.value)} className={`${inputCls} border-emerald-200 dark:border-emerald-500/30 focus:border-emerald-500 focus:ring-emerald-500/30`} placeholder="0.00" />
                                             </Field>
                                             <Field label="Monthly Amort.">
-                                                <input type="number" value={monthlyAmortization} onChange={e => setMonthlyAmortization(e.target.value)} className={inputCls} placeholder="0.00" />
+                                                <input type="number" value={monthlyAmortization} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} placeholder="0.00" />
                                             </Field>
                                         </div>
                                     </div>
@@ -568,25 +584,25 @@ export default function Loan() {
                                         <div className="col-span-2 sm:col-span-3 lg:col-span-3">
                                             <div className="grid grid-cols-2 gap-3">
                                                 <Field label="Monthly Int. Rate">
-                                                    <input type="number" step="0.00001" value={monthlyInterestRate} onChange={e => setMonthlyInterestRate(e.target.value)} className={inputCls} placeholder="0.015" />
+                                                    <input type="number" step="0.00001" value={monthlyInterestRate} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} />
                                                 </Field>
                                                 <Field label="Effective Int. Rate">
-                                                    <input type="number" step="0.00001" value={effectiveInterestRate} onChange={e => setEffectiveInterestRate(e.target.value)} className={inputCls} placeholder="0.18" />
+                                                    <input type="number" step="0.00001" value={effectiveInterestRate} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} />
                                                 </Field>
                                             </div>
                                         </div>
-                                        <Field label="Service Fee">    <input type="number" value={serviceFee}      onChange={e=>setServiceFee(e.target.value)}      className={inputCls} placeholder="0.00" /></Field>
-                                        <Field label="Advance Int.">   <input type="number" value={advanceInterest} onChange={e=>setAdvanceInterest(e.target.value)} className={inputCls} placeholder="0.00" /></Field>
-                                        <Field label="Insurance">      <input type="number" value={insurance}       onChange={e=>setInsurance(e.target.value)}       className={inputCls} placeholder="0.00" /></Field>
-                                        <Field label="Cap. Contrib.">  <input type="number" value={capCon}          onChange={e=>setCapCon(e.target.value)}           className={inputCls} placeholder="0.00" /></Field>
+                                        <Field label="Service Fee">    <input type="number" value={serviceFee} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} /></Field>
+                                        <Field label="Advance Int.">   <input type="number" value={advanceInterest} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} /></Field>
+                                        <Field label="Insurance">      <input type="number" value={insurance} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} /></Field>
+                                        <Field label="Cap. Contrib.">  <input type="number" value={capCon} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} /></Field>
                                         <div className="col-span-2">
-                                            <Field label="Membership Fee"><input type="number" value={membershipFee} onChange={e=>setMembershipFee(e.target.value)} className={inputCls} placeholder="0.00" /></Field>
+                                            <Field label="Membership Fee"><input type="number" value={membershipFee} readOnly className={`${inputCls} bg-slate-100 dark:bg-white/[0.03]`} placeholder="0.00" /></Field>
                                         </div>
                                     </div>
                                 </SectionCard>
 
                                 {/* SECTION 3: Journal Entry Builder */}
-                                <div className="bg-white dark:bg-[#0d1a14] rounded-2xl border border-slate-200 dark:border-white/[0.08] shadow-sm overflow-hidden">
+                                {false && <div className="bg-white dark:bg-[#0d1a14] rounded-2xl border border-slate-200 dark:border-white/[0.08] shadow-sm overflow-hidden">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-white/[0.06]">
                                         <div className="flex items-center gap-3">
                                             <div className="h-8 w-8 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 grid place-items-center text-indigo-600 dark:text-indigo-400 shrink-0">
@@ -694,22 +710,22 @@ export default function Loan() {
                                             </tfoot>
                                         </table>
                                     </div>
-                                </div>
+                                </div>}
                             </div>
 
                             {/* Modal footer */}
                             <div className="shrink-0 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 px-5 sm:px-7 py-4 border-t border-slate-100 dark:border-white/[0.07] bg-white dark:bg-[#0a1510]">
                                 <p className="text-xs text-slate-400 dark:text-white/30 hidden sm:block">
-                                    {isBalanced ? '✓ Ledger is balanced and ready to submit.' : 'Total debits must equal total credits to submit.'}
+                                    Release and payment journals are generated automatically and still require accounting review.
                                 </p>
                                 <div className="flex gap-2.5 w-full sm:w-auto">
                                     <button onClick={() => setShowModal(false)}
                                         className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-white/80 hover:bg-slate-50 dark:hover:bg-white/10 font-semibold text-sm transition active:scale-95"
                                     >Cancel</button>
-                                    <button onClick={handleSubmitLoan} disabled={!isBalanced || (activeEntries.length === 0 && manualEntries.length === 0)}
+                                    <button onClick={handleSubmitLoan} disabled={computing || !calculationVersion}
                                         className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/25 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
                                     >
-                                        {isBalanced ? <><CheckCircle2 size={15} className="text-current" /> Submit Application</> : <><AlertCircle size={15} className="text-current" /> Unbalanced</>}
+                                        {computing ? <><Loader2 size={15} className="animate-spin" /> Calculating</> : <><CheckCircle2 size={15} /> Submit Application</>}
                                     </button>
                                 </div>
                             </div>

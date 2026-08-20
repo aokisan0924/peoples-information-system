@@ -9,6 +9,7 @@ use App\Models\Loan;
 use App\Models\Computations;
 use App\Models\LoanDocuments;
 use App\Models\MembershipPayment;
+use App\Services\LoanCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -100,7 +101,6 @@ class ClientLoanController extends Controller
         $termMonths  = $termYears * 12;
 
         $branchServiceName = $this->getBranchServiceName($member);
-        $category          = $this->mapCategoryByBranchServiceName($branchServiceName);
 
         $hasPaidMembership = MembershipPayment::where('memberId', $member->id)
             ->where('is_paid', true)
@@ -108,41 +108,17 @@ class ClientLoanController extends Controller
 
         $membershipFee = $hasPaidMembership ? 0.0 : 300.0;
 
-        $capCon                = 5000.0;
         $advanceInterestMonths = 2;
 
-        $hasComputation = Computations::query()
-            ->where('category', $category)
-            ->where('termMonths', $termMonths)
-            ->where('isActive', true)
-            ->exists();
-
-        if (!$hasComputation) {
-            return response()->json([
-                'message' => "No active computation settings for {$category} at {$termMonths} months.",
-            ], 422);
-        }
-
-        $adminPayload = [
-            'category'              => $category,
-            'netProceeds'           => $netProceeds,
-            'capCon'                => $capCon,
-            'membershipFee'         => $membershipFee,
-            'terms'                 => $termMonths,
-            'advanceInterestMonths' => $advanceInterestMonths,
-        ];
-
-        $fakeRequest = Request::create('/admin/loans/api-compute', 'POST', $adminPayload);
-
-        /** @var AdminLoanController $adminController */
-        $adminController = app(AdminLoanController::class);
-
-        /** @var JsonResponse $response */
-        $response = $adminController->compute($fakeRequest);
-        $payload  = $response->getData(true);
+        $payload = app(LoanCalculator::class)->calculate(
+            $netProceeds,
+            $termMonths,
+            null,
+            $membershipFee,
+            $advanceInterestMonths,
+        );
 
         $payload['membershipFee']       = $membershipFee;
-        $payload['capCon']              = $capCon;
         $payload['termYears']           = $termYears;
         $payload['termMonths']          = $termMonths;
         $payload['branchService']       = $branchServiceName ?: 'N/A';
@@ -150,9 +126,7 @@ class ClientLoanController extends Controller
             (string) ($branchServiceName ?? '')
         );
 
-        if (isset($payload['gross']) && !isset($payload['grossAmount'])) {
-            $payload['grossAmount'] = $payload['gross'];
-        }
+        $payload['grossAmount'] = $payload['gross'];
 
         return response()->json($payload);
     }
@@ -172,47 +146,22 @@ class ClientLoanController extends Controller
         $termYears   = (int) $data['termYears'];
         $termMonths  = $termYears * 12;
 
-        $branchServiceName = $this->getBranchServiceName($member);
-        $category          = $this->mapCategoryByBranchServiceName($branchServiceName);
-
         $hasPaidMembership = MembershipPayment::where('memberId', $member->id)
             ->where('is_paid', true)
             ->exists();
 
         $membershipFee = $hasPaidMembership ? 0.0 : 300.0;
 
-        $capCon                = 5000.0;
         $advanceInterestMonths = 2;
 
-        $hasComputation = Computations::query()
-            ->where('category', $category)
-            ->where('termMonths', $termMonths)
-            ->where('isActive', true)
-            ->exists();
-
-        if (!$hasComputation) {
-            return response()->json([
-                'message' => "No active computation settings for {$category} at {$termMonths} months.",
-            ], 422);
-        }
-
-        $adminPayload = [
-            'category'              => $category,
-            'netProceeds'           => $netProceeds,
-            'capCon'                => $capCon,
-            'membershipFee'         => $membershipFee,
-            'terms'                 => $termMonths,
-            'advanceInterestMonths' => $advanceInterestMonths,
-        ];
-
-        $fakeRequest = Request::create('/admin/loans/api-compute', 'POST', $adminPayload);
-
-        /** @var AdminLoanController $adminController */
-        $adminController = app(AdminLoanController::class);
-
-        /** @var JsonResponse $computeResponse */
-        $computeResponse = $adminController->compute($fakeRequest);
-        $computed        = $computeResponse->getData(true);
+        $computed = app(LoanCalculator::class)->calculate(
+            $netProceeds,
+            $termMonths,
+            null,
+            $membershipFee,
+            $advanceInterestMonths,
+        );
+        $capCon = (float) $computed['capCon'];
 
         $serviceFee          = (float) ($computed['serviceFee'] ?? 0);
         $insurance           = (float) ($computed['insurance'] ?? 0);
@@ -229,8 +178,8 @@ class ClientLoanController extends Controller
             ? round(($income / $grossAmount) * 100, 2)
             : 0.0;
 
-        $effectiveInterestRate = round($computed['effectiveInterestRate'], 5);
-        $monthlyInterestRate   = round($computed['monthlyInterestRate'], 5);
+        $effectiveInterestRate = (float) $computed['effectiveInterestRate'];
+        $monthlyInterestRate   = (float) $computed['monthlyInterestRate'];
 
         $loan = new Loan();
         $loan->memberId              = $member->id;
@@ -251,6 +200,9 @@ class ClientLoanController extends Controller
         $loan->monthlyInterestRate   = $monthlyInterestRate;
         $loan->monthlyAmortization   = $monthlyAmortization;
         $loan->advanceInterestMonths = $advanceInterestMonths;
+        $loan->annual_interest_rate  = $computed['annualInterestRate'];
+        $loan->calculation_version   = $computed['calculationVersion'];
+        $loan->calculation_snapshot  = $computed;
         $loan->status                = 'Pending';
         $loan->save();
 
@@ -683,6 +635,12 @@ class ClientLoanController extends Controller
                         : null,
                     'amountDue'         => (float) $row->amountDue,
                     'amountPaid'        => (float) ($row->amountPaid ?? 0),
+                    'principalDue'      => (float) ($row->principalDue ?? 0),
+                    'interestDue'       => (float) ($row->interestDue ?? 0),
+                    'principalPaid'     => (float) ($row->principalPaid ?? 0),
+                    'interestPaid'      => (float) ($row->interestPaid ?? 0),
+                    'openingBalance'    => (float) ($row->openingBalance ?? 0),
+                    'closingBalance'    => (float) ($row->closingBalance ?? 0),
                     'status'            => $row->status,
                 ]);
         }

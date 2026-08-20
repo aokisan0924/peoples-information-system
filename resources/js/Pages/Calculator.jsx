@@ -117,8 +117,8 @@ export default function Calculator() {
 
                             <p className="mt-4 text-sm sm:text-base lg:text-lg text-emerald-50 max-w-xl leading-relaxed">
                                 Quickly estimate your monthly amortization, membership fee,
-                                capital contribution, and net proceeds based on the configured
-                                settings.
+                                capital contribution, and net proceeds using PMPC's official
+                                loan computation table.
                             </p>
 
                             <div className="mt-6 flex flex-wrap gap-3">
@@ -169,11 +169,11 @@ export default function Calculator() {
                                         <Percent className="h-6 w-6 text-yellow-300" />
                                         <div>
                                             <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-200">
-                                                Configurable Rates
+                                                Official PMPC Rates
                                             </p>
                                             <p className="text-base font-semibold">
-                                                Uses back-end settings for interest, service fee, and
-                                                other loan charges.
+                                                Uses the same versioned interest, service fee, insurance,
+                                                and advance-interest rules as the loan workflow.
                                             </p>
                                         </div>
                                     </div>

@@ -48,7 +48,7 @@ export const SpouseModal = ({ member, onClose }) => {
 
 const submit = (e) => {
     e.preventDefault();
-    post(route('admin.update-spouse-info', { encrypted: member.encrypted }), {
+    post(route('admin.members.update-spouse-info', { id: member.id }), {
         preserveScroll: true,
         onSuccess: () => {
             toast.success('Spouse info updated successfully.');

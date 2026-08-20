@@ -74,7 +74,7 @@ export const DependentsModal = ({ member, onClose }) => {
 
     const submit = (e) => {
         e.preventDefault();
-        post(route('admin.update-dependents-info', { encrypted: member.encrypted }), {
+        post(route('admin.members.update-dependents-info', { id: member.id }), {
             preserveScroll: true,
             onSuccess: () => {
             toast.success('Dependents updated successfully.');

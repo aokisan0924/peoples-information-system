@@ -20,7 +20,7 @@ use Inertia\Response;
 class AccJournalController extends Controller
 {
     private const SOURCE_TYPES = [
-        'membership', 'capital', 'savings', 'memcap', 'loan',
+        'membership', 'capital', 'savings', 'memcap', 'loan', 'loan_payment',
         'petty_cash', 'ewallet', 'bank', 'ppe',
     ];
 

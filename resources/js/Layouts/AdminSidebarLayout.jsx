@@ -216,9 +216,9 @@ export default function AdminSidebarLayout({ children }) {
     const [isDarkMode, setIsDarkMode] = useState(() => {
         if (typeof window !== "undefined") {
             const saved = localStorage.getItem("theme");
-            return saved ? saved === "dark" : true;
+            return saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
         }
-        return true;
+        return false;
     });
     useEffect(() => {
         document.documentElement.classList.toggle("dark", isDarkMode);
@@ -450,7 +450,9 @@ export default function AdminSidebarLayout({ children }) {
                                         ? "bg-[#1f2937] border-[#374151]"
                                         : "bg-slate-100 border-slate-200",
                                 ].join(" ")}
-                                aria-label="Toggle theme"
+                                aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                                aria-pressed={isDarkMode}
+                                title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
                             >
                                 <span className={[
                                     "absolute top-0.5 h-6 w-6 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm",
